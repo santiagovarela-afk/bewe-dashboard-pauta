@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bewe · Control de Pauta · Mayo 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F8FAFC; --surface:#FFFFFF; --border:#E2E8F0; --border-l:#F1F5F9;
+  --tx:#0F172A; --dim:#64748B; --mut:#94A3B8;
+  --acc:#059669; --acc-h:#047857; --acc-bg:#ECFDF5; --acc-bd:#A7F3D0; --acc-tx:#065F46;
+  --sec:#6366F1; --sec-bg:#EEF2FF; --sec-bd:#C7D2FE;
+  --g:#16A34A; --gbg:#DCFCE7; --gbd:#86EFAC;
+  --y:#D97706; --ybg:#FEF3C7; --ybd:#FCD34D;
+  --r:#DC2626; --rbg:#FEE2E2; --rbd:#FCA5A5;
+  --b:#2563EB; --bbg:#DBEAFE; --bbd:#93C5FD;
+  --p:#7C3AED; --pbg:#EDE9FE; --pbd:#C4B5FD;
+  --o:#EA580C; --obg:#FFF7ED; --obd:#FED7AA;
+  --sh0:0 1px 2px rgba(0,0,0,.05);
+  --sh1:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --sh2:0 4px 12px rgba(0,0,0,.08),0 2px 4px rgba(0,0,0,.04);
+  --sh3:0 10px 25px rgba(0,0,0,.1),0 4px 8px rgba(0,0,0,.05);
+  --r4:4px; --r6:6px; --r10:10px; --r14:14px;
+  --sb:220px; --hdr:58px;
+  --font:'Inter',system-ui,sans-serif;
+  --mono:'SF Mono','Fira Code',Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--tx);font-family:var(--font);font-size:14px;line-height:1.5;min-height:100%}
+button{cursor:pointer;font-family:inherit;font-size:inherit}
+input,select{font-family:inherit}
+.mono{font-family:var(--mono)}
+.hidden{display:none!important}
+
+/* ── SHELL ── */
+#shell{display:flex;min-height:100vh}
+
+/* ── SIDEBAR ── */
+.sb{width:var(--sb);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0;z-index:50}
+.sb-logo{padding:20px 18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border-l)}
+.sb-brand{font-size:19px;font-weight:700;letter-spacing:-.5px;color:var(--tx)}
+.sb-tag{background:var(--acc-bg);color:var(--acc-tx);border:1px solid var(--acc-bd);border-radius:var(--r4);font-size:9px;font-weight:700;padding:2px 6px;letter-spacing:.07em}
+.sb-nav{padding:10px 8px;flex:1;display:flex;flex-direction:column;gap:1px}
+.ni{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r6);font-size:13px;font-weight:500;color:var(--dim);cursor:pointer;transition:all .12s;border:none;background:transparent;width:100%;text-align:left;user-select:none;position:relative}
+.ni:hover{background:var(--border-l);color:var(--tx)}
+.ni.on{background:var(--acc-bg);color:var(--acc-tx);font-weight:600}
+.ni.on .ni-ic{color:var(--acc)}
+.ni-ic{font-size:16px;width:22px;text-align:center;flex-shrink:0}
+.ni-lbl{flex:1}
+.ni-bd{background:var(--rbg);color:var(--r);border:1px solid var(--rbd);border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;line-height:1.4}
+.sb-foot{padding:12px 16px;border-top:1px solid var(--border-l)}
+.sb-acct{font-size:11px;color:var(--mut);line-height:1.6}
+.sb-acct strong{color:var(--dim);font-size:12px}
+
+/* ── MAIN AREA ── */
+.main{flex:1;display:flex;flex-direction:column;min-height:100vh;overflow:hidden}
+
+/* ── TOP BAR ── */
+.topbar{height:var(--hdr);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:40;flex-shrink:0}
+.tb-l{display:flex;align-items:center;gap:8px}
+.tb-crumb{font-size:13px;color:var(--mut)}
+.tb-page{font-size:14px;font-weight:600;color:var(--tx)}
+.tb-r{display:flex;align-items:center;gap:8px}
+.snap-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);background:var(--border-l);border:1px solid var(--border);border-radius:20px;padding:4px 11px;white-space:nowrap}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--mut);flex-shrink:0}
+.sdot.live{background:var(--r);animation:pulse 1.5s ease-in-out infinite}
+.snap-chip.live-chip{background:var(--rbg);border-color:var(--rbd);color:var(--r)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.hdr-sel{background:var(--border-l);border:1px solid var(--border);border-radius:20px;color:var(--dim);font-size:11px;padding:4px 10px;cursor:pointer;outline:none;transition:border-color .15s}
+.hdr-sel:hover,.hdr-sel:focus{border-color:var(--acc);color:var(--tx)}
+
+/* ── BUTTONS ── */
+.btn{padding:7px 14px;border-radius:var(--r6);font-size:12px;font-weight:600;border:1px solid transparent;transition:all .15s;line-height:1.4;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.btn-primary{background:var(--acc);color:#fff;border-color:var(--acc)}.btn-primary:hover{background:var(--acc-h);border-color:var(--acc-h)}
+.btn-ghost{background:transparent;color:var(--dim);border-color:var(--border)}.btn-ghost:hover{background:var(--border-l);color:var(--tx);border-color:var(--dim)}
+.btn-sm{padding:5px 11px;font-size:11px}
+.btn-xs{padding:3px 8px;font-size:10px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ── PAGE CONTENT ── */
+.page{padding:22px 24px;flex:1;animation:fadeIn .18s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── SECTION HEADERS ── */
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sh-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--dim)}
+.sh-r{font-size:12px;color:var(--mut)}
+
+/* ── ALERTS ── */
+.alerts{display:flex;flex-direction:column;gap:7px;margin-bottom:18px}
+.al{display:flex;gap:12px;padding:10px 14px;border-radius:var(--r6);font-size:13px;border:1px solid}
+.al-r{background:var(--rbg);border-color:var(--rbd)}.al-y{background:var(--ybg);border-color:var(--ybd)}
+.al-g{background:var(--gbg);border-color:var(--gbd)}.al-b{background:var(--bbg);border-color:var(--bbd)}
+.al-p{background:var(--pbg);border-color:var(--pbd)}.al-o{background:var(--obg);border-color:var(--obd)}
+.al-ic{flex-shrink:0;font-size:15px;margin-top:1px}
+.al-t{font-weight:600;margin-bottom:2px;color:var(--tx)}
+.al-d{color:var(--dim);font-size:12px;line-height:1.5}
+
+/* ── KPI GRID ── */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:11px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:16px;box-shadow:var(--sh0);transition:all .2s}
+.kpi:hover{box-shadow:var(--sh2);transform:translateY(-2px)}
+.kpi-l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);margin-bottom:8px}
+.kpi-v{font-size:26px;font-weight:700;font-family:var(--mono);line-height:1;margin-bottom:4px}
+.kpi-s{font-size:11px;color:var(--mut)}
+.vg{color:var(--g)}.vy{color:var(--y)}.vr{color:var(--r)}.vn{color:var(--tx)}.vp{color:var(--p)}.va{color:var(--acc)}.vs{color:var(--sec)}
+
+/* ── FUNNEL CARD ── */
+.funnel-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:18px 20px;margin-bottom:18px;box-shadow:var(--sh0)}
+.funnel-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);margin-bottom:16px}
+.funnel-row{display:flex;align-items:stretch;gap:0}
+.fn-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:0 8px}
+.fn-bar-wrap{width:100%;height:60px;display:flex;align-items:flex-end;justify-content:center}
+.fn-bar{width:80%;border-radius:var(--r4) var(--r4) 0 0;transition:height .7s ease;min-height:4px}
+.fn-num{font-size:22px;font-weight:700;font-family:var(--mono);line-height:1}
+.fn-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);text-align:center}
+.fn-cvr{font-size:11px;color:var(--mut)}
+.fn-arr{color:var(--border);font-size:22px;display:flex;align-items:center;padding-bottom:30px;flex-shrink:0}
+
+/* ── TIMELINE ── */
+.tlrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px;margin-bottom:18px}
+.tlc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:14px 15px;display:flex;gap:11px;box-shadow:var(--sh0);transition:box-shadow .2s}
+.tlc:hover{box-shadow:var(--sh1)}
+.tli{font-size:20px;flex-shrink:0}
+.tld{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-bottom:3px}
+.tlt{font-size:13px;font-weight:600;color:var(--tx);margin-bottom:4px}
+.tlb{font-size:11px;color:var(--dim);line-height:1.5}
+.tlc2{font-size:13px;font-weight:700;font-family:var(--mono);margin-top:6px}
+.c-done{color:var(--g)}.c-now{color:var(--r)}.c-fut{color:var(--dim)}.c-past{color:var(--y)}
+
+/* ── CAMPAIGN CARDS ── */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin-bottom:18px}
+.cc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);overflow:hidden;cursor:pointer;transition:all .2s;box-shadow:var(--sh0)}
+.cc:hover{box-shadow:var(--sh2);transform:translateY(-2px);border-color:var(--mut)}
+.cc.sel{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-bg)}
+.cc-head{padding:14px 16px 10px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.cc-lbl{font-size:10px;font-weight:700;color:var(--acc);margin-bottom:3px;letter-spacing:.05em}
+.cc-name{font-size:11px;font-weight:600;font-family:var(--mono);line-height:1.35;color:var(--tx)}
+.cc-pills{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.pill{font-size:9px;padding:2px 6px;border-radius:var(--r4);font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:1px solid}
+.p-on{background:var(--gbg);color:var(--g);border-color:var(--gbd)}
+.p-cr{background:var(--pbg);color:var(--p);border-color:var(--pbd)}
+.p-ic{background:var(--bbg);color:var(--b);border-color:var(--bbd)}
+.p-geo{background:var(--border-l);color:var(--dim);border-color:var(--border)}
+.p-y{background:var(--ybg);color:var(--y);border-color:var(--ybd)}
+.p-r{background:var(--rbg);color:var(--r);border-color:var(--rbd)}
+.cc-bgt{font-size:11px;color:var(--dim);text-align:right;flex-shrink:0;line-height:1.7}
+.cc-m{padding:4px 16px 12px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ml{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin-bottom:3px}
+.mv{font-size:16px;font-weight:700;font-family:var(--mono);line-height:1}
+.ms{font-size:10px;color:var(--mut);margin-top:2px}
+.mg{color:var(--g)}.my{color:var(--y)}.mr{color:var(--r)}.md{color:var(--mut)}.mn{color:var(--tx)}
+.cc-funnel{display:flex;align-items:center;gap:5px;padding:0 16px 12px;flex-wrap:wrap}
+.cfn-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:55px}
+.cfn-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)}
+.cfn-val{font-size:14px;font-weight:700;font-family:var(--mono)}
+.cfn-arr{color:var(--border);font-size:13px;flex-shrink:0}
+.fn-c{color:#0EA5E9}.fn-i{color:var(--sec)}.fn-r{color:var(--g)}
+.cc-bar{margin:0 16px 12px}
+.bl{display:flex;justify-content:space-between;font-size:10px;color:var(--mut);margin-bottom:4px}
+.bt{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.bf{height:100%;border-radius:2px;transition:width .6s ease}
+.bf-ok{background:var(--acc)}.bf-y{background:var(--y)}.bf-r{background:var(--r)}
+
+/* ── ADSET PANEL ── */
+.adpanel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);overflow:hidden;margin-bottom:18px;box-shadow:var(--sh1)}
+.aph{display:flex;align-items:center;justify-content:space-between;padding:11px 18px;border-bottom:1px solid var(--border);background:var(--border-l)}
+.apt{font-size:13px;font-weight:600;font-family:var(--mono);color:var(--tx)}
+.twrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{background:var(--border-l);padding:8px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);white-space:nowrap;border-bottom:1px solid var(--border)}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--border-l);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--border-l)}
+.tn{font-family:var(--mono);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--tx)}
+.tnum{font-family:var(--mono);font-weight:600}
+.tg{color:var(--g)}.ty{color:var(--y)}.tr_{color:var(--r)}.td_{color:var(--mut)}
+
+/* ── PLAN ── */
+.plan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:13px}
+.pcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:18px;box-shadow:var(--sh0)}
+.pcard-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.prow{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border-l);font-size:12px}
+.prow:last-child{border-bottom:none}
+.pk{color:var(--dim)}.pv{font-weight:600;font-family:var(--mono)}
+.pv-g{color:var(--g)}.pv-y{color:var(--y)}.pv-r{color:var(--r)}.pv-n{color:var(--tx)}.pv-p{color:var(--p)}.pv-a{color:var(--acc)}
+.rule{background:var(--border-l);border-left:3px solid var(--acc);border-radius:0 var(--r6) var(--r6) 0;padding:10px 14px;margin-bottom:8px;font-size:12px;line-height:1.6}
+.rule b{color:var(--tx)}.rule .dim{color:var(--dim)}
+
+/* ── REPORT ── */
+.report-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:22px;font-family:var(--mono);font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-x:auto;max-height:600px;overflow-y:auto;box-shadow:var(--sh0);color:var(--tx)}
+
+/* ── AGENT ── */
+.agent-wrap{display:flex;flex-direction:column;gap:14px;max-width:820px}
+.chat-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);overflow:hidden;display:flex;flex-direction:column;height:510px;box-shadow:var(--sh1)}
+.chat-msgs{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:84%;padding:12px 16px;border-radius:var(--r10);font-size:13px;line-height:1.6}
+.msg-user{background:var(--acc);color:#fff;align-self:flex-end;border-radius:var(--r10) var(--r10) var(--r4) var(--r10)}
+.msg-agent{background:var(--border-l);border:1px solid var(--border);align-self:flex-start;color:var(--tx);border-radius:var(--r4) var(--r10) var(--r10) var(--r10)}
+.msg-agent b{color:var(--acc)}.msg-agent .ok{color:var(--g)}.msg-agent .warn{color:var(--y)}.msg-agent .bad{color:var(--r)}
+.chip-row{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--border);background:var(--border-l)}
+.chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;color:var(--dim);transition:all .15s}
+.chip:hover{color:var(--acc);border-color:var(--acc-bd);background:var(--acc-bg)}
+.chat-in{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);background:var(--border-l)}
+.chat-inp{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--r6);color:var(--tx);font-size:13px;padding:9px 14px;outline:none;transition:all .15s}
+.chat-inp:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-bg)}
+.typing{display:flex;gap:4px;align-items:center;padding:2px 0}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--mut);animation:blink 1.2s infinite}
+.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+
+/* ── CONFIG ── */
+.cfg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:13px;max-width:900px}
+.cfg-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:20px;box-shadow:var(--sh0)}
+.cfg-t{font-size:14px;font-weight:600;color:var(--tx);margin-bottom:4px}
+.cfg-d{font-size:12px;color:var(--dim);margin-bottom:16px;line-height:1.6}
+.field{margin-bottom:14px}
+.fl{display:block;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.fi{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--r6);color:var(--tx);font-size:13px;padding:9px 12px;font-family:var(--mono);outline:none;transition:all .15s}
+.fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-bg);background:var(--surface)}
+.fh{font-size:11px;color:var(--mut);margin-top:5px}
+
+/* ── ANALYSIS ── */
+.an-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:13px}
+.an-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:18px;box-shadow:var(--sh0)}
+.an-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.an-title{font-size:13px;font-weight:700;color:var(--tx)}
+.an-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;border:1px solid}
+.an-r{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-l);font-size:12px}
+.an-r:last-child{border-bottom:none}
+.an-k{color:var(--dim)}.an-v{font-weight:700;font-family:var(--mono);color:var(--tx)}
+.meter{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px}
+.mf{height:100%;border-radius:3px;transition:width .7s ease}
+
+/* ── MODAL ── */
+.modal-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:300;animation:fadeIn .15s}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r14);padding:28px;width:480px;max-width:94vw;box-shadow:var(--sh3)}
+.modal-t{font-size:17px;font-weight:700;color:var(--tx);margin-bottom:6px}
+.modal-d{font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6}
+
+@media(max-width:880px){.sb{width:60px}.sb-brand,.sb-tag,.ni-lbl,.ni-bd,.sb-foot{display:none}.sb-logo{justify-content:center;padding:16px 10px}.ni{justify-content:center}}
+@media(max-width:600px){#shell{flex-direction:column}.sb{display:none}.page{padding:16px}.cgrid{grid-template-columns:1fr}.kgrid{grid-template-columns:repeat(2,1fr)}}
+
+/* ── LOGIN ── */
+#loginScreen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;animation:fadeIn .2s ease}
+.lcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r14);padding:44px 40px;width:380px;max-width:94vw;box-shadow:var(--sh3)}
+.llogo{font-size:24px;font-weight:700;letter-spacing:-.5px;color:var(--tx);margin-bottom:4px}
+.ltag{display:inline-block;background:var(--acc-bg);color:var(--acc-tx);border:1px solid var(--acc-bd);border-radius:var(--r4);font-size:9px;font-weight:700;padding:2px 7px;letter-spacing:.07em;margin-bottom:22px}
+.ltitle{font-size:17px;font-weight:700;color:var(--tx);margin-bottom:5px}
+.lsub{font-size:13px;color:var(--dim);margin-bottom:26px}
+.lerr{background:var(--rbg);border:1px solid var(--rbd);color:var(--r);border-radius:var(--r6);padding:9px 13px;font-size:12px;margin-bottom:14px;display:none}
+.lbtn{width:100%;padding:11px;border-radius:var(--r6);background:var(--acc);color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;margin-top:6px}
+.lbtn:hover{background:var(--acc-h)}
+.lfoot{text-align:center;font-size:11px;color:var(--mut);margin-top:18px}
+
+/* ── ORGANIC POSTS ── */
+.post-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:18px}
+.post-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);overflow:hidden;transition:all .2s;cursor:pointer}
+.post-card:hover{box-shadow:var(--sh2);transform:translateY(-2px)}
+.post-thumb{width:100%;aspect-ratio:1;object-fit:cover;background:var(--border-l);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--mut)}
+.post-thumb img{width:100%;height:100%;object-fit:cover}
+.post-info{padding:10px 12px}
+.post-caption{font-size:11px;color:var(--dim);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px}
+.post-meta{display:flex;gap:10px;font-size:10px;color:var(--mut)}
+.post-stat{display:flex;align-items:center;gap:3px}
+.post-date{font-size:10px;color:var(--mut);margin-bottom:4px}
+.post-type{display:inline-block;font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;text-transform:uppercase;margin-bottom:5px}
+.pt-image{background:var(--bbg);color:var(--b)}.pt-video{background:var(--pbg);color:var(--p)}.pt-carousel{background:var(--obg);color:var(--o)}
+
+/* ── ADS GRID ── */
+.ad-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:18px}
+.ad-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);overflow:hidden;transition:all .2s}
+.ad-card:hover{box-shadow:var(--sh2)}
+.ad-thumb{width:100%;height:130px;object-fit:cover;background:var(--border-l);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--mut)}
+.ad-thumb img{width:100%;height:100%;object-fit:cover}
+.ad-info{padding:11px 13px}
+.ad-name{font-size:11px;font-weight:600;color:var(--tx);margin-bottom:5px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ad-camp{font-size:10px;color:var(--mut);margin-bottom:8px}
+.ad-stats{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.ad-stat{font-size:10px}.ad-stat span{font-weight:700;font-family:var(--mono);color:var(--tx)}
+.ad-status{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;text-transform:uppercase;margin-bottom:6px}
+.st-active{background:var(--gbg);color:var(--g)}.st-paused{background:var(--ybg);color:var(--y)}.st-rejected{background:var(--rbg);color:var(--r)}
+
+/* ── PARRILLA ── */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:18px}
+.cal-head{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);text-align:center;padding:6px 0}
+.cal-day{background:var(--surface);border:1px solid var(--border);border-radius:var(--r6);min-height:80px;padding:7px;font-size:10px;cursor:pointer;transition:border-color .15s}
+.cal-day:hover{border-color:var(--acc)}
+.cal-day.today{border-color:var(--acc);background:var(--acc-bg)}
+.cal-dn{font-weight:700;color:var(--dim);margin-bottom:4px}
+.cal-post{background:var(--acc-bg);border:1px solid var(--acc-bd);border-radius:3px;padding:2px 4px;font-size:9px;color:var(--acc-tx);margin-bottom:2px;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.cal-post.fb{background:var(--bbg);border-color:var(--bbd);color:var(--b)}
+.composer{background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);padding:20px;box-shadow:var(--sh0)}
+.comp-t{font-size:13px;font-weight:700;color:var(--tx);margin-bottom:14px}
+.plat-row{display:flex;gap:8px;margin-bottom:14px}
+.plat-btn{padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;color:var(--dim);transition:all .15s}
+.plat-btn.on.ig{background:var(--pbg);border-color:var(--pbd);color:var(--p)}
+.plat-btn.on.fb{background:var(--bbg);border-color:var(--bbd);color:var(--b)}
+.comp-ta{width:100%;border:1px solid var(--border);border-radius:var(--r6);padding:10px 12px;font-family:inherit;font-size:13px;color:var(--tx);background:var(--bg);resize:vertical;min-height:90px;outline:none;transition:border-color .15s}
+.comp-ta:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-bg);background:var(--surface)}
+
+/* ── ROLE LOCK ── */
+.role-lock{display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;gap:12px;color:var(--mut)}
+.role-lock-ic{font-size:48px}
+.role-lock-t{font-size:15px;font-weight:600;color:var(--dim)}
+.role-lock-d{font-size:13px;color:var(--mut);text-align:center;max-width:280px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="loginScreen">
+  <div class="lcard">
+    <div class="llogo">bewe</div>
+    <div class="ltag">DASHBOARD PAUTA</div>
+    <div class="ltitle">Acceso del equipo</div>
+    <div class="lsub">Mayo 2026 · Control de campañas y contenido</div>
+    <div class="lerr" id="loginErr">Correo o contraseña incorrectos</div>
+    <div class="field">
+      <label class="fl">Correo</label>
+      <input class="fi" id="loginEmail" type="email" placeholder="nombre@bewe.io" autocomplete="email">
+    </div>
+    <div class="field">
+      <label class="fl">Contraseña</label>
+      <input class="fi" id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="lbtn" onclick="doLogin()">Entrar →</button>
+    <div class="lfoot">Acceso restringido · Solo equipo Bewe</div>
+  </div>
+</div>
+
+<div id="shell" class="hidden">
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sb">
+  <div class="sb-logo">
+    <span class="sb-brand">bewe</span>
+    <span class="sb-tag">PAUTA</span>
+  </div>
+  <nav class="sb-nav">
+    <button class="ni on" onclick="showTab('dashboard')" id="nav-dashboard"><span class="ni-ic">📊</span><span class="ni-lbl">Dashboard</span></button>
+    <button class="ni"    onclick="showTab('campanas')"  id="nav-campanas" ><span class="ni-ic">📣</span><span class="ni-lbl">Campañas</span></button>
+    <button class="ni"    onclick="showTab('estrategia')" id="nav-estrategia"><span class="ni-ic">🎯</span><span class="ni-lbl">Estrategia</span><span class="ni-bd" id="alertBadge">3</span></button>
+    <button class="ni"    onclick="showTab('anuncios')"  id="nav-anuncios" ><span class="ni-ic">🖼️</span><span class="ni-lbl">Anuncios</span></button>
+    <button class="ni"    onclick="showTab('organico')"  id="nav-organico" ><span class="ni-ic">📱</span><span class="ni-lbl">Orgánico</span></button>
+    <button class="ni"    onclick="showTab('parrilla')"  id="nav-parrilla" ><span class="ni-ic">📅</span><span class="ni-lbl">Parrilla</span></button>
+    <button class="ni"    onclick="showTab('informe')"   id="nav-informe"  ><span class="ni-ic">📄</span><span class="ni-lbl">Informe</span></button>
+    <button class="ni"    onclick="showTab('agente')"    id="nav-agente"   ><span class="ni-ic">🤖</span><span class="ni-lbl">Agente IA</span></button>
+    <button class="ni"    onclick="showTab('config')"    id="nav-config"   ><span class="ni-ic">⚙️</span><span class="ni-lbl">Config</span></button>
+  </nav>
+  <div class="sb-foot">
+    <div class="sb-acct"><strong>act_929824...</strong>Meta Ads · Mayo 2026</div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="tb-l">
+    <span class="tb-crumb">Bewe ·</span>
+    <span class="tb-page" id="pageTitle">Dashboard</span>
+  </div>
+  <div class="tb-r">
+    <select class="hdr-sel" id="datePreset">
+      <option value="last_3d">Últimos 3d</option>
+      <option value="last_7d" selected>Últimos 7d</option>
+      <option value="last_14d">Últimos 14d</option>
+      <option value="this_month">Este mes</option>
+    </select>
+    <div class="snap-chip" id="snapChip">
+      <div class="sdot" id="snapDot"></div>
+      <span id="snapLabel">Snapshot · 12–15 may</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="fetchMetaLive()">↻ Actualizar</button>
+  </div>
+</header>
+
+<!-- ── DASHBOARD ── -->
+<div class="page" id="t-dashboard">
+  <div class="alerts" id="alerts"></div>
+  <div class="sh"><div class="sh-t">Métricas clave</div><div class="sh-r" id="kpiSub"></div></div>
+  <div class="kgrid" id="kpiRow"></div>
+  <div class="funnel-wrap">
+    <div class="funnel-t">Embudo de conversión — todas las campañas</div>
+    <div id="funnelViz"></div>
+  </div>
+  <div class="sh" style="margin-bottom:12px"><div class="sh-t">Fechas clave</div></div>
+  <div class="tlrow" id="timeline"></div>
+</div>
+
+<!-- ── CAMPAÑAS ── -->
+<div class="page hidden" id="t-campanas">
+  <div class="sh" id="campSec">
+    <div class="sh-t">6 campañas activas · MAY26</div>
+    <div class="sh-r" id="campSub"></div>
+  </div>
+  <div class="cgrid" id="campGrid"></div>
+  <div class="adpanel hidden" id="adsetPanel">
+    <div class="aph">
+      <div class="apt" id="adsetTitle">Conjuntos de anuncios</div>
+      <button class="btn btn-ghost btn-xs" onclick="closeAdsets()">✕ Cerrar</button>
+    </div>
+    <div class="twrap">
+      <table><thead><tr>
+        <th>Conjunto</th><th>Gasto</th><th>Impr.</th><th>Clicks</th>
+        <th>CTR</th><th>CPM</th><th>Alcance</th><th>Conv.</th><th>CPT</th>
+      </tr></thead><tbody id="adsetBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ── ESTRATEGIA ── -->
+<div class="page hidden" id="t-estrategia">
+  <div class="sh" style="margin-bottom:20px">
+    <div class="sh-t">Estrategia · Plan & Análisis</div>
+    <div class="sh-r" id="estSub"></div>
+  </div>
+  <!-- Semáforo CPT -->
+  <div class="sh"><div class="sh-t" style="color:var(--dim)">Semáforo de rendimiento</div></div>
+  <div class="kgrid" id="estKpis" style="margin-bottom:20px"></div>
+  <!-- Proyección + Pacing -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:20px">
+    <div class="an-card" id="estPacing"></div>
+    <div class="an-card" id="estProj"></div>
+  </div>
+  <!-- Alertas operativas -->
+  <div class="sh"><div class="sh-t" style="color:var(--dim)">Alertas operativas</div></div>
+  <div class="alerts" id="estAlerts" style="margin-bottom:20px"></div>
+  <!-- Reglas con estado -->
+  <div class="sh"><div class="sh-t" style="color:var(--dim)">Reglas Julián — estado actual</div></div>
+  <div id="estReglas" style="margin-bottom:20px"></div>
+  <!-- Análisis por campaña -->
+  <div class="sh"><div class="sh-t" style="color:var(--dim)">Análisis por campaña</div></div>
+  <div class="an-grid" id="estCampAnalysis"></div>
+</div>
+
+<!-- ── ANÁLISIS (legacy, oculto) ── -->
+<div class="page hidden" id="t-analisis">
+  <div class="sh"><div class="sh-t">Detección de anomalías y señales operativas</div><div class="sh-r" id="anSub"></div></div>
+  <div class="an-grid" id="analysisGrid"></div>
+</div>
+
+<!-- ── PLAN ── -->
+<div class="page hidden" id="t-plan">
+  <div class="plan-grid" id="planGrid"></div>
+</div>
+
+<!-- ── INFORME ── -->
+<div class="page hidden" id="t-informe">
+  <div class="sh">
+    <div class="sh-t">Informe de estado · Mayo 2026</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" onclick="genReport()">⚡ Generar</button>
+      <button class="btn btn-ghost btn-sm" id="copyBtn" onclick="copyReport()">Copiar</button>
+    </div>
+  </div>
+  <div class="report-box mono" id="reportBox">Haz clic en "Generar" para crear el informe de estado.</div>
+</div>
+
+<!-- ── AGENTE ── -->
+<div class="page hidden" id="t-agente">
+  <div class="agent-wrap">
+    <div class="chat-box">
+      <div class="chat-msgs" id="chatMsgs">
+        <div class="msg msg-agent">
+          <b>Agente Bewe</b> — Hola Santiago 👋<br><br>
+          Tengo cargado el plan de pauta de mayo 2026 con todos los objetivos, reglas de Julián y el snapshot <b>12–15 mayo 2026</b>.<br>
+          Si configuraste el token Meta, haz clic en <b>↻ Actualizar</b> para traer datos en vivo.<br><br>
+          ¿En qué te ayudo?
+        </div>
+      </div>
+      <div class="chip-row">
+        <div class="chip" onclick="askChip('¿Cómo estamos con el CPT global y qué campañas están en problemas?')">📊 Estado CPT</div>
+        <div class="chip" onclick="askChip('¿Qué necesito revisar el día 7 (19 mayo)?')">🔍 Día 7</div>
+        <div class="chip" onclick="askChip('C3 MX_SERVICIOS tiene 364 conversiones con CPT €0.19, ¿es real o hay un problema de tracking?')">⚠️ C3 anomalía</div>
+        <div class="chip" onclick="askChip('C2 MX_COMERCIO tiene CPT €8.66 con solo 10 conversiones, ¿qué hago?')">🚨 C2 CPT alto</div>
+        <div class="chip" onclick="askChip('Dame un resumen ejecutivo de pauta para compartir con Julián.')">📄 Resumen Julián</div>
+      </div>
+      <div class="chat-in">
+        <input class="chat-inp" id="chatInput" placeholder="Pregunta sobre campañas, métricas, decisiones..." onkeydown="if(event.key==='Enter')sendMsg()">
+        <button class="btn btn-primary" onclick="sendMsg()">Enviar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONFIG ── -->
+<div class="page hidden" id="t-config">
+  <div class="sh" style="margin-bottom:18px"><div class="sh-t">Configuración de la plataforma</div></div>
+  <div class="cfg-grid">
+    <div class="cfg-card">
+      <div class="cfg-t">🔗 Meta Graph API</div>
+      <div class="cfg-d">Token de acceso para actualizar datos en tiempo real desde tu cuenta de Meta Ads. Se almacena únicamente en este navegador (localStorage).</div>
+      <div class="field">
+        <label class="fl">Access Token</label>
+        <input class="fi" id="metaTokenInput" type="password" placeholder="EAAaIVRk…" autocomplete="off">
+        <div class="fh">Token de usuario con permisos ads_read · nunca expira si es long-lived token</div>
+      </div>
+      <div id="metaTokenStatus" style="font-size:12px;margin-bottom:12px"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveMetaToken()">Guardar token Meta</button>
+    </div>
+    <div class="cfg-card">
+      <div class="cfg-t">🤖 Gemini Flash (Agente IA)</div>
+      <div class="cfg-d">API key de Google AI Studio para activar el agente inteligente con contexto completo del plan de pauta. Completamente gratuito.</div>
+      <div class="field">
+        <label class="fl">API Key</label>
+        <input class="fi" id="geminiKeyInput" type="password" placeholder="AIzaSy…" autocomplete="off">
+        <div class="fh">Obtén tu clave gratis en aistudio.google.com/app/apikey</div>
+      </div>
+      <div id="geminiKeyStatus" style="font-size:12px;margin-bottom:12px"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveGeminiKeyFn()">Guardar clave Gemini</button>
+    </div>
+    <div class="cfg-card">
+      <div class="cfg-t">📊 Cuenta activa</div>
+      <div class="cfg-d">Detalles de la cuenta de Meta Ads vinculada a este dashboard.</div>
+      <div class="an-r"><span class="an-k">Account ID</span><span class="an-v mono" style="font-size:11px">act_929824683759001</span></div>
+      <div class="an-r"><span class="an-k">Período</span><span class="an-v">12 – 31 mayo 2026</span></div>
+      <div class="an-r"><span class="an-k">Presupuesto total</span><span class="an-v">€3.000</span></div>
+      <div class="an-r"><span class="an-k">Campañas activas</span><span class="an-v">6</span></div>
+      <div class="an-r"><span class="an-k">Adsets</span><span class="an-v">14</span></div>
+      <div class="an-r" style="border:none"><span class="an-k">Owner</span><span class="an-v">Santiago Varela</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ANUNCIOS ── -->
+<div class="page hidden" id="t-anuncios">
+  <div class="sh">
+    <div class="sh-t">Anuncios activos · Mayo 2026</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="hdr-sel" id="adsCampFilter" onchange="renderAds()">
+        <option value="">Todas las campañas</option>
+        <option value="C1">C1 MX Belleza</option>
+        <option value="C2">C2 MX Comercio</option>
+        <option value="C3">C3 MX Servicios</option>
+        <option value="C4">C4 LATAM Belleza</option>
+        <option value="C5">C5 LATAM Comercio</option>
+        <option value="C6">C6 LATAM Servicios</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="fetchAds()">↻ Cargar desde API</button>
+    </div>
+  </div>
+  <div id="adsLoading" class="hidden" style="padding:40px;text-align:center;color:var(--mut);font-size:13px">Cargando anuncios desde Meta API…</div>
+  <div class="ad-grid" id="adsGrid"></div>
+  <div class="sh" style="margin-top:8px"><div class="sh-t">Assets por Adset</div></div>
+  <div id="adsetAssets"></div>
+</div>
+
+<!-- ── ORGÁNICO ── -->
+<div class="page hidden" id="t-organico">
+  <div class="sh">
+    <div class="sh-t">Contenido orgánico · Mayo 2026</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" id="btnIG" onclick="setOrgTab('ig')" style="border-color:var(--p);color:var(--p);background:var(--pbg)">📸 Instagram</button>
+      <button class="btn btn-ghost btn-sm" id="btnFB" onclick="setOrgTab('fb')">👥 Facebook</button>
+      <select class="hdr-sel" onchange="setOrgFilter(this.value)">
+        <option value="semana">Última semana</option>
+        <option value="mes" selected>Último mes</option>
+        <option value="trimestre">Trimestre</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="fetchOrganic()">↻ Cargar desde API</button>
+    </div>
+  </div>
+  <div id="orgLoading" class="hidden" style="padding:40px;text-align:center;color:var(--mut);font-size:13px">Cargando posts desde API…</div>
+  <div class="kgrid" id="orgKpis" style="margin-bottom:18px"></div>
+  <div class="post-grid" id="orgGrid"></div>
+</div>
+
+<!-- ── PARRILLA ── -->
+<div class="page hidden" id="t-parrilla">
+  <div class="sh">
+    <div class="sh-t">Parrilla de contenido · Mayo 2026</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="toggleComposer()">✏️ Nuevo post</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start">
+    <div>
+      <div class="cal-grid" id="calHeader"></div>
+      <div class="cal-grid" id="calDays"></div>
+    </div>
+    <div class="composer" id="composer" style="display:none">
+      <div class="comp-t">✏️ Crear y publicar</div>
+      <div class="plat-row">
+        <button class="plat-btn ig" id="platIG" onclick="togglePlat('ig')">📸 Instagram</button>
+        <button class="plat-btn fb" id="platFB" onclick="togglePlat('fb')">👥 Facebook</button>
+      </div>
+      <div class="field">
+        <label class="fl">URL de imagen (pública)</label>
+        <input class="fi" id="postImgUrl" placeholder="https://...">
+        <div class="fh">La imagen debe estar en una URL pública accesible</div>
+      </div>
+      <div class="field">
+        <label class="fl">Caption</label>
+        <textarea class="comp-ta" id="postCaption" placeholder="Escribe el copy del post…"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-primary btn-sm" onclick="publishPost()">🚀 Publicar ahora</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleComposer()">Cancelar</button>
+      </div>
+      <div id="pubStatus" style="font-size:12px;margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+// ═══ AUTH ════════════════════════════════════════════════
+const USERS = {
+  'santiago.varela@bewe.io': {pass:'BeweDash!26',role:'admin',name:'Santiago'},
+  'julian.varela@bewe.io':   {pass:'BeweDash!26',role:'admin',name:'Julián'},
+  'wendy.pamplona@bewe.io':  {pass:'BeweDash!26',role:'admin',name:'Wendy'},
+  'maria.chaparro@bewe.io':  {pass:'BeweLead!26',role:'lead', name:'María'},
+  'paula.gonzalez@bewe.io':  {pass:'BeweRedes26', role:'content',name:'Paula'},
+  'hernan.guzman@bewe.io':   {pass:'BeweRedes26', role:'content',name:'Hernán'},
+};
+const ROLE_TABS = {
+  admin:   ['dashboard','campanas','estrategia','anuncios','organico','parrilla','informe','agente','config'],
+  lead:    ['dashboard','campanas','estrategia','anuncios','organico','parrilla','informe','agente'],
+  content: ['dashboard','campanas','anuncios','organico','parrilla'],
+};
+let currentUser = null;
+
+function doLogin(){
+  const email = $('loginEmail').value.trim().toLowerCase();
+  const pass  = $('loginPass').value;
+  const u     = USERS[email];
+  $('loginErr').style.display = 'none';
+  if(!u || u.pass !== pass){ $('loginErr').style.display='block'; return; }
+  currentUser = {email, ...u};
+  localStorage.setItem('bw_session', JSON.stringify(currentUser));
+  $('loginScreen').style.display = 'none';
+  $('shell').classList.remove('hidden');
+  applyRoleUI();
+  initDashboard();
+}
+
+function applyRoleUI(){
+  if(!currentUser) return;
+  const allowed = ROLE_TABS[currentUser.role] || [];
+  ['dashboard','campanas','analisis','anuncios','organico','parrilla','plan','informe','agente','config'].forEach(t=>{
+    const btn = $('nav-'+t);
+    if(!btn) return;
+    if(!allowed.includes(t)){
+      btn.style.opacity = '0.35';
+      btn.style.pointerEvents = 'none';
+      btn.title = 'Sin acceso';
+    }
+  });
+  // Show user name in sidebar footer
+  const foot = document.querySelector('.sb-acct');
+  if(foot) foot.innerHTML = `<strong>${currentUser.name}</strong><br>act_929824... · ${currentUser.role}`;
+}
+
+function checkSession(){
+  const s = localStorage.getItem('bw_session');
+  if(s){ try{ currentUser = JSON.parse(s); $('loginScreen').style.display='none'; $('shell').classList.remove('hidden'); applyRoleUI(); initDashboard(); }catch(e){ localStorage.removeItem('bw_session'); } }
+}
+
+function doLogout(){
+  localStorage.removeItem('bw_session');
+  currentUser = null;
+  location.reload();
+}
+
+// ═══ IDs PLATAFORMAS ═══════════════════════════════════
+const FB_PAGE_ID = '225426867908315';
+const IG_ACC_ID  = '17841404681419259';
+
+// ═══ DATOS ═══════════════════════════════════════════════
+let SNAP_DATE = '16–20 mayo 2026';
+const LAUNCH = new Date('2026-05-12T00:00:00');
+const DAY7   = new Date('2026-05-19T00:00:00');
+const DAY14  = new Date('2026-05-26T00:00:00');
+const BUDGET = 3000;
+const CPT_T  = {target:2.20,warn:3.00,critical:5.50};
+
+const CAMPS = [
+  {id:'C1',cid:'52551556599886',name:'MX_BELLEZA_WEB_MAY26',event:'CompleteRegistration',geo:'MX',daily:26,total:520,spend:104.80,impressions:19100,clicks:942,ctr:4.93,cpm:5.49,reach:13100,freq:1.46,conversions:18,cpt:5.82,flag:'critical',evContact:37,evInitCheckout:90,evCompleteReg:18},
+  {id:'C2',cid:'52551556733086',name:'MX_COMERCIO_WEB_MAY26',event:'CompleteRegistration',geo:'MX',daily:21,total:420,spend:84.70,impressions:11420,clicks:889,ctr:7.79,cpm:7.42,reach:8760,freq:1.30,conversions:9,cpt:9.41,flag:'critical',evContact:20,evInitCheckout:50,evCompleteReg:9},
+  {id:'C3',cid:'52551556895286',name:'MX_SERVICIOS_WEB_MAY26',event:'InitiateCheckout',geo:'MX',daily:16,total:320,spend:68.90,impressions:37300,clicks:7660,ctr:20.54,cpm:1.85,reach:24300,freq:1.54,conversions:352,cpt:0.20,flag:'anomaly',evContact:219,evInitCheckout:352,evCompleteReg:13},
+  {id:'C4',cid:'52551557046086',name:'CR_PA_CL_CO_BELLEZA_WEB_MAY26',event:'CompleteRegistration',geo:'CR+PA+CL+CO',daily:18,total:360,spend:72.50,impressions:15050,clicks:676,ctr:4.49,cpm:4.82,reach:11600,freq:1.30,conversions:17,cpt:4.26,flag:'warn',evContact:27,evInitCheckout:59,evCompleteReg:17},
+  {id:'C5',cid:'52551557199886',name:'CR_PA_CL_CO_COMERCIO_WEB_MAY26',event:'InitiateCheckout',geo:'CR+PA+CL+CO',daily:14,total:280,spend:65.90,impressions:16200,clicks:2100,ctr:12.96,cpm:4.07,reach:12350,freq:1.31,conversions:126,cpt:0.52,evContact:90,evInitCheckout:126,evCompleteReg:1},
+  {id:'C6',cid:'52551557419286',name:'CR_PA_CL_CO_SERVICIOS_WEB_MAY26',event:'InitiateCheckout',geo:'CR+PA+CL+CO',daily:10,total:200,spend:51.10,impressions:7150,clicks:943,ctr:13.19,cpm:7.15,reach:5380,freq:1.33,conversions:137,cpt:0.37,evContact:139,evInitCheckout:137,evCompleteReg:5},
+];
+
+const ADSETS = [
+  {cid:'52551556599886',name:'A1.1_MX_LOK_BELLEZA',    spend:18.40,impressions:3580, clicks:69,  ctr:1.93, cpm:5.14,reach:2800, freq:1.28,conversions:9, cpt:2.04},
+  {cid:'52551556599886',name:'A1.2_MX_CA_ENGAGERS',    spend:8.35, impressions:2530, clicks:69,  ctr:2.73, cpm:3.30,reach:2240, freq:1.13,conversions:2, cpt:4.18},
+  {cid:'52551556599886',name:'A1.3_MX_INT_BELLEZA',    spend:78.05,impressions:12990,clicks:804, ctr:6.19, cpm:6.01,reach:9560, freq:1.36,conversions:7, cpt:11.15},
+  {cid:'52551556733086',name:'A2.1_MX_LOK_COMERCIO',   spend:9.60, impressions:1220, clicks:32,  ctr:2.62, cpm:7.87,reach:1030, freq:1.18,conversions:0, cpt:null},
+  {cid:'52551556733086',name:'A2.2_MX_LOK_GURU',       spend:9.77, impressions:1295, clicks:39,  ctr:3.01, cpm:7.54,reach:1145, freq:1.13,conversions:0, cpt:null},
+  {cid:'52551556733086',name:'A2.3_MX_INT_COMERCIO',   spend:65.33,impressions:8905, clicks:818, ctr:9.19, cpm:7.34,reach:6885, freq:1.29,conversions:9, cpt:7.26},
+  {cid:'52551556895286',name:'A3.1_MX_LOK_SERVICIOS',  spend:38.50,impressions:8380, clicks:248, ctr:2.96, cpm:4.59,reach:6320, freq:1.33,conversions:27,cpt:1.43},
+  {cid:'52551556895286',name:'A3.2_MX_INT_SERVICIOS',  spend:30.40,impressions:28920,clicks:7412,ctr:25.63,cpm:1.05,reach:17780,freq:1.63,conversions:325,cpt:0.09,warn:true},
+  {cid:'52551557046086',name:'A4.1_LATAM_LOK_BELLEZA', spend:39.80,impressions:8880, clicks:249, ctr:2.80, cpm:4.48,reach:7260, freq:1.22,conversions:11,cpt:3.62},
+  {cid:'52551557046086',name:'A4.2_LATAM_INT_BELLEZA', spend:32.70,impressions:6170, clicks:427, ctr:6.92, cpm:5.30,reach:4730, freq:1.30,conversions:6, cpt:5.45},
+  {cid:'52551557199886',name:'A5.1_LATAM_LOK_COMERCIO',spend:30.90,impressions:6940, clicks:296, ctr:4.27, cpm:4.45,reach:4880, freq:1.42,conversions:40,cpt:0.77},
+  {cid:'52551557199886',name:'A5.2_LATAM_INT_COMERCIO',spend:35.00,impressions:9260, clicks:1804,ctr:19.48,cpm:3.78,reach:7470, freq:1.24,conversions:86,cpt:0.41},
+  {cid:'52551557419286',name:'A6.1_LATAM_LOK_SERVICIOS',spend:23.10,impressions:2840,clicks:319, ctr:11.23,cpm:8.13,reach:2300, freq:1.23,conversions:58,cpt:0.40},
+  {cid:'52551557419286',name:'A6.2_LATAM_INT_SERVICIOS',spend:28.00,impressions:4310,clicks:624, ctr:14.48,cpm:6.50,reach:3080, freq:1.40,conversions:79,cpt:0.35},
+];
+
+const PLAN_CONTEXT = `PLAN DE PAUTA BEWE MAYO 2026
+Owner: Santiago Varela. Aprueba: Julián Varela (CGPO).
+Período: 12 mayo – 31 mayo 2026. Presupuesto: €3.000 + €1.000 contingencia condicional.
+
+CAMPAÑAS:
+C1 MX_BELLEZA_WEB — €26/día, CompleteRegistration, México
+C2 MX_COMERCIO_WEB — €21/día, CompleteRegistration, México
+C3 MX_SERVICIOS_WEB — €16/día, InitiateCheckout, México [PIXEL SOSPECHOSO]
+C4 CR_PA_CL_CO_BELLEZA_WEB — €18/día, CompleteRegistration, LATAM
+C5 CR_PA_CL_CO_COMERCIO_WEB — €14/día, InitiateCheckout, LATAM
+C6 CR_PA_CL_CO_SERVICIOS_WEB — €10/día, InitiateCheckout, LATAM [FRÁGIL]
+C7 RETARGETING — €90/día×6d, activación CONDICIONAL 26 mayo
+C8 LATAM_TOOLS — €18/día, InitiateTool [NO CREADA]
+
+InitiateCheckout en Bewe = clic en "Probar gratis" → app.bewe.ai/onboarding.
+
+BENCHMARKS: Agresivo €1.57 CPT · Medio €2.20 CPT · Conservador €5.50 CPT
+CRÍTICO si día 10 CPT global >€8.
+
+REGLAS JULIÁN:
+- ABO (por adset). Reasignación libre hasta 20%, >20% aprobación Julián.
+- Día 7 (19 mayo): Plan B si CompleteReg <20 → switch a InitiateCheckout. Watchpoint CO.
+- Día 14 (26 mayo): Activar C7 si ≥1000 visits + ≥30 trials. Contingencia €1000 si ≥2 camps CPT<€3.
+
+DATOS SNAPSHOT 16-20 mayo (post-CAPI): gasto €447.90/€3000 (período), total acumulado ~€906.86.
+CompleteReg (C1+C2+C4)=44, InitCheckout excl C3 (C5+C6)=263.
+PLAN B ACTIVADO: C2 con 9 CR en 9 días → switch a InitiateCheckout.
+C1 CPT cruzó umbral crítico €5.50 → revisar A1.3_INT_BELLEZA.
+C3 anomalía CAPI confirmada: excluir de CPT global.`;
+
+// ═══ HELPERS ═══════════════════════════════════════════
+const $  = id => document.getElementById(id);
+const e  = v => v===null||v===undefined||isNaN(v)?'—':'€'+parseFloat(v).toLocaleString('es',{minimumFractionDigits:2,maximumFractionDigits:2});
+const p  = v => v===null||isNaN(v)?'—':parseFloat(v).toFixed(2)+'%';
+const n  = v => !v&&v!==0?'—':parseInt(v).toLocaleString('es');
+const cg = v => v===null?'md':v<=CPT_T.target?'mg':v<=CPT_T.warn?'my':'mr';
+const tg = v => v===null?'td_':v<=CPT_T.target?'tg':v<=CPT_T.warn?'ty':'tr_';
+const rg = v => v>=1.5?'mg':v>=1.0?'my':v>0?'mr':'md';
+const days   = () => Math.max(0,Math.min(Math.floor((Date.now()-LAUNCH)/864e5),20));
+const dUntil = d  => Math.ceil((d-Date.now())/864e5);
+
+let selectedCamp = null;
+let geminiKey    = localStorage.getItem('bw_gkey')      || '';
+let metaToken    = localStorage.getItem('bw_metaToken') || '';
+const META_ACC   = 'act_929824683759001';
+const META_BASE  = 'https://graph.facebook.com/v22.0';
+
+const ALL_TABS = ['dashboard','campanas','estrategia','anuncios','organico','parrilla','informe','agente','config'];
+const PAGE_TITLES = {dashboard:'Dashboard',campanas:'Campañas',estrategia:'Estrategia',anuncios:'Anuncios',organico:'Contenido Orgánico',parrilla:'Parrilla',informe:'Informe',agente:'Agente IA',config:'Configuración'};
+
+// ═══ TABS ═════════════════════════════════════════════════
+function showTab(id){
+  const allowed = currentUser ? ROLE_TABS[currentUser.role] : ALL_TABS;
+  if(!allowed.includes(id)){ return; }
+  ALL_TABS.forEach(t=>{
+    const el=$('t-'+t); if(el) el.classList.toggle('hidden',t!==id);
+    const nb=$('nav-'+t); if(nb) nb.classList.toggle('on',t===id);
+  });
+  $('pageTitle').textContent = PAGE_TITLES[id]||id;
+  if(id==='estrategia') renderEstrategia();
+  if(id==='informe')    genReport();
+  if(id==='anuncios')   renderAds();
+  if(id==='organico')   renderOrganic();
+  if(id==='parrilla')   renderParrilla();
+}
+
+function initDashboard(){
+  geminiKey  = localStorage.getItem('bw_gkey')      || '';
+  metaToken  = localStorage.getItem('bw_metaToken') || '';
+  if(geminiKey){ $('geminiKeyInput').value='••••••••'; $('geminiKeyStatus').textContent='✓ Clave Gemini activa'; $('geminiKeyStatus').style.color='var(--g)'; }
+  if(metaToken){ $('metaTokenInput').value='••••••••'; $('metaTokenStatus').textContent='✓ Token Meta guardado'; $('metaTokenStatus').style.color='var(--g)'; }
+  renderAlerts(); renderKPIs(); renderFunnel(); renderTimeline(); renderCamps();
+  const tReg=CAMPS.reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const tChk=CAMPS.reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  $('campSub').textContent=`€${CAMPS.reduce((s,c)=>s+c.spend,0).toFixed(2)} gastado · ${tReg} registros · ${tChk} inicio pago`;
+  $('kpiSub').textContent=`Snapshot: ${SNAP_DATE}`;
+}
+
+// ═══ INIT ═════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', checkSession);
+
+// ═══ ALERTS ═══════════════════════════════════════════════
+function renderAlerts(){
+  const d=days();
+  const items=[
+    {c:'al-r',i:'🚨',t:'PLAN B ACTIVADO — C2 MX_COMERCIO (solo 9 CompleteRegistration en 9 días)',d:`Día ${d}: Umbral Plan B era <20 CR en 7 días. C2 tiene 9 CR (16-20 may). Acción: switch a evento InitiateCheckout + revisar audiencias. A2.3 INT: €65.33 gastados con CPT €7.26.`},
+    {c:'al-r',i:'🚨',t:'C1 MX_BELLEZA — CPT €5.82 cruzó umbral crítico (€5.50)',d:'A1.3_INT_BELLEZA: €78.05 gastados con solo 7 conversiones (CPT €11.15). A1.1_LOK mantiene €2.04 — evaluar reasignar budget de INT a LOK.'},
+    {c:'al-y',i:'⚠️',t:'C3 MX_SERVICIOS — Anomalía CAPI confirmada (352 IC a €0.20)',d:'A3.2_INT_SERVICIOS sigue disparando IC en page load. CAPI confirma el mismo patrón. Excluida del CPT Inicio Pago global. No pausar — genera señal de volumen.'},
+    {c:'al-b',i:'ℹ️',t:`Día ${d} — Evaluar reasignación presupuestal (regla Julián ≤20%)`,d:'C5 y C6 muestran CPT €0.52 y €0.37 respectivamente. Considerar mover €4/día de C2 hacia C5 sin requerir aprobación Julián (<20% del presupuesto).'},
+  ];
+  const critical=items.filter(i=>i.c==='al-r').length;
+  const warn=items.filter(i=>i.c==='al-y').length;
+  $('alertBadge').textContent=critical+warn;
+  $('alertBadge').style.display=(critical+warn)>0?'':'none';
+  $('alerts').innerHTML=items.map(a=>`<div class="al ${a.c}"><span class="al-ic">${a.i}</span><div><div class="al-t">${a.t}</div><div class="al-d">${a.d}</div></div></div>`).join('');
+}
+
+// ═══ KPIs ════════════════════════════════════════════════
+function renderKPIs(){
+  const spend  = CAMPS.reduce((s,c)=>s+c.spend,0);
+  const impr   = CAMPS.reduce((s,c)=>s+c.impressions,0);
+  const clicks = CAMPS.reduce((s,c)=>s+c.clicks,0);
+  const gctr   = impr>0?clicks/impr*100:0;
+  const gcpm   = impr>0?spend/impr*1000:0;
+  const d=days();
+  const cRegC  = CAMPS.filter(c=>c.event==='CompleteRegistration');
+  const cIcoC  = CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3');
+  const spReg  = cRegC.reduce((s,c)=>s+c.spend,0);
+  const cvReg  = cRegC.reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const cptReg = cvReg>0?spReg/cvReg:null;
+  const spIco  = cIcoC.reduce((s,c)=>s+c.spend,0);
+  const cvIco  = cIcoC.reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  const cptIco = cvIco>0?spIco/cvIco:null;
+  const cR=cptReg===null?'vn':cptReg<=CPT_T.target?'vg':cptReg<=CPT_T.warn?'vy':'vr';
+  const cI=cptIco===null?'vn':cptIco<=CPT_T.target?'vg':cptIco<=CPT_T.warn?'vy':'vr';
+  $('kpiSub').textContent=`Snapshot: ${SNAP_DATE}`;
+  $('kpiRow').innerHTML=`
+    <div class="kpi"><div class="kpi-l">Gasto total</div><div class="kpi-v vn">${e(spend)}</div><div class="kpi-s">${Math.round(spend/BUDGET*100)}% de €${BUDGET} · €${Math.round(BUDGET-spend)} restante</div></div>
+    <div class="kpi"><div class="kpi-l">CPT Registro</div><div class="kpi-v ${cR}">${e(cptReg)}</div><div class="kpi-s">C1+C2+C4 · ${cvReg} CompleteReg</div></div>
+    <div class="kpi"><div class="kpi-l">CPT Inicio pago</div><div class="kpi-v ${cI}">${e(cptIco)}</div><div class="kpi-s">C5+C6 · ${cvIco} InitCheckout</div></div>
+    <div class="kpi"><div class="kpi-l">CTR global</div><div class="kpi-v ${gctr>=1.5?'vg':gctr>=1.0?'vy':'vr'}">${p(gctr)}</div><div class="kpi-s">objetivo 1.5–2.5%</div></div>
+    <div class="kpi"><div class="kpi-l">CPM global</div><div class="kpi-v ${gcpm<=9?'vg':gcpm<=12?'vy':'vr'}">${e(gcpm)}</div><div class="kpi-s">objetivo &lt;€9</div></div>
+    <div class="kpi"><div class="kpi-l">Días activo</div><div class="kpi-v vn">${d}<span style="font-size:13px;color:var(--mut)">/20</span></div><div class="kpi-s">12 – 31 mayo 2026</div></div>
+  `;
+}
+
+// ═══ FUNNEL VIZ ═══════════════════════════════════════════
+function renderFunnel(){
+  const totC=CAMPS.reduce((s,c)=>s+(c.evContact||0),0);
+  const totI=CAMPS.reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  const totR=CAMPS.reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const max=Math.max(totC,totI,totR,1);
+  const h=(v)=>Math.max(8,Math.round(v/max*60));
+  const cvr1=totC>0?(totI/totC*100).toFixed(1):'—';
+  const cvr2=totI>0?(totR/totI*100).toFixed(1):'—';
+  $('funnelViz').innerHTML=`
+    <div class="funnel-row">
+      <div class="fn-step">
+        <div class="fn-bar-wrap"><div class="fn-bar" style="height:${h(totC)}px;background:linear-gradient(135deg,#0EA5E9,#38BDF8)"></div></div>
+        <div class="fn-num" style="color:#0EA5E9">${n(totC)}</div>
+        <div class="fn-lbl">Contactos</div>
+        <div class="fn-cvr">Linda · WhatsApp</div>
+      </div>
+      <div class="fn-arr">→</div>
+      <div class="fn-step">
+        <div class="fn-cvr" style="font-size:12px;font-weight:700;color:var(--dim);text-align:center">${cvr1}%</div>
+        <div class="fn-bar-wrap"><div class="fn-bar" style="height:${h(totI)}px;background:linear-gradient(135deg,#6366F1,#818CF8)"></div></div>
+        <div class="fn-num" style="color:var(--sec)">${n(totI)}</div>
+        <div class="fn-lbl">Inicio de pago</div>
+        <div class="fn-cvr">"Probar gratis" → onboarding</div>
+      </div>
+      <div class="fn-arr">→</div>
+      <div class="fn-step">
+        <div class="fn-cvr" style="font-size:12px;font-weight:700;color:var(--dim);text-align:center">${cvr2}%</div>
+        <div class="fn-bar-wrap"><div class="fn-bar" style="height:${h(totR)}px;background:linear-gradient(135deg,#16A34A,#4ADE80)"></div></div>
+        <div class="fn-num" style="color:var(--g)">${n(totR)}</div>
+        <div class="fn-lbl">Registro completo</div>
+        <div class="fn-cvr">trial confirmado</div>
+      </div>
+    </div>`;
+}
+
+// ═══ TIMELINE ═════════════════════════════════════════════
+function renderTimeline(){
+  const d7=dUntil(DAY7),d14=dUntil(DAY14),d=days();
+  const l7 =d7<0?`Hace ${Math.abs(d7)}d`:d7===0?'¡HOY!':d7===1?'Mañana':`En ${d7}d`;
+  const l14=d14<0?`Hace ${Math.abs(d14)}d`:d14===0?'¡HOY!':d14===1?'Mañana':`En ${d14}d`;
+  $('timeline').innerHTML=`
+    <div class="tlc"><div class="tli">🚀</div><div><div class="tld">12 may</div><div class="tlt">Lanzamiento</div><div class="tlb">6 campañas activas desde el día 1.</div><div class="tlc2 c-done">✓ Día ${d}/20</div></div></div>
+    <div class="tlc"><div class="tli">🔍</div><div><div class="tld">19 may — Día 7</div><div class="tlt">Revisión Plan B</div><div class="tlb">Switch evento · Watchpoint CO · Reasignación 20%.</div><div class="tlc2 ${d7<0?'c-past':d7<=1?'c-now':'c-fut'}">${l7}</div></div></div>
+    <div class="tlc"><div class="tli">⚡</div><div><div class="tld">26 may — Día 14</div><div class="tlt">C7 + contingencia</div><div class="tlb">Activa C7 si ≥1.000 visits + ≥30 trials. Decisión €1.000.</div><div class="tlc2 ${d14<0?'c-past':d14<=1?'c-now':'c-fut'}">${l14}</div></div></div>
+    <div class="tlc"><div class="tli">📊</div><div><div class="tld">31 may</div><div class="tlt">Cierre mes 1</div><div class="tlb">Reporte final y brief junio.</div></div></div>
+  `;
+}
+
+// ═══ CAMPAIGNS ════════════════════════════════════════════
+function renderCamps(){
+  const d=days();
+  $('campGrid').innerHTML=CAMPS.map(c=>{
+    const exp=c.daily*d, pac=exp>0?c.spend/exp*100:0;
+    const pcls=pac>115?'bf-r':pac<70&&d>=3?'bf-y':'bf-ok';
+    const sel=selectedCamp===c.cid;
+    const flagPill=c.flag==='critical'?'<span class="pill p-r">CPT crítico</span>':c.flag==='anomaly'?'<span class="pill p-y">Verificar pixel</span>':c.flag==='warn'?'<span class="pill p-y">CPT elevado</span>':'';
+    const evtPill=c.event==='CompleteRegistration'?'<span class="pill p-cr">CompleteReg</span>':'<span class="pill p-ic">InitCheckout</span>';
+    const vert=c.name.includes('BELLEZA')?'Belleza':c.name.includes('COMERCIO')?'Comercio':'Servicios';
+    return`<div class="cc ${sel?'sel':''}" onclick="toggleAdsets('${c.cid}','${c.name}')">
+      <div class="cc-head">
+        <div>
+          <div class="cc-lbl">${c.id} · ${vert}</div>
+          <div class="cc-name">${c.name}</div>
+          <div class="cc-pills"><span class="pill p-on">Activa</span>${evtPill}<span class="pill p-geo">${c.geo}</span>${flagPill}</div>
+        </div>
+        <div class="cc-bgt">€${c.daily}/día<br>€${c.total}</div>
+      </div>
+      <div class="cc-m">
+        <div><div class="ml">Gasto</div><div class="mv mn">${e(c.spend)}</div><div class="ms">${Math.round(c.spend/c.total*100)}% del total</div></div>
+        <div><div class="ml">Conv.</div><div class="mv ${c.conversions>0?'mg':'md'}">${n(c.conversions)}</div><div class="ms">${c.event==='CompleteRegistration'?'CompleteReg':'InitCheckout'}</div></div>
+        <div><div class="ml">CPT</div><div class="mv ${cg(c.cpt)}">${e(c.cpt)}</div><div class="ms">obj &lt;€${CPT_T.target}</div></div>
+        <div><div class="ml">CTR</div><div class="mv ${rg(c.ctr)}">${p(c.ctr)}</div><div class="ms">obj 1.5–2.5%</div></div>
+        <div><div class="ml">CPM</div><div class="mv ${c.cpm<=9?'mg':c.cpm<=12?'my':'mr'}">${e(c.cpm)}</div><div class="ms">obj &lt;€9</div></div>
+        <div><div class="ml">Alcance</div><div class="mv mn">${n(c.reach)}</div><div class="ms">frec. ${c.freq}</div></div>
+      </div>
+      <div class="cc-funnel">
+        <div class="cfn-item"><span class="cfn-lbl">Contacto</span><span class="cfn-val fn-c">${c.evContact}</span></div>
+        <span class="cfn-arr">→</span>
+        <div class="cfn-item"><span class="cfn-lbl">Inicio pago</span><span class="cfn-val fn-i">${c.evInitCheckout}</span></div>
+        <span class="cfn-arr">→</span>
+        <div class="cfn-item"><span class="cfn-lbl">Registro</span><span class="cfn-val fn-r">${c.evCompleteReg}</span></div>
+      </div>
+      <div class="cc-bar">
+        <div class="bl"><span>Pacing día ${d}</span><span>${exp>0?Math.round(pac)+'%':'—'}</span></div>
+        <div class="bt"><div class="bf ${pcls}" style="width:${Math.min(pac||0,100)}%"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleAdsets(id,name){
+  if(selectedCamp===id){closeAdsets();return;}
+  selectedCamp=id; renderCamps();
+  const rows=ADSETS.filter(a=>a.cid===id);
+  $('adsetTitle').textContent='Conjuntos · '+name;
+  $('adsetBody').innerHTML=rows.map(a=>`<tr>
+    <td class="tn">${a.name}</td>
+    <td class="tnum">${e(a.spend)}</td>
+    <td class="tnum">${n(a.impressions)}</td>
+    <td class="tnum">${n(a.clicks)}</td>
+    <td class="tnum ${a.ctr>=1.5?'tg':a.ctr>=1.0?'ty':a.ctr>0?'tr_':''}">${p(a.ctr)}</td>
+    <td class="tnum ${a.cpm<=9?'tg':a.cpm<=12?'ty':'tr_'}">${e(a.cpm)}</td>
+    <td class="tnum">${n(a.reach)}</td>
+    <td class="tnum ${a.conversions>0?'tg':'td_'}">${a.conversions>0?n(a.conversions):'—'}</td>
+    <td class="tnum ${tg(a.cpt)}">${e(a.cpt)}${a.warn?' ⚠️':''}</td>
+  </tr>`).join('');
+  $('adsetPanel').classList.remove('hidden');
+  setTimeout(()=>$('adsetPanel').scrollIntoView({behavior:'smooth',block:'nearest'}),60);
+}
+function closeAdsets(){selectedCamp=null;$('adsetPanel').classList.add('hidden');renderCamps();}
+
+// ═══ ANÁLISIS ═════════════════════════════════════════════
+function renderAnalysis(){
+  const d=days();
+  const c1=CAMPS.find(c=>c.id==='C1'),c2=CAMPS.find(c=>c.id==='C2'),c4=CAMPS.find(c=>c.id==='C4');
+  const c3=CAMPS.find(c=>c.id==='C3'),c5=CAMPS.find(c=>c.id==='C5'),c6=CAMPS.find(c=>c.id==='C6');
+  const cRegC=CAMPS.filter(c=>c.event==='CompleteRegistration');
+  const avgCpt=cRegC.reduce((s,c)=>s+(c.cpt||0),0)/cRegC.length;
+  const daysToD7=dUntil(DAY7);
+  const d7lbl=daysToD7>0?`En ${daysToD7} días`:daysToD7===0?'¡HOY!':'Pasado';
+
+  const planBStatus=(c)=>{
+    const cr=c.evCompleteReg||0;
+    if(cr>=20) return{txt:'✓ OK',cls:'gbg',bdc:'gbd',color:'var(--g)'};
+    return{txt:`⚠ ${cr}/20`,cls:'ybg',bdc:'ybd',color:'var(--y)'};
+  };
+
+  $('anSub').textContent=`Día ${d}/20 · próxima revisión obligatoria: 19 mayo`;
+
+  $('analysisGrid').innerHTML=`
+    <!-- C3 Pixel Anomaly -->
+    <div class="an-card">
+      <div class="an-head">
+        <div class="an-title">⚠️ C3 Pixel — Anomalía detectada</div>
+        <span class="an-badge" style="background:var(--ybg);color:var(--y);border-color:var(--ybd)">VERIFICAR</span>
+      </div>
+      <div class="an-r"><span class="an-k">InitiateCheckout reportados</span><span class="an-v" style="color:var(--y)">364</span></div>
+      <div class="an-r"><span class="an-k">CPT anómalo (A3.2 INT)</span><span class="an-v" style="color:var(--y)">€0.09</span></div>
+      <div class="an-r"><span class="an-k">CTR A3.2 INT</span><span class="an-v" style="color:var(--y)">25.7%</span></div>
+      <div class="an-r"><span class="an-k">CompleteRegistration reales</span><span class="an-v" style="color:var(--g)">13</span></div>
+      <div class="an-r"><span class="an-k">Hipótesis</span><span class="an-v" style="color:var(--r);font-size:11px">Pixel dispara en page load</span></div>
+      <div style="margin-top:12px;padding:10px;background:var(--ybg);border-radius:var(--r6);font-size:11px;color:var(--y);border:1px solid var(--ybd)">
+        <b>Acción:</b> Abre Eventos Manager → Actividad del Pixel → filtra InitiateCheckout → revisa URL. Debe disparar en <code>app.bewe.ai/onboarding</code>, NO en la landing.
+      </div>
+    </div>
+
+    <!-- Plan B Tracker -->
+    <div class="an-card">
+      <div class="an-head">
+        <div class="an-title">📋 Plan B — Switch de evento</div>
+        <span class="an-badge" style="background:var(--bbg);color:var(--b);border-color:var(--bbd)">${d7lbl}</span>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:12px">Si al día 7 (19 mayo) una campaña tiene &lt;20 CompleteRegistration acumulados → switch automático a InitiateCheckout.</div>
+      ${[c1,c2,c4].map(c=>{
+        const s=planBStatus(c);
+        const cr=c.evCompleteReg||0;
+        const pct=Math.min(cr/20*100,100);
+        return`<div style="margin-bottom:10px">
+          <div class="an-r" style="margin-bottom:4px"><span class="an-k">${c.id} ${c.name.split('_').slice(-3,-1).join('_')}</span><span class="an-v" style="color:${s.color}">${s.txt} CompleteReg</span></div>
+          <div class="meter"><div class="mf" style="width:${pct}%;background:${cr>=20?'var(--g)':cr>=10?'var(--y)':'var(--r)'}"></div></div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- CO Geo Watchpoint -->
+    <div class="an-card">
+      <div class="an-head">
+        <div class="an-title">🌎 Geo-leakage Colombia</div>
+        <span class="an-badge" style="background:var(--bbg);color:var(--b);border-color:var(--bbd)">Watchpoint</span>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:12px">Revisar % de gasto de Colombia en campañas LATAM el 19 mayo. Regla de Julián para evitar geo-leakage.</div>
+      <div class="an-r"><span class="an-k">C4 LATAM_BELLEZA</span><span class="an-v">Revisar CO%</span></div>
+      <div class="an-r"><span class="an-k">C5 LATAM_COMERCIO</span><span class="an-v">Revisar CO%</span></div>
+      <div class="an-r"><span class="an-k">C6 LATAM_SERVICIOS</span><span class="an-v">Revisar CO%</span></div>
+      <div style="margin-top:12px;font-size:11px;color:var(--dim)">
+        <b>Umbrales:</b> CO ≤30% = OK · CO 30–40% con CPT peor = Bid cap -25% · CO >40% = Bid cap o exclusión inmediata
+      </div>
+    </div>
+
+    <!-- CPT Ranking -->
+    <div class="an-card">
+      <div class="an-head">
+        <div class="an-title">📊 Ranking CPT por campaña</div>
+        <span class="an-badge" style="background:var(--gbg);color:var(--g);border-color:var(--gbd)">Real</span>
+      </div>
+      ${CAMPS.filter(c=>c.id!=='C3').sort((a,b)=>(a.cpt||99)-(b.cpt||99)).map(c=>{
+        const pct=c.cpt?Math.min(c.cpt/CPT_T.critical*100,100):0;
+        const cl=c.cpt<=CPT_T.target?'var(--g)':c.cpt<=CPT_T.warn?'var(--y)':'var(--r)';
+        return`<div style="margin-bottom:8px">
+          <div class="an-r" style="margin-bottom:3px"><span class="an-k mono" style="font-size:11px">${c.id}</span><span class="an-v" style="color:${cl}">${e(c.cpt)}</span></div>
+          <div class="meter"><div class="mf" style="width:${pct}%;background:${cl}"></div></div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- C2 Critical -->
+    <div class="an-card">
+      <div class="an-head">
+        <div class="an-title">🚨 C2 Comercio — Acción requerida</div>
+        <span class="an-badge" style="background:var(--rbg);color:var(--r);border-color:var(--rbd)">CRÍTICO</span>
+      </div>
+      <div class="an-r"><span class="an-k">CPT actual</span><span class="an-v" style="color:var(--r)">€${c2.cpt}</span></div>
+      <div class="an-r"><span class="an-k">Objetivo CPT</span><span class="an-v">€${CPT_T.target}</span></div>
+      <div class="an-r"><span class="an-k">Desviación</span><span class="an-v" style="color:var(--r)">${((c2.cpt/CPT_T.target-1)*100).toFixed(0)}% sobre objetivo</span></div>
+      <div class="an-r"><span class="an-k">CompleteReg acumulados</span><span class="an-v" style="color:var(--r)">${c2.evCompleteReg}/20 para Plan B</span></div>
+      <div class="an-r"><span class="an-k">A2.1 LOK conversiones</span><span class="an-v" style="color:var(--r)">0</span></div>
+      <div class="an-r"><span class="an-k">A2.2 GURU conversiones</span><span class="an-v" style="color:var(--r)">0</span></div>
+      <div style="margin-top:12px;padding:10px;background:var(--rbg);border-radius:var(--r6);font-size:11px;color:var(--r);border:1px solid var(--rbd)">
+        <b>Decisión el 19 mayo:</b> Si sigue &lt;20 registros → aplicar Plan B automáticamente. Sin necesidad de aprobación de Julián.
+      </div>
+    </div>
+
+    <!-- Winners -->
+    <div class="an-card">
+      <div class="an-head">
+        <div class="an-title">✅ C5 & C6 — Campañas ganadoras</div>
+        <span class="an-badge" style="background:var(--gbg);color:var(--g);border-color:var(--gbd)">EN OBJETIVO</span>
+      </div>
+      <div class="an-r"><span class="an-k">C5 Comercio CPT</span><span class="an-v" style="color:var(--g)">€${c5.cpt}</span></div>
+      <div class="an-r"><span class="an-k">C6 Servicios CPT</span><span class="an-v" style="color:var(--g)">€${c6.cpt}</span></div>
+      <div class="an-r"><span class="an-k">C5 CTR</span><span class="an-v" style="color:var(--g)">${c5.ctr}%</span></div>
+      <div class="an-r"><span class="an-k">A5.2 INT CPT</span><span class="an-v" style="color:var(--g)">€0.40</span></div>
+      <div class="an-r"><span class="an-k">C6 InitiateCheckout</span><span class="an-v" style="color:var(--g)">${c6.evInitCheckout}</span></div>
+      <div style="margin-top:12px;padding:10px;background:var(--gbg);border-radius:var(--r6);font-size:11px;color:var(--g);border:1px solid var(--gbd)">
+        <b>Reasignación posible:</b> Si C2 sigue crítico el día 7, mover hasta 20% de su presupuesto (€4.2/día) a C5 o C6.
+      </div>
+    </div>
+  `;
+}
+
+// ═══ PLAN ═════════════════════════════════════════════════
+function renderPlan(){
+  const totalSpend=CAMPS.reduce((s,c)=>s+c.spend,0);
+  const d=days();
+  const spReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+c.spend,0);
+  const cvReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const cptReg=cvReg>0?spReg/cvReg:null;
+  const spIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+c.spend,0);
+  const cvIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  const cptIco=cvIco>0?spIco/cvIco:null;
+  $('planGrid').innerHTML=`
+    <div class="pcard">
+      <div class="pcard-t">📊 Estado vs Objetivos</div>
+      <div class="prow"><span class="pk">Agresivo CPT</span><span class="pv pv-p">€1.57</span></div>
+      <div class="prow"><span class="pk">Objetivo medio CPT</span><span class="pv pv-g">€2.20</span></div>
+      <div class="prow"><span class="pk">Umbral conservador</span><span class="pv pv-y">€3.00</span></div>
+      <div class="prow"><span class="pk">Umbral crítico</span><span class="pv pv-r">€5.50</span></div>
+      <div class="prow"><span class="pk">CPT Registro (C1/C2/C4)</span><span class="pv ${cptReg&&cptReg<=2.20?'pv-g':cptReg&&cptReg<=3?'pv-y':'pv-r'}">${e(cptReg)}</span></div>
+      <div class="prow"><span class="pk">CPT Inicio pago (C5/C6)</span><span class="pv ${cptIco&&cptIco<=2.20?'pv-g':cptIco&&cptIco<=3?'pv-y':'pv-r'}">${e(cptIco)}</span></div>
+      <div class="prow"><span class="pk">Gasto día ${d}</span><span class="pv pv-n">${e(totalSpend)}</span></div>
+      <div class="prow"><span class="pk">Objetivo registros 31 may</span><span class="pv pv-g">1.350</span></div>
+    </div>
+    <div class="pcard">
+      <div class="pcard-t">🔍 Watchpoints Día 7 — 19 Mayo</div>
+      <div class="rule"><b>Plan B: Switch evento</b><br><span class="dim">Si C1, C2 o C4 tienen &lt;20 CompleteRegistration → switch a InitiateCheckout. Sin aprobación.</span></div>
+      <div class="rule"><b>CO Geo-leakage</b><br><span class="dim">CO ≤30%: OK · CO 30-40% CPT peor 25%+: Bid cap -25% · CO >40%: Bid cap o exclusión inmediata.</span></div>
+      <div class="rule"><b>Reasignación 20%</b><br><span class="dim">Si campaña CPT 50%+ sobre promedio → mover hasta 20% sin aprobación.</span></div>
+    </div>
+    <div class="pcard">
+      <div class="pcard-t">⚡ Watchpoints Día 14 — 26 Mayo</div>
+      <div class="rule"><b>Activar C7 Retargeting</b><br><span class="dim">Solo si: ≥1.000 visitantes bewe.ai + ≥30 trials. Si no, €540 van a las 2 mejores por CPT.</span></div>
+      <div class="rule"><b>Contingencia €1.000</b><br><span class="dim">Si ≥2 campañas CPT &lt;€3: Santiago propone, Julián aprueba en 24h.</span></div>
+      <div class="rule"><b>Pausar si CPT 2x promedio</b><br><span class="dim">Pausar campaña y reasignar presupuesto completo.</span></div>
+    </div>
+    <div class="pcard">
+      <div class="pcard-t">🎯 Evento por Campaña</div>
+      ${CAMPS.map(c=>`<div class="prow"><span class="pk mono" style="font-size:11px">${c.id} ${c.name.split('_').slice(-3,-1).join('_')}</span><span class="pv ${c.event==='CompleteRegistration'?'pv-p':'pv-a'}" style="font-size:10px">${c.event==='CompleteRegistration'?'CompleteReg':'InitCheckout'}</span></div>`).join('')}
+      <div class="prow"><span class="pk">C7 Retargeting</span><span class="pv pv-y">Condicional 26/5</span></div>
+      <div class="prow"><span class="pk">C8 LATAM Tools</span><span class="pv pv-r">No creada</span></div>
+    </div>
+    <div class="pcard">
+      <div class="pcard-t">❓ 4 Preguntas Clave al 31 Mayo</div>
+      <div class="rule" style="border-left-color:var(--g)"><b>1. ¿CPT promedio &lt;€3?</b><br><span class="dim">Registro: ${cptReg?e(cptReg)+' → '+(cptReg<3?'SÍ ✓':'NO ✗'):'—'} · Inicio pago: ${cptIco?e(cptIco)+' → '+(cptIco<3?'SÍ ✓':'—'):'—'}</span></div>
+      <div class="rule" style="border-left-color:var(--b)"><b>2. ¿≥25% trials completan onboarding?</b><br><span class="dim">Requiere datos de Posthog.</span></div>
+      <div class="rule" style="border-left-color:var(--y)"><b>3. ¿Todos los trials con UTM en CRM?</b><br><span class="dim">Verificar en HubSpot que utm_source llega correctamente.</span></div>
+      <div class="rule" style="border-left-color:var(--p)"><b>4. ¿CompleteReg vs InitCheckout genera mejor trial?</b><br><span class="dim">Comparar C1/C2/C4 vs C3/C5/C6 al cierre.</span></div>
+    </div>
+    <div class="pcard">
+      <div class="pcard-t">⚙️ Reglas Operativas</div>
+      <div class="prow"><span class="pk">Presupuesto</span><span class="pv pv-n">ABO (por adset)</span></div>
+      <div class="prow"><span class="pk">Reasignación libre</span><span class="pv pv-n">hasta 20%</span></div>
+      <div class="prow"><span class="pk">Puja semana 1</span><span class="pv pv-n">Volumen máximo</span></div>
+      <div class="prow"><span class="pk">Atribución</span><span class="pv pv-n">7d clic / 1d view</span></div>
+      <div class="prow"><span class="pk">Det. Expansion</span><span class="pv pv-n">OFF en LOK, ON en INT</span></div>
+      <div class="prow"><span class="pk">Dominio verificado</span><span class="pv pv-n">bewe.ai</span></div>
+    </div>
+  `;
+}
+
+// ═══ INFORME ══════════════════════════════════════════════
+function genReport(){
+  const d=days();
+  const totalSpend=CAMPS.reduce((s,c)=>s+c.spend,0);
+  const totReg=CAMPS.reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const spReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+c.spend,0);
+  const cvReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const cptReg=cvReg>0?spReg/cvReg:null;
+  const spIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+c.spend,0);
+  const cvIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  const cptIco=cvIco>0?spIco/cvIco:null;
+  const dToD7=dUntil(DAY7);
+  let r='';
+  r+=`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINFORME DE PAUTA — BEWE MAYO 2026\nSnapshot: ${SNAP_DATE} · Día ${d}/20\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  r+=`RESUMEN EJECUTIVO\n─────────────────\n`;
+  r+=`Gasto acumulado: €${totalSpend.toFixed(2)} / €${BUDGET} (${Math.round(totalSpend/BUDGET*100)}%)\n`;
+  r+=`Registros completos (CompleteRegistration): ${totReg}\n`;
+  r+=`CPT Registro (C1/C2/C4): ${cptReg?'€'+cptReg.toFixed(2):'—'} → ${cptReg?cptReg<=CPT_T.target?'✓ EN OBJETIVO':cptReg<=CPT_T.warn?'⚠ POR ENCIMA':'✗ CRÍTICO':'—'}\n`;
+  r+=`CPT Inicio pago (C5/C6): ${cptIco?'€'+cptIco.toFixed(2):'—'} → ${cptIco?cptIco<=CPT_T.target?'✓ EN OBJETIVO':cptIco<=CPT_T.warn?'⚠ POR ENCIMA':'✗ CRÍTICO':'—'}\n`;
+  r+=`Próxima revisión: Día 7 (19 mayo, ${dToD7>0?'en '+dToD7+' días':dToD7===0?'HOY':'pasado'})\n\n`;
+  r+=`ESTADO POR CAMPAÑA\n───────────────────\n`;
+  CAMPS.forEach(c=>{
+    const s=c.flag==='critical'?'🚨 CRÍTICO':c.flag==='anomaly'?'⚠ VERIFICAR':c.flag==='warn'?'⚠ ATENCIÓN':'✓ OK';
+    r+=`${c.id} ${c.name}\n  Gasto: €${c.spend} | CompleteReg: ${c.evCompleteReg} | InitCheckout: ${c.evInitCheckout} | CPT: ${c.cpt?'€'+c.cpt:'—'} | CTR: ${c.ctr}% | ${s}\n`;
+    if(c.flag==='critical') r+=`  → Si <20 conv día 7 → Plan B: switch a InitiateCheckout\n`;
+    if(c.flag==='anomaly')  r+=`  → Verificar pixel en Eventos Manager\n`;
+    r+='\n';
+  });
+  r+=`PENDIENTES URGENTES\n────────────────────\n`;
+  r+=`✗ PLAN B ACTIVADO: C2 switch a InitiateCheckout (9 CR en 9 días)\n`;
+  r+=`✗ C1 CPT €5.82 cruzó umbral crítico — pausar A1.3_INT_BELLEZA o reducir budget\n`;
+  r+=`□ C3 anomalía CAPI confirmada — excluir de CPT global, no pausar\n`;
+  r+=`□ Watchpoint geo-leakage Colombia en C4/C5/C6 (≥40% → bid cap)\n`;
+  r+=`□ 26 mayo (Día 14): Activar C7 si ≥1000 visits + ≥30 trials\n`;
+  r+=`□ Crear C8 LATAM_TOOLS (pendiente desde lanzamiento)\n`;
+  r+=`□ Confirmar UTMs en CRM para todas las conversiones\n\n`;
+  r+=`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nGenerado por Dashboard Bewe · ${SNAP_DATE}\n`;
+  $('reportBox').textContent=r;
+  $('copyBtn').textContent='Copiar';
+}
+function copyReport(){
+  navigator.clipboard.writeText($('reportBox').textContent).then(()=>{
+    $('copyBtn').textContent='✓ Copiado';
+    setTimeout(()=>$('copyBtn').textContent='Copiar',2000);
+  });
+}
+
+// ═══ META LIVE API ════════════════════════════════════════
+async function fetchMetaLive(){
+  if(!metaToken){showTab('config');return;}
+  const preset=$('datePreset').value;
+  const btn=$('refreshBtn'),lbl=$('snapLabel'),chip=$('snapChip'),dot=$('snapDot');
+  lbl.textContent='Cargando...'; chip.className='snap-chip'; dot.className='sdot';
+  if(btn) btn.disabled=true;
+  const FC='campaign_id,campaign_name,spend,impressions,clicks,ctr,cpm,reach,frequency,actions';
+  const FA='adset_id,adset_name,campaign_id,spend,impressions,clicks,ctr,cpm,reach,frequency,actions';
+  const base=`${META_BASE}/${META_ACC}/insights`;
+  const tok=`access_token=${encodeURIComponent(metaToken)}`;
+  try{
+    const [cR,aR]=await Promise.all([
+      fetch(`${base}?level=campaign&fields=${FC}&date_preset=${preset}&limit=20&${tok}`).then(r=>r.json()),
+      fetch(`${base}?level=adset&fields=${FA}&date_preset=${preset}&limit=100&${tok}`).then(r=>r.json())
+    ]);
+    if(cR.error) throw new Error(cR.error.message);
+    if(aR.error) throw new Error(aR.error.message);
+    const ga=(acts,type)=>parseInt((acts||[]).find(a=>a.action_type===type)?.value||'0');
+    cR.data.forEach(row=>{
+      const c=CAMPS.find(x=>x.cid===row.campaign_id); if(!c) return;
+      c.spend=parseFloat(row.spend)||0; c.impressions=parseInt(row.impressions)||0;
+      c.clicks=parseInt(row.clicks)||0; c.ctr=parseFloat(row.ctr)||0;
+      c.cpm=parseFloat(row.cpm)||0; c.reach=parseInt(row.reach)||0; c.freq=parseFloat(row.frequency)||0;
+      c.evCompleteReg =ga(row.actions,'offsite_conversion.fb_pixel_complete_registration');
+      c.evInitCheckout=ga(row.actions,'offsite_conversion.fb_pixel_initiate_checkout');
+      c.evContact     =ga(row.actions,'offsite_conversion.fb_pixel_contact');
+      c.conversions=c.event==='CompleteRegistration'?c.evCompleteReg:c.evInitCheckout;
+      c.cpt=c.conversions>0?+(c.spend/c.conversions).toFixed(2):null;
+      c.flag=c.id==='C3'?'anomaly':c.cpt===null?null:c.cpt>CPT_T.critical?'critical':c.cpt>CPT_T.warn?'warn':null;
+    });
+    ADSETS.length=0;
+    aR.data.forEach(row=>{
+      const camp=CAMPS.find(x=>x.cid===row.campaign_id);
+      const evCR=ga(row.actions,'offsite_conversion.fb_pixel_complete_registration');
+      const evIC=ga(row.actions,'offsite_conversion.fb_pixel_initiate_checkout');
+      const conv=camp?.event==='CompleteRegistration'?evCR:evIC;
+      const sp=parseFloat(row.spend)||0;
+      ADSETS.push({cid:row.campaign_id,name:row.adset_name,spend:sp,impressions:parseInt(row.impressions)||0,clicks:parseInt(row.clicks)||0,ctr:parseFloat(row.ctr)||0,cpm:parseFloat(row.cpm)||0,reach:parseInt(row.reach)||0,freq:parseFloat(row.frequency)||0,conversions:conv,cpt:conv>0?+(sp/conv).toFixed(2):null});
+    });
+    const now=new Date(),ts=now.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+    const pLbl={last_3d:'3d',last_7d:'7d',last_14d:'14d',this_month:'Este mes',today:'Hoy',yesterday:'Ayer'}[preset]||preset;
+    SNAP_DATE=`Live ${pLbl} · ${ts}`;
+    lbl.textContent=`Live · ${pLbl} · ${ts}`;
+    chip.className='snap-chip live-chip'; dot.className='sdot live';
+    renderAlerts(); renderKPIs(); renderFunnel(); renderTimeline(); renderCamps();
+    const tR=CAMPS.reduce((s,c)=>s+(c.evCompleteReg||0),0),tC=CAMPS.reduce((s,c)=>s+(c.evInitCheckout||0),0);
+    $('campSub').textContent=`€${CAMPS.reduce((s,c)=>s+c.spend,0).toFixed(2)} gastado · ${tR} registros · ${tC} inicio pago`;
+  }catch(err){
+    lbl.textContent='Error: '+err.message.slice(0,50);
+    chip.className='snap-chip live-chip';
+  }finally{if(btn)btn.disabled=false;}
+}
+
+// ═══ CONFIG ═══════════════════════════════════════════════
+function saveMetaToken(){
+  const t=$('metaTokenInput').value.trim();
+  if(!t||t==='••••••••'){$('metaTokenStatus').textContent='Introduce un token válido.';$('metaTokenStatus').style.color='var(--r)';return;}
+  localStorage.setItem('bw_metaToken',t);
+  metaToken=t;
+  $('metaTokenInput').value='••••••••';
+  $('metaTokenStatus').textContent='✓ Token guardado — haz clic en ↻ Actualizar en el header';
+  $('metaTokenStatus').style.color='var(--g)';
+}
+function saveGeminiKeyFn(){
+  const k=$('geminiKeyInput').value.trim();
+  if(!k||k==='••••••••'){$('geminiKeyStatus').textContent='Introduce una clave válida.';$('geminiKeyStatus').style.color='var(--r)';return;}
+  localStorage.setItem('bw_gkey',k);
+  geminiKey=k;
+  $('geminiKeyInput').value='••••••••';
+  $('geminiKeyStatus').textContent='✓ Clave Gemini guardada — agente IA activo';
+  $('geminiKeyStatus').style.color='var(--g)';
+}
+
+// ═══ AGENT ════════════════════════════════════════════════
+function askChip(q){$('chatInput').value=q;sendMsg();}
+async function sendMsg(){
+  const inp=$('chatInput'),q=inp.value.trim();
+  if(!q)return;
+  inp.value='';
+  addMsg(q,'user');
+  const typing=addTyping();
+  let reply;
+  if(geminiKey){try{reply=await callGemini(q);}catch(e){reply=offlineAnswer(q);}}
+  else{await new Promise(r=>setTimeout(r,600));reply=offlineAnswer(q);}
+  typing.remove();
+  addMsg(reply,'agent');
+}
+function addMsg(text,role){
+  const box=$('chatMsgs'),div=document.createElement('div');
+  div.className='msg msg-'+role;
+  if(role==='agent') div.innerHTML=text.replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/€[\d.]+/g,m=>`<span class="mono">${m}</span>`);
+  else div.textContent=text;
+  box.appendChild(div);box.scrollTop=box.scrollHeight;return div;
+}
+function addTyping(){
+  const box=$('chatMsgs'),div=document.createElement('div');
+  div.className='msg msg-agent';
+  div.innerHTML='<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+  box.appendChild(div);box.scrollTop=box.scrollHeight;return div;
+}
+async function callGemini(question){
+  const d=days();
+  const spReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+c.spend,0);
+  const cvReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const cptReg=cvReg>0?(spReg/cvReg).toFixed(2):null;
+  const spIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+c.spend,0);
+  const cvIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  const cptIco=cvIco>0?(spIco/cvIco).toFixed(2):null;
+  const sys=PLAN_CONTEXT+`\n\nDATOS ACTUALES POR CAMPAÑA (${SNAP_DATE}):\n`+
+    CAMPS.map(c=>`${c.id} ${c.name}: gasto €${c.spend}, CompleteReg=${c.evCompleteReg}, InitCheckout=${c.evInitCheckout}, contactos=${c.evContact}, CPT ${c.cpt?'€'+c.cpt:'—'}, CTR ${c.ctr}%, CPM €${c.cpm}${c.flag?' ['+c.flag+']':''}`).join('\n')+
+    `\n\nCPT Registro (C1/C2/C4): ${cptReg?'€'+cptReg:'—'} · CPT Inicio pago (C5/C6 excl C3): ${cptIco?'€'+cptIco:'—'}\nDías activo: ${d}/20\n\nResponde en español, conciso y accionable. Usa datos concretos del plan.`;
+  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({system_instruction:{parts:[{text:sys}]},contents:[{parts:[{text:question}]}],generationConfig:{maxOutputTokens:600,temperature:0.3}})
+  });
+  const data=await res.json();
+  if(data.error) throw new Error(data.error.message);
+  return data.candidates[0].content.parts[0].text;
+}
+function offlineAnswer(q){
+  const ql=q.toLowerCase(),d=days(),dToD7=dUntil(DAY7);
+  const totalSpend=CAMPS.reduce((s,c)=>s+c.spend,0);
+  const spReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+c.spend,0);
+  const cvReg=CAMPS.filter(c=>c.event==='CompleteRegistration').reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const cptReg=cvReg>0?spReg/cvReg:null;
+  const spIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+c.spend,0);
+  const cvIco=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3').reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  const cptIco=cvIco>0?spIco/cvIco:null;
+  if(ql.includes('cpt')||ql.includes('estado')||ql.includes('cómo estamos')){
+    const c1=CAMPS.find(c=>c.id==='C1'),c2=CAMPS.find(c=>c.id==='C2'),c4=CAMPS.find(c=>c.id==='C4'),c5=CAMPS.find(c=>c.id==='C5'),c6=CAMPS.find(c=>c.id==='C6');
+    return `**Estado CPT — Día ${d}/20**\n\n**Registro (C1/C2/C4):** ${cptReg?'€'+cptReg.toFixed(2):'—'} → ${cptReg&&cptReg<=2.20?'✅ En objetivo':cptReg&&cptReg<=3?'⚠️ Por encima':'🚨 Crítico'}\n• C1 Belleza: €${c1.cpt} | C2 Comercio: €${c2.cpt} 🚨 | C4 LATAM Belleza: €${c4.cpt}\n\n**Inicio pago (C5/C6):** ${cptIco?'€'+cptIco.toFixed(2):'—'} → ✅ En objetivo\n• C5 Comercio: €${c5.cpt} | C6 Servicios: €${c6.cpt}\n\n**C3 MX_SERVICIOS:** €${CAMPS.find(c=>c.id==='C3').cpt} ⚠️ anómala — probable pixel mal implementado`;
+  }
+  if(ql.includes('día 7')||ql.includes('19 mayo')){
+    const c1r=CAMPS.find(c=>c.id==='C1').evCompleteReg,c2r=CAMPS.find(c=>c.id==='C2').evCompleteReg,c4r=CAMPS.find(c=>c.id==='C4').evCompleteReg;
+    return `**Checklist Día 7 — 19 mayo** (${dToD7>0?'en '+dToD7+' días':'¡HOY!'})\n\n**1. Plan B switch evento:**\n• C1 MX_BELLEZA: ${c1r} registros → ${c1r<20?'⚠️ <20 → switch a InitiateCheckout':'✅ OK'}\n• C2 MX_COMERCIO: ${c2r} registros → ${c2r<20?'🚨 <20 → switch URGENTE':'✅ OK'}\n• C4 LATAM_BELLEZA: ${c4r} registros → ${c4r<20?'⚠️ <20 → evaluar switch':'✅ OK'}\n\n**2. Watchpoint CO:** Revisar % Colombia en C4/C5/C6. Si >40% → bid cap o exclusión.\n\n**3. Reasignación:** Hasta 20% sin aprobación. Si C2 sigue crítico → mover su presupuesto a C5 o C6.`;
+  }
+  if(ql.includes('c3')||ql.includes('pixel')||ql.includes('anómal')){
+    return `**C3 MX_SERVICIOS — Anomalía de pixel**\n\n• A3.2 INT_SERVICIOS: 336 InitiateCheckout a **€0.09 CPT** con CPM **€1.02**\n• CTR 25.7% — anómalo para cualquier campaña\n• C3 tiene ${CAMPS.find(c=>c.id==='C3').evCompleteReg} CompleteRegistration reales (esos sí son fiables)\n• Posthog confirma que Meta IC (172+) > clicks reales totales en todos los canales\n\n**Hipótesis confirmada:** El evento InitiateCheckout dispara en el page load de la landing, no en el clic del CTA.\n\n**Acción:**\n1. Eventos Manager → Actividad del Pixel → filtrar InitiateCheckout\n2. Verificar URL → debe ser app.bewe.ai/onboarding\n3. Si dispara en bewe.ai/servicios → bug en implementación, escalar a dev`;
+  }
+  if(ql.includes('c2')||ql.includes('comercio')){
+    const c2=CAMPS.find(c=>c.id==='C2');
+    return `**C2 MX_COMERCIO — CPT €${c2.cpt} (crítico)**\n\nSituación: ${c2.evCompleteReg} CompleteRegistration de €${c2.spend} gastados.\n• A2.3 INT_COMERCIO: €66.47 → 10 registros\n• A2.1 LOK y A2.2 Guru: 0 registros\n• InitiateCheckout disponible: ${c2.evInitCheckout}\n\n**Regla de Julián:** Si al día 7 (19 mayo) <20 CompleteReg → **Plan B automático**. Sin aprobación.\n\n**Ahora:** No tocar. Son solo ${d} días de datos. El día 7 decides.`;
+  }
+  if(ql.includes('julián')||ql.includes('resumen')){
+    return `**Resumen para Julián — Día ${d}/20**\n\n**Gasto:** €${totalSpend.toFixed(2)} de €3.000 (${Math.round(totalSpend/3000*100)}%)\n**CPT Registro:** ${cptReg?'€'+cptReg.toFixed(2):'—'} · **CPT Inicio pago:** ${cptIco?'€'+cptIco.toFixed(2):'—'}\n\n**✅ Bien:**\n• C5 (€0.52) y C6 (€0.41) muy por debajo del objetivo €2.20\n• Pacing de gasto en rango normal\n\n**⚠️ Atención:**\n• C3: pixel sospechoso — 364 IC a €0.19 vs solo 13 registros reales\n• C2: CPT €8.66 — probable Plan B el 19 mayo\n• C8 LATAM_TOOLS no creada\n\n**Próximo hito:** Día 7 (19 mayo) — Plan B + watchpoint CO`;
+  }
+  return `Soy el agente offline (sin Gemini activo). Puedo responder sobre:\n\n• **Estado CPT** por campaña\n• **Plan B activado** en C2\n• **C3 anomalía** CAPI confirmada\n• **Proyección al 31 mayo**\n• **Resumen para Julián**\n\nPara respuestas elaboradas, guarda tu clave Gemini en ⚙️ Configuración.`;
+}
+
+// ═══ ESTRATEGIA (fusión análisis + plan) ══════════════════
+function renderEstrategia(){
+  const d=days();
+  const spend=CAMPS.reduce((s,c)=>s+c.spend,0);
+  const cRegC=CAMPS.filter(c=>c.event==='CompleteRegistration');
+  const cIcoC=CAMPS.filter(c=>c.event==='InitiateCheckout'&&c.id!=='C3');
+  const spReg=cRegC.reduce((s,c)=>s+c.spend,0);
+  const cvReg=cRegC.reduce((s,c)=>s+(c.evCompleteReg||0),0);
+  const cptReg=cvReg>0?spReg/cvReg:null;
+  const spIco=cIcoC.reduce((s,c)=>s+c.spend,0);
+  const cvIco=cIcoC.reduce((s,c)=>s+(c.evInitCheckout||0),0);
+  const cptIco=cvIco>0?spIco/cvIco:null;
+  $('estSub').textContent=`Día ${d}/20 · Snapshot ${SNAP_DATE}`;
+
+  // Semáforo KPIs
+  const flag=(v,t,w)=>v===null?'md':v<=t?'mg':v<=w?'my':'mr';
+  const totalClick=CAMPS.reduce((s,c)=>s+c.clicks,0);
+  const totalImpr=CAMPS.reduce((s,c)=>s+c.impressions,0);
+  const gctr=totalImpr>0?totalClick/totalImpr*100:0;
+  const gcpm=totalImpr>0?spend/totalImpr*1000:0;
+  $('estKpis').innerHTML=`
+    <div class="kpi"><div class="kpi-l">CPT Registro</div>
+      <div class="kpi-v ${flag(cptReg,CPT_T.target,CPT_T.warn)}">${cptReg?'€'+cptReg.toFixed(2):'—'}</div>
+      <div class="kpi-s">${cptReg?cptReg<=CPT_T.target?'✓ Objetivo':cptReg<=CPT_T.warn?'⚠ Por encima':'✗ Crítico':''} · C1+C2+C4</div></div>
+    <div class="kpi"><div class="kpi-l">CPT Inicio Pago</div>
+      <div class="kpi-v ${flag(cptIco,CPT_T.target,CPT_T.warn)}">${cptIco?'€'+cptIco.toFixed(2):'—'}</div>
+      <div class="kpi-s">${cptIco?cptIco<=CPT_T.target?'✓ Objetivo':cptIco<=CPT_T.warn?'⚠ Por encima':'✗ Crítico':''} · C5+C6</div></div>
+    <div class="kpi"><div class="kpi-l">CTR Global</div>
+      <div class="kpi-v ${gctr>=1.5?'mg':gctr>=1.0?'my':'mr'}">${gctr.toFixed(2)}%</div>
+      <div class="kpi-s">objetivo 1.5–2.5%</div></div>
+    <div class="kpi"><div class="kpi-l">CPM Global</div>
+      <div class="kpi-v ${gcpm<=9?'mg':gcpm<=12?'my':'mr'}">${e(gcpm)}</div>
+      <div class="kpi-s">objetivo &lt;€9</div></div>`;
+
+  // Pacing
+  const dailyAvg=d>0?spend/d:0;
+  const proj=dailyAvg*20;
+  const rem=BUDGET-spend;
+  const dRem=20-d;
+  const reqDaily=dRem>0?rem/dRem:0;
+  $('estPacing').innerHTML=`<div class="an-head"><div class="an-title">📈 Pacing del presupuesto</div></div>
+    <div class="an-r"><span class="an-k">Gastado</span><span class="an-v">${e(spend)} <span style="color:var(--mut);font-size:10px">(${Math.round(spend/BUDGET*100)}%)</span></span></div>
+    <div class="an-r"><span class="an-k">Ritmo actual</span><span class="an-v">${e(dailyAvg)}/día</span></div>
+    <div class="an-r"><span class="an-k">Necesario ahora</span><span class="an-v ${reqDaily>dailyAvg?'vr':'vg'}">${e(reqDaily)}/día</span></div>
+    <div class="an-r"><span class="an-k">Proyección día 20</span><span class="an-v ${proj>BUDGET?'vr':'vg'}">${e(proj)}</span></div>
+    <div class="meter" style="margin-top:12px"><div class="mf" style="width:${Math.min(spend/BUDGET*100,100)}%;background:${spend/BUDGET>1?'var(--r)':spend/BUDGET>0.6?'var(--y)':'var(--acc)'}"></div></div>`;
+
+  // Proyección conversiones
+  const crRate=d>0?cvReg/d:0; const icoRate=d>0?cvIco/d:0;
+  $('estProj').innerHTML=`<div class="an-head"><div class="an-title">🎯 Proyección al 31 mayo</div></div>
+    <div class="an-r"><span class="an-k">CR Registros proyectados</span><span class="an-v">${Math.round(crRate*20)}</span></div>
+    <div class="an-r"><span class="an-k">IC Pagos proyectados</span><span class="an-v">${Math.round(icoRate*20)}</span></div>
+    <div class="an-r"><span class="an-k">Gasto proyectado</span><span class="an-v">${e(proj)}</span></div>
+    <div class="an-r"><span class="an-k">CPT CR proyectado</span><span class="an-v ${flag(cptReg,CPT_T.target,CPT_T.warn)}">${cptReg?'€'+cptReg.toFixed(2):'—'}</span></div>
+    <div class="an-r" style="border:none"><span class="an-k">Día 14 (26 may)</span><span class="an-v" style="font-size:11px">Eval. C7 + contingencia</span></div>`;
+
+  // Alertas
+  $('estAlerts').innerHTML=$('alerts').innerHTML;
+
+  // Reglas Julián
+  const reglas=[
+    {ic:'📋',t:'ABO — Reasignación libre hasta 20%',d:'Cualquier movimiento >20% del budget requiere aprobación de Julián.',ok:true},
+    {ic:'🔴',t:'Plan B C2 activado — switch a InitiateCheckout',d:`C2 llegó al día ${d} con ${CAMPS.find(c=>c.id==='C2')?.evCompleteReg||0} CR. Umbral era <20. Pendiente ejecución del switch.`,ok:false},
+    {ic:'⚠️',t:'Día 14 (26 mayo) — evaluar C7 Retargeting',d:'Condición: ≥1.000 visits + ≥30 trials. Contingencia €1.000 si ≥2 camps CPT<€3 (C5 y C6 ya califican).',ok:null},
+    {ic:'🌍',t:'Watchpoint Colombia — geo leakage',d:'Si CO representa >40% de las conversiones LATAM → activar bid cap de €2. Revisar en Ads Manager.',ok:null},
+    {ic:'✓',t:'Atribución 7d clic / 1d view',d:'Configurada correctamente en todas las campañas desde el lanzamiento.',ok:true},
+    {ic:'✓',t:'Dominio verificado bewe.ai',d:'CAPI activo desde 15 mayo. Pixel eliminado.',ok:true},
+  ];
+  $('estReglas').innerHTML=`<div class="plan-grid">${reglas.map(r=>`
+    <div class="pcard" style="border-left:3px solid ${r.ok===true?'var(--g)':r.ok===false?'var(--r)':'var(--y)'}">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px">${r.ic}</span>
+        <div><div style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:4px">${r.t}</div>
+        <div style="font-size:11px;color:var(--dim);line-height:1.6">${r.d}</div></div>
+      </div>
+    </div>`).join('')}</div>`;
+
+  // Análisis por campaña
+  $('estCampAnalysis').innerHTML=CAMPS.map(c=>{
+    const cvr=c.clicks>0?(c.conversions/c.clicks*100).toFixed(1):'—';
+    const spPct=Math.round(c.spend/BUDGET*100);
+    const fColor=c.flag==='critical'?'var(--r)':c.flag==='warn'?'var(--y)':c.flag==='anomaly'?'var(--o)':'var(--g)';
+    return `<div class="an-card">
+      <div class="an-head">
+        <div class="an-title">${c.id} · ${c.event==='CompleteRegistration'?'Completar Registro':'Iniciar Pago'}</div>
+        <div class="an-badge" style="background:${fColor}15;color:${fColor};border-color:${fColor}40">${c.flag==='critical'?'Crítico':c.flag==='warn'?'Atención':c.flag==='anomaly'?'Anomalía':'OK'}</div>
+      </div>
+      <div class="an-r"><span class="an-k">Campaña</span><span class="an-v" style="font-size:10px;font-family:var(--mono)">${c.name}</span></div>
+      <div class="an-r"><span class="an-k">Gasto</span><span class="an-v">${e(c.spend)} <span style="color:var(--mut);font-size:10px">(${spPct}% del total)</span></span></div>
+      <div class="an-r"><span class="an-k">Conversiones</span><span class="an-v">${c.conversions} ${c.event==='CompleteRegistration'?'CR':'IC'}</span></div>
+      <div class="an-r"><span class="an-k">CPT</span><span class="an-v" style="color:${fColor}">${e(c.cpt)}</span></div>
+      <div class="an-r"><span class="an-k">CVR (clicks→conv)</span><span class="an-v">${cvr}%</span></div>
+      <div class="an-r" style="border:none"><span class="an-k">Frecuencia</span><span class="an-v">${c.freq}×</span></div>
+      <div class="meter" style="margin-top:10px"><div class="mf" style="width:${Math.min(spPct*3,100)}%;background:${fColor}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ═══ API HELPER ═══════════════════════════════════════════
+async function apiCall(path, params={}){
+  const isLocal = ['localhost','127.0.0.1'].includes(location.hostname);
+  if(isLocal){
+    if(!metaToken){ showTab('config'); throw new Error('No token'); }
+    const url=new URL(`${META_BASE}/${path}`);
+    Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
+    url.searchParams.set('access_token',metaToken);
+    const r=await fetch(url.toString());
+    return r.json();
+  } else {
+    const url=new URL('/api/meta',location.origin);
+    url.searchParams.set('endpoint',path);
+    Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
+    const r=await fetch(url.toString());
+    return r.json();
+  }
+}
+
+// ═══ ANUNCIOS (PAID ADS) ══════════════════════════════════
+let adsData = [];
+async function fetchAds(){
+  $('adsLoading').classList.remove('hidden');
+  $('adsGrid').innerHTML='';
+  try{
+    // Paso 1: traer todos los anuncios con creative embebido
+    const [adsRes, insRes] = await Promise.all([
+      apiCall(`${META_ACC}/ads`,{
+        fields:'id,name,status,campaign_id,adset_id,creative{id,thumbnail_url,title,body,image_url,effective_instagram_story_id}',
+        limit:'200', date_preset:'this_month'
+      }),
+      apiCall(`${META_ACC}/ads`,{
+        fields:'id,insights.date_preset(this_month){spend,impressions,clicks,ctr,cpm,frequency,reach,actions}',
+        limit:'200', date_preset:'this_month'
+      })
+    ]);
+    const insMap={};
+    (insRes.data||[]).forEach(a=>{ if(a.insights?.data?.[0]) insMap[a.id]=a.insights.data[0]; });
+    adsData=(adsRes.data||[]).map(a=>({...a,ins:insMap[a.id]||null}));
+    renderAds();
+  }catch(e){ $('adsGrid').innerHTML=`<div style="color:var(--r);padding:20px;font-size:13px">Error: ${e.message}</div>`; }
+  finally{ $('adsLoading').classList.add('hidden'); }
+}
+
+function renderAds(){
+  const filter=$('adsCampFilter')?.value||'';
+  const camp = filter ? CAMPS.find(c=>c.id===filter) : null;
+  let ads = adsData.length ? adsData : buildStaticAds();
+  if(camp) ads = ads.filter(a=>a.campaign_id===camp?.cid);
+
+  const cMap={}; CAMPS.forEach(c=>cMap[c.cid]=`${c.id} · ${c.name.split('_').slice(0,2).join(' ')}`);
+  if(!ads.length){
+    $('adsGrid').innerHTML='<div style="padding:40px;text-align:center;color:var(--mut);font-size:13px">↑ Haz clic en <b>↻ Cargar desde API</b> para traer todos los anuncios del mes con sus métricas.</div>';
+    renderAdsetAssets(); return;
+  }
+  $('adsGrid').innerHTML = ads.map(a=>{
+    const ins=a.ins||{};
+    const spend=ins.spend?'€'+parseFloat(ins.spend).toFixed(2):'—';
+    const cpm=ins.cpm?'€'+parseFloat(ins.cpm).toFixed(2):'—';
+    const freq=ins.frequency?parseFloat(ins.frequency).toFixed(2):'—';
+    const reach=ins.reach?parseInt(ins.reach).toLocaleString('es'):'—';
+    const acts=ins.actions||[];
+    const cr=parseInt(acts.find(x=>x.action_type==='offsite_conversion.fb_pixel_complete_registration')?.value||0);
+    const ic=parseInt(acts.find(x=>x.action_type==='offsite_conversion.fb_pixel_initiate_checkout')?.value||0);
+    const conv=cr||ic||0;
+    const cptVal=conv>0&&ins.spend?parseFloat(ins.spend)/conv:null;
+    const cptColor=cptVal===null?'var(--mut)':cptVal<=CPT_T.target?'var(--g)':cptVal<=CPT_T.warn?'var(--y)':'var(--r)';
+    const st=a.status==='ACTIVE'?'st-active':a.status==='PAUSED'?'st-paused':'st-rejected';
+    const stl=a.status==='ACTIVE'?'Activo':a.status==='PAUSED'?'Pausado':'Rechazado';
+    const thumb=a.creative?.thumbnail_url||a.creative?.image_url;
+    return `<div class="ad-card" onclick="showAdDetail('${a.id}')">
+      <div class="ad-thumb" style="height:140px">${thumb?`<img src="${thumb}" loading="lazy" onerror="this.parentElement.innerHTML='🖼️'">`:'🖼️'}</div>
+      <div class="ad-info">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <div class="ad-status ${st}">● ${stl}</div>
+          ${cptVal!==null?`<span style="font-size:10px;font-weight:700;color:${cptColor}">CPT €${cptVal.toFixed(2)}</span>`:''}
+        </div>
+        <div class="ad-name" title="${a.name}">${a.name}</div>
+        <div class="ad-camp">${cMap[a.campaign_id]||a.campaign_id}</div>
+        <div class="ad-stats">
+          <div class="ad-stat">Gasto <span>${spend}</span></div>
+          <div class="ad-stat">CPM <span>${cpm}</span></div>
+          <div class="ad-stat">CTR <span>${ins.ctr?parseFloat(ins.ctr).toFixed(2)+'%':'—'}</span></div>
+          <div class="ad-stat">Freq. <span>${freq}</span></div>
+          <div class="ad-stat">Alcance <span>${reach}</span></div>
+          <div class="ad-stat">Conv. <span style="color:${conv?'var(--g)':'var(--mut)'}">${conv||'0'} ${cr?'CR':ic?'IC':''}</span></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  renderAdsetAssets();
+}
+
+function showAdDetail(id){
+  const a=adsData.find(x=>x.id===id); if(!a) return;
+  const ins=a.ins||{};
+  const acts=ins.actions||[];
+  const cr=parseInt(acts.find(x=>x.action_type==='offsite_conversion.fb_pixel_complete_registration')?.value||0);
+  const ic=parseInt(acts.find(x=>x.action_type==='offsite_conversion.fb_pixel_initiate_checkout')?.value||0);
+  const conv=cr||ic||0;
+  const cptVal=conv>0&&ins.spend?parseFloat(ins.spend)/conv:null;
+  const rec=cptVal===null?'Sin conversiones — revisar segmentación o creative':
+    cptVal<=CPT_T.target?'Rendimiento óptimo — mantener o escalar':
+    cptVal<=CPT_T.warn?'Por encima del objetivo — monitorear':
+    '⚠️ CPT crítico — pausar o cambiar creative/audiencia';
+  const thumb=a.creative?.thumbnail_url||a.creative?.image_url;
+  document.body.insertAdjacentHTML('beforeend',`
+    <div class="modal-ov" id="adModal" onclick="if(event.target.id==='adModal')this.remove()">
+      <div class="modal-box" style="width:520px;max-width:96vw">
+        <div style="display:flex;gap:16px;margin-bottom:16px">
+          ${thumb?`<img src="${thumb}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.remove()">`:''}
+          <div>
+            <div style="font-size:11px;color:var(--mut);margin-bottom:4px">${a.campaign_id}</div>
+            <div class="modal-t">${a.name}</div>
+            <div class="ad-status ${a.status==='ACTIVE'?'st-active':'st-paused'}" style="margin-top:6px">● ${a.status==='ACTIVE'?'Activo':'Pausado'}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+          ${[['Gasto',ins.spend?'€'+parseFloat(ins.spend).toFixed(2):'—'],
+             ['Impresiones',ins.impressions?parseInt(ins.impressions).toLocaleString('es'):'—'],
+             ['Clicks',ins.clicks?parseInt(ins.clicks).toLocaleString('es'):'—'],
+             ['CTR',ins.ctr?parseFloat(ins.ctr).toFixed(2)+'%':'—'],
+             ['CPM',ins.cpm?'€'+parseFloat(ins.cpm).toFixed(2):'—'],
+             ['Frecuencia',ins.frequency?parseFloat(ins.frequency).toFixed(2):'—'],
+             ['Alcance',ins.reach?parseInt(ins.reach).toLocaleString('es'):'—'],
+             ['CompleteReg',cr||'0'],
+             ['InicioPago',ic||'0']
+          ].map(([l,v])=>`<div style="background:var(--border-l);border-radius:6px;padding:10px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-bottom:4px">${l}</div><div style="font-size:16px;font-weight:700;font-family:var(--mono)">${v}</div></div>`).join('')}
+        </div>
+        ${cptVal!==null?`<div style="background:${cptVal<=CPT_T.target?'var(--gbg)':cptVal<=CPT_T.warn?'var(--ybg)':'var(--rbg)'};border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px"><b>CPT: €${cptVal.toFixed(2)}</b> — ${rec}</div>`:'<div style="background:var(--ybg);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px">'+rec+'</div>'}
+        <button class="btn btn-ghost btn-sm" onclick="$('adModal').remove()" style="width:100%">Cerrar</button>
+      </div>
+    </div>`);
+}
+
+function buildStaticAds(){
+  // Placeholder cards basados en datos del snapshot
+  return ADSETS.map((a,i)=>({
+    id:'ad_'+i, name:a.name, status:'ACTIVE',
+    campaign_id: a.cid, adset_id:'as_'+i,
+    ins:{ spend:a.spend, impressions:a.impressions, clicks:a.clicks, ctr:a.ctr, cpm:a.cpm,
+      actions:[{action_type:'offsite_conversion.fb_pixel_complete_registration',value:a.conversions||0}] }
+  }));
+}
+
+function renderAdsetAssets(){
+  $('adsetAssets').innerHTML = `
+    <div class="twrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r10);overflow:hidden;box-shadow:var(--sh0)">
+      <table><thead><tr>
+        <th>Adset</th><th>Estado</th><th>Gasto</th><th>Conv.</th><th>CPT</th><th>CTR</th><th>CPM</th>
+      </tr></thead><tbody>
+        ${ADSETS.map(a=>{
+          const camp=CAMPS.find(c=>c.cid===a.cid);
+          const flag=a.cpt===null?'🔴':a.cpt<=CPT_T.target?'🟢':a.cpt<=CPT_T.warn?'🟡':'🔴';
+          return `<tr>
+            <td><span class="tn">${a.name}</span></td>
+            <td>${flag}</td>
+            <td class="tnum">${e(a.spend)}</td>
+            <td class="tnum ${a.conversions?'':'tr_'}">${a.conversions||'0'}</td>
+            <td class="tnum ${tg(a.cpt)}">${a.cpt?e(a.cpt):'Sin conv.'}</td>
+            <td class="tnum">${p(a.ctr)}</td>
+            <td class="tnum">${e(a.cpm)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>
+    </div>`;
+}
+
+// ═══ ORGÁNICO ═════════════════════════════════════════════
+let orgData={ig:[],fb:[]}, orgTab='ig', orgFilter='mes';
+function setOrgTab(t){ orgTab=t; renderOrganic(); }
+function setOrgFilter(f){ orgFilter=f; renderOrganic(); }
+
+async function fetchOrganic(){
+  $('orgLoading').classList.remove('hidden');
+  try{
+    // Instagram: paginar hasta 100 posts, filtrar por fecha en cliente
+    const [igRes,fbRes]=await Promise.all([
+      apiCall(`${IG_ACC_ID}/media`,{
+        fields:'id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink',
+        limit:'100'
+      }),
+      apiCall(`${FB_PAGE_ID}/posts`,{
+        fields:'id,message,full_picture,created_time,likes.summary(true),comments.summary(true),shares',
+        limit:'100'
+      })
+    ]);
+    orgData.ig=(igRes.data||[]);
+    orgData.fb=(fbRes.data||[]);
+
+    // Intentar obtener insights de los últimos 20 posts IG
+    const recentIG=orgData.ig.slice(0,20);
+    const insightResults=await Promise.allSettled(
+      recentIG.map(p=>apiCall(`${p.id}/insights`,{metric:'impressions,reach,engagement,saved'}))
+    );
+    insightResults.forEach((r,i)=>{
+      if(r.status==='fulfilled'&&r.value?.data){
+        const map={}; r.value.data.forEach(m=>{map[m.name]=m.values?.[0]?.value||m.value||0;});
+        orgData.ig[i]={...orgData.ig[i],_ins:map};
+      }
+    });
+    renderOrganic();
+  }catch(e){ $('orgGrid').innerHTML=`<div style="color:var(--r);padding:20px;font-size:13px">Error cargando contenido orgánico: ${e.message}<br><br><small>Verifica que el token tenga permisos instagram_basic e instagram_manage_insights.</small></div>`; }
+  finally{ $('orgLoading').classList.add('hidden'); }
+}
+
+function renderOrganic(){
+  $('btnIG').style.cssText=orgTab==='ig'?'border-color:var(--p);color:var(--p);background:var(--pbg)':'';
+  $('btnFB').style.cssText=orgTab==='fb'?'border-color:var(--b);color:var(--b);background:var(--bbg)':'';
+  const allPosts=orgTab==='ig'?orgData.ig:orgData.fb;
+
+  // Filtro por período
+  const now=Date.now();
+  const cutoffs={semana:7,mes:30,trimestre:90};
+  const days=cutoffs[orgFilter]||30;
+  const posts=allPosts.filter(p=>{
+    const ts=new Date(orgTab==='ig'?p.timestamp:p.created_time).getTime();
+    return (now-ts)<=days*864e5;
+  });
+
+  if(!allPosts.length){
+    $('orgKpis').innerHTML='';
+    $('orgGrid').innerHTML='<div style="padding:40px;text-align:center;color:var(--mut);font-size:13px">↑ Haz clic en <b>↻ Cargar desde API</b> para traer los posts orgánicos.</div>';
+    return;
+  }
+
+  const isIG=orgTab==='ig';
+  const totalLikes=posts.reduce((s,p)=>s+(isIG?(p.like_count||0):(p.likes?.summary?.total_count||0)),0);
+  const totalCom=posts.reduce((s,p)=>s+(isIG?(p.comments_count||0):(p.comments?.summary?.total_count||0)),0);
+  const totalReach=isIG?posts.reduce((s,p)=>s+(p._ins?.reach||0),0):0;
+  const totalEngage=isIG?posts.reduce((s,p)=>s+(p._ins?.engagement||0),0):0;
+
+  // Posts tendencia: crecimiento en 24h/48h/72h
+  const h24=posts.filter(p=>(now-new Date(isIG?p.timestamp:p.created_time).getTime())<=864e5);
+  const h48=posts.filter(p=>(now-new Date(isIG?p.timestamp:p.created_time).getTime())<=2*864e5&&(now-new Date(isIG?p.timestamp:p.created_time).getTime())>864e5);
+  const h72=posts.filter(p=>(now-new Date(isIG?p.timestamp:p.created_time).getTime())<=3*864e5&&(now-new Date(isIG?p.timestamp:p.created_time).getTime())>2*864e5);
+
+  $('orgKpis').innerHTML=`
+    <div class="kpi"><div class="kpi-l">Posts (${orgFilter})</div><div class="kpi-v vn">${posts.length}</div><div class="kpi-s">últimas ${days} días</div></div>
+    <div class="kpi"><div class="kpi-l">Total likes</div><div class="kpi-v vp">${n(totalLikes)}</div><div class="kpi-s">acumulado</div></div>
+    <div class="kpi"><div class="kpi-l">Comentarios</div><div class="kpi-v vs">${n(totalCom)}</div><div class="kpi-s">acumulado</div></div>
+    ${isIG&&totalReach?`<div class="kpi"><div class="kpi-l">Alcance total</div><div class="kpi-v va">${n(totalReach)}</div><div class="kpi-s">últimos 20 posts</div></div>`:''}
+    ${isIG&&totalEngage?`<div class="kpi"><div class="kpi-l">Engagement</div><div class="kpi-v vg">${n(totalEngage)}</div><div class="kpi-s">suma interactions</div></div>`:''}
+    <div class="kpi"><div class="kpi-l">Últ. 24h</div><div class="kpi-v ${h24.length?'vg':'vn'}">${h24.length}</div><div class="kpi-s">posts nuevos</div></div>
+    <div class="kpi"><div class="kpi-l">Últ. 48h</div><div class="kpi-v vn">${h48.length}</div><div class="kpi-s">posts</div></div>
+    <div class="kpi"><div class="kpi-l">Últ. 72h</div><div class="kpi-v vn">${h72.length}</div><div class="kpi-s">posts</div></div>`;
+
+  // Ordenar por engagement (likes + comments)
+  const sorted=[...posts].sort((a,b)=>{
+    const ea=(isIG?(a.like_count||0):(a.likes?.summary?.total_count||0))+(isIG?(a.comments_count||0):(a.comments?.summary?.total_count||0));
+    const eb=(isIG?(b.like_count||0):(b.likes?.summary?.total_count||0))+(isIG?(b.comments_count||0):(b.comments?.summary?.total_count||0));
+    return eb-ea;
+  });
+
+  $('orgGrid').innerHTML=sorted.map(post=>{
+    const thumb=isIG?(post.thumbnail_url||post.media_url):post.full_picture;
+    const caption=isIG?post.caption:post.message;
+    const date=new Date(isIG?post.timestamp:post.created_time).toLocaleDateString('es',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    const likes=isIG?(post.like_count||0):(post.likes?.summary?.total_count||0);
+    const comments=isIG?(post.comments_count||0):(post.comments?.summary?.total_count||0);
+    const shares=post.shares?.count||0;
+    const reach=post._ins?.reach||0;
+    const engage=post._ins?.engagement||0;
+    const typeMap={IMAGE:'image',VIDEO:'video',CAROUSEL_ALBUM:'carousel'};
+    const typeClass=isIG?`pt-${typeMap[post.media_type]||'image'}`:'pt-image';
+    const typeLabel=isIG?(post.media_type==='VIDEO'?'Video':post.media_type==='CAROUSEL_ALBUM'?'Carrusel':'Imagen'):'Post';
+    const age=now-new Date(isIG?post.timestamp:post.created_time).getTime();
+    const isNew=age<864e5;
+    return `<div class="post-card" onclick="showPostDetail('${post.id}','${orgTab}')">
+      <div class="post-thumb" style="position:relative">${thumb?`<img src="${thumb}" loading="lazy" onerror="this.parentElement.innerHTML='🖼️'">`:'🖼️'}${isNew?'<div style="position:absolute;top:6px;right:6px;background:var(--r);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px">HOY</div>':''}</div>
+      <div class="post-info">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="post-date">${date}</div>
+          <span class="post-type ${typeClass}">${typeLabel}</span>
+        </div>
+        <div class="post-caption">${(caption||'Sin caption').substring(0,100)}</div>
+        <div class="post-meta">
+          <span class="post-stat">❤️ <b>${likes}</b></span>
+          <span class="post-stat">💬 <b>${comments}</b></span>
+          ${shares?`<span class="post-stat">↗ ${shares}</span>`:''}
+          ${reach?`<span class="post-stat">👁 ${n(reach)}</span>`:''}
+          ${engage?`<span class="post-stat">⚡ ${engage}</span>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showPostDetail(id, tab){
+  const post=(tab==='ig'?orgData.ig:orgData.fb).find(p=>p.id===id); if(!post) return;
+  const isIG=tab==='ig';
+  const thumb=isIG?(post.thumbnail_url||post.media_url):post.full_picture;
+  const caption=isIG?post.caption:post.message;
+  const likes=isIG?(post.like_count||0):(post.likes?.summary?.total_count||0);
+  const comments=isIG?(post.comments_count||0):(post.comments?.summary?.total_count||0);
+  const ins=post._ins||{};
+  document.body.insertAdjacentHTML('beforeend',`
+    <div class="modal-ov" id="postModal" onclick="if(event.target.id==='postModal')this.remove()">
+      <div class="modal-box" style="width:480px;max-width:96vw">
+        <div style="display:flex;gap:14px;margin-bottom:14px">
+          ${thumb?`<img src="${thumb}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.remove()">`:''}
+          <div><div class="modal-t" style="font-size:14px">${isIG?'Instagram':'Facebook'} · ${new Date(isIG?post.timestamp:post.created_time).toLocaleDateString('es',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</div>
+          <div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.6">${(caption||'Sin caption').substring(0,200)}</div>
+          ${post.permalink?`<a href="${post.permalink}" target="_blank" style="font-size:11px;color:var(--acc);margin-top:4px;display:inline-block">Ver en Instagram →</a>`:''}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+          ${[['❤️ Likes',likes],['💬 Comentarios',comments],['👁 Alcance',ins.reach||'—'],['⚡ Engagement',ins.engagement||'—'],['🔖 Guardados',ins.saved||'—'],['📊 Impresiones',ins.impressions||'—']].map(([l,v])=>`<div style="background:var(--border-l);border-radius:6px;padding:10px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-bottom:4px">${l}</div><div style="font-size:16px;font-weight:700;font-family:var(--mono)">${v}</div></div>`).join('')}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="$('postModal').remove()" style="width:100%">Cerrar</button>
+      </div>
+    </div>`);
+}
+
+// ═══ PARRILLA ════════════════════════════════════════════
+let activePlats={ig:true,fb:false};
+function togglePlat(p){ activePlats[p]=!activePlats[p]; renderParrilla(); }
+function toggleComposer(){ const c=$('composer'); c.style.display=c.style.display==='none'?'block':'none'; }
+
+function renderParrilla(){
+  const DAYS=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  $('calHeader').innerHTML=DAYS.map(d=>`<div class="cal-head">${d}</div>`).join('');
+  const today=new Date(); const y=today.getFullYear(); const m=today.getMonth();
+  const first=new Date(y,m,1).getDay(); const last=new Date(y,m+1,0).getDate();
+  let html=''; for(let i=0;i<first;i++) html+='<div></div>';
+  for(let d=1;d<=last;d++){
+    const isToday=d===today.getDate()&&m===today.getMonth();
+    const igPosts=(orgData.ig||[]).filter(p=>new Date(p.timestamp).getDate()===d&&new Date(p.timestamp).getMonth()===m);
+    const fbPosts=(orgData.fb||[]).filter(p=>new Date(p.created_time).getDate()===d&&new Date(p.created_time).getMonth()===m);
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="calDayClick(${d})">
+      <div class="cal-dn">${d}</div>
+      ${igPosts.map(p=>`<div class="cal-post">📸 ${(p.caption||'Post IG').substring(0,20)}</div>`).join('')}
+      ${fbPosts.map(p=>`<div class="cal-post fb">👥 ${(p.message||'Post FB').substring(0,20)}</div>`).join('')}
+    </div>`;
+  }
+  $('calDays').innerHTML=html;
+  // Update plat buttons
+  $('platIG').className=`plat-btn ig${activePlats.ig?' on':''}`;
+  $('platFB').className=`plat-btn fb${activePlats.fb?' on':''}`;
+}
+
+function calDayClick(d){ toggleComposer(); }
+
+async function publishPost(){
+  const imgUrl=$('postImgUrl').value.trim();
+  const caption=$('postCaption').value.trim();
+  const status=$('pubStatus');
+  if(!imgUrl||!caption){ status.textContent='Completa imagen y caption.'; status.style.color='var(--r)'; return; }
+  if(!metaToken){ showTab('config'); return; }
+  status.textContent='Publicando…'; status.style.color='var(--dim)';
+  try{
+    const results=[];
+    if(activePlats.ig){
+      // Step 1: create container
+      const container=await apiCall(`${IG_ACC_ID}/media`,{image_url:imgUrl,caption});
+      if(container.id){
+        const pub=await apiCall(`${IG_ACC_ID}/media_publish`,{creation_id:container.id});
+        if(pub.id) results.push('✅ Instagram publicado');
+        else results.push('⚠️ Instagram: error al publicar');
+      } else results.push('⚠️ Instagram: no se creó el contenedor');
+    }
+    if(activePlats.fb){
+      const fbRes=await fetch(`${META_BASE}/${FB_PAGE_ID}/photos`,{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({url:imgUrl,caption,access_token:metaToken})
+      });
+      const fbData=await fbRes.json();
+      if(fbData.id) results.push('✅ Facebook publicado');
+      else results.push(`⚠️ Facebook: ${fbData.error?.message||'error'}`);
+    }
+    status.textContent=results.join(' · ');
+    status.style.color='var(--g)';
+    setTimeout(()=>{ fetchOrganic(); renderParrilla(); },2000);
+  }catch(e){ status.textContent='Error: '+e.message; status.style.color='var(--r)'; }
+}
+</script>
+</body>
+</html>

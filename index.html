@@ -319,7 +319,7 @@ tbody tr:hover td{background:var(--border-l)}
     <div class="lerr" id="loginErr">Correo o contraseña incorrectos</div>
     <div class="field">
       <label class="fl">Correo</label>
-      <input class="fi" id="loginEmail" type="email" placeholder="nombre@bewe.io" autocomplete="email">
+      <input class="fi" id="loginEmail" type="email" placeholder="nombre@bewe.io" autocomplete="email" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <div class="field">
       <label class="fl">Contraseña</label>
@@ -351,6 +351,7 @@ tbody tr:hover td{background:var(--border-l)}
   </nav>
   <div class="sb-foot">
     <div class="sb-acct"><strong>act_929824...</strong>Meta Ads · Mayo 2026</div>
+    <button class="btn btn-ghost btn-xs" id="logoutBtn" onclick="doLogout()" style="margin-top:8px;width:100%">Cerrar sesión</button>
   </div>
 </aside>
 
@@ -643,18 +644,25 @@ function doLogin(){
 function applyRoleUI(){
   if(!currentUser) return;
   const allowed = ROLE_TABS[currentUser.role] || [];
-  ['dashboard','campanas','analisis','anuncios','organico','parrilla','plan','informe','agente','config'].forEach(t=>{
+  ['dashboard','campanas','estrategia','anuncios','organico','parrilla','informe','agente','config'].forEach(t=>{
     const btn = $('nav-'+t);
     if(!btn) return;
     if(!allowed.includes(t)){
       btn.style.opacity = '0.35';
       btn.style.pointerEvents = 'none';
       btn.title = 'Sin acceso';
+    } else {
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+      btn.removeAttribute('title');
     }
   });
+  // Hide alert badge for roles without access to "estrategia"
+  const badge = $('alertBadge');
+  if(badge) badge.style.display = allowed.includes('estrategia') ? '' : 'none';
   // Show user name in sidebar footer
   const foot = document.querySelector('.sb-acct');
-  if(foot) foot.innerHTML = `<strong>${currentUser.name}</strong><br>act_929824... · ${currentUser.role}`;
+  if(foot) foot.innerHTML = `<strong>${escapeHtml(currentUser.name)}</strong><br>act_929824... · ${currentUser.role}`;
 }
 
 function checkSession(){
@@ -741,9 +749,10 @@ const $  = id => document.getElementById(id);
 const e  = v => v===null||v===undefined||isNaN(v)?'—':'€'+parseFloat(v).toLocaleString('es',{minimumFractionDigits:2,maximumFractionDigits:2});
 const p  = v => v===null||isNaN(v)?'—':parseFloat(v).toFixed(2)+'%';
 const n  = v => !v&&v!==0?'—':parseInt(v).toLocaleString('es');
-const cg = v => v===null?'md':v<=CPT_T.target?'mg':v<=CPT_T.warn?'my':'mr';
-const tg = v => v===null?'td_':v<=CPT_T.target?'tg':v<=CPT_T.warn?'ty':'tr_';
+const cg = v => v==null?'md':v<=CPT_T.target?'mg':v<=CPT_T.warn?'my':'mr';
+const tg = v => v==null?'td_':v<=CPT_T.target?'tg':v<=CPT_T.warn?'ty':'tr_';
 const rg = v => v>=1.5?'mg':v>=1.0?'my':v>0?'mr':'md';
+const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const days   = () => Math.max(0,Math.min(Math.floor((Date.now()-LAUNCH)/864e5),20));
 const dUntil = d  => Math.ceil((d-Date.now())/864e5);
 
@@ -901,7 +910,7 @@ function renderCamps(){
         <div class="cc-bgt">€${c.daily}/día<br>€${c.total}</div>
       </div>
       <div class="cc-m">
-        <div><div class="ml">Gasto</div><div class="mv mn">${e(c.spend)}</div><div class="ms">${Math.round(c.spend/c.total*100)}% del total</div></div>
+        <div><div class="ml">Gasto</div><div class="mv mn">${e(c.spend)}</div><div class="ms">${c.total>0?Math.round(c.spend/c.total*100):0}% del total</div></div>
         <div><div class="ml">Conv.</div><div class="mv ${c.conversions>0?'mg':'md'}">${n(c.conversions)}</div><div class="ms">${c.event==='CompleteRegistration'?'CompleteReg':'InitCheckout'}</div></div>
         <div><div class="ml">CPT</div><div class="mv ${cg(c.cpt)}">${e(c.cpt)}</div><div class="ms">obj &lt;€${CPT_T.target}</div></div>
         <div><div class="ml">CTR</div><div class="mv ${rg(c.ctr)}">${p(c.ctr)}</div><div class="ms">obj 1.5–2.5%</div></div>
@@ -1260,8 +1269,12 @@ async function sendMsg(){
 function addMsg(text,role){
   const box=$('chatMsgs'),div=document.createElement('div');
   div.className='msg msg-'+role;
-  if(role==='agent') div.innerHTML=text.replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/€[\d.]+/g,m=>`<span class="mono">${m}</span>`);
-  else div.textContent=text;
+  if(role==='agent'){
+    // Escape first, then re-apply allowed inline formatting (bold + currency mono).
+    div.innerHTML = escapeHtml(text)
+      .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')
+      .replace(/€[\d.,]+/g, m => `<span class="mono">${m}</span>`);
+  } else div.textContent=text;
   box.appendChild(div);box.scrollTop=box.scrollHeight;return div;
 }
 function addTyping(){
@@ -1287,7 +1300,9 @@ async function callGemini(question){
   });
   const data=await res.json();
   if(data.error) throw new Error(data.error.message);
-  return data.candidates[0].content.parts[0].text;
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if(!text) throw new Error('Sin respuesta de Gemini (¿bloqueada por safety o cuota agotada?)');
+  return text;
 }
 function offlineAnswer(q){
   const ql=q.toLowerCase(),d=days(),dToD7=dUntil(DAY7);
@@ -1418,21 +1433,40 @@ function renderEstrategia(){
 }
 
 // ═══ API HELPER ═══════════════════════════════════════════
-async function apiCall(path, params={}){
+async function apiCall(path, params={}, opts={}){
+  const method = (opts.method || 'GET').toUpperCase();
   const isLocal = ['localhost','127.0.0.1'].includes(location.hostname);
   if(isLocal){
     if(!metaToken){ showTab('config'); throw new Error('No token'); }
     const url=new URL(`${META_BASE}/${path}`);
-    Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
-    url.searchParams.set('access_token',metaToken);
-    const r=await fetch(url.toString());
-    return r.json();
+    if(method==='GET'){
+      Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
+      url.searchParams.set('access_token',metaToken);
+      const r=await fetch(url.toString());
+      return r.json();
+    } else {
+      const r=await fetch(url.toString(),{
+        method,
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({...params, access_token:metaToken})
+      });
+      return r.json();
+    }
   } else {
     const url=new URL('/api/meta',location.origin);
     url.searchParams.set('endpoint',path);
-    Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
-    const r=await fetch(url.toString());
-    return r.json();
+    if(method==='GET'){
+      Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
+      const r=await fetch(url.toString());
+      return r.json();
+    } else {
+      const r=await fetch(url.toString(),{
+        method,
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(params)
+      });
+      return r.json();
+    }
   }
 }
 
@@ -1494,8 +1528,8 @@ function renderAds(){
           <div class="ad-status ${st}">● ${stl}</div>
           ${cptVal!==null?`<span style="font-size:10px;font-weight:700;color:${cptColor}">CPT €${cptVal.toFixed(2)}</span>`:''}
         </div>
-        <div class="ad-name" title="${a.name}">${a.name}</div>
-        <div class="ad-camp">${cMap[a.campaign_id]||a.campaign_id}</div>
+        <div class="ad-name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
+        <div class="ad-camp">${escapeHtml(cMap[a.campaign_id]||a.campaign_id)}</div>
         <div class="ad-stats">
           <div class="ad-stat">Gasto <span>${spend}</span></div>
           <div class="ad-stat">CPM <span>${cpm}</span></div>
@@ -1529,8 +1563,8 @@ function showAdDetail(id){
         <div style="display:flex;gap:16px;margin-bottom:16px">
           ${thumb?`<img src="${thumb}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.remove()">`:''}
           <div>
-            <div style="font-size:11px;color:var(--mut);margin-bottom:4px">${a.campaign_id}</div>
-            <div class="modal-t">${a.name}</div>
+            <div style="font-size:11px;color:var(--mut);margin-bottom:4px">${escapeHtml(a.campaign_id)}</div>
+            <div class="modal-t">${escapeHtml(a.name)}</div>
             <div class="ad-status ${a.status==='ACTIVE'?'st-active':'st-paused'}" style="margin-top:6px">● ${a.status==='ACTIVE'?'Activo':'Pausado'}</div>
           </div>
         </div>
@@ -1547,7 +1581,7 @@ function showAdDetail(id){
           ].map(([l,v])=>`<div style="background:var(--border-l);border-radius:6px;padding:10px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-bottom:4px">${l}</div><div style="font-size:16px;font-weight:700;font-family:var(--mono)">${v}</div></div>`).join('')}
         </div>
         ${cptVal!==null?`<div style="background:${cptVal<=CPT_T.target?'var(--gbg)':cptVal<=CPT_T.warn?'var(--ybg)':'var(--rbg)'};border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px"><b>CPT: €${cptVal.toFixed(2)}</b> — ${rec}</div>`:'<div style="background:var(--ybg);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px">'+rec+'</div>'}
-        <button class="btn btn-ghost btn-sm" onclick="$('adModal').remove()" style="width:100%">Cerrar</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('adModal').remove()" style="width:100%">Cerrar</button>
       </div>
     </div>`);
 }
@@ -1572,7 +1606,7 @@ function renderAdsetAssets(){
           const camp=CAMPS.find(c=>c.cid===a.cid);
           const flag=a.cpt===null?'🔴':a.cpt<=CPT_T.target?'🟢':a.cpt<=CPT_T.warn?'🟡':'🔴';
           return `<tr>
-            <td><span class="tn">${a.name}</span></td>
+            <td><span class="tn">${escapeHtml(a.name)}</span></td>
             <td>${flag}</td>
             <td class="tnum">${e(a.spend)}</td>
             <td class="tnum ${a.conversions?'':'tr_'}">${a.conversions||'0'}</td>
@@ -1692,7 +1726,7 @@ function renderOrganic(){
           <div class="post-date">${date}</div>
           <span class="post-type ${typeClass}">${typeLabel}</span>
         </div>
-        <div class="post-caption">${(caption||'Sin caption').substring(0,100)}</div>
+        <div class="post-caption">${escapeHtml((caption||'Sin caption').substring(0,100))}</div>
         <div class="post-meta">
           <span class="post-stat">❤️ <b>${likes}</b></span>
           <span class="post-stat">💬 <b>${comments}</b></span>
@@ -1719,13 +1753,13 @@ function showPostDetail(id, tab){
         <div style="display:flex;gap:14px;margin-bottom:14px">
           ${thumb?`<img src="${thumb}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.remove()">`:''}
           <div><div class="modal-t" style="font-size:14px">${isIG?'Instagram':'Facebook'} · ${new Date(isIG?post.timestamp:post.created_time).toLocaleDateString('es',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</div>
-          <div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.6">${(caption||'Sin caption').substring(0,200)}</div>
-          ${post.permalink?`<a href="${post.permalink}" target="_blank" style="font-size:11px;color:var(--acc);margin-top:4px;display:inline-block">Ver en Instagram →</a>`:''}</div>
+          <div style="font-size:12px;color:var(--dim);margin-top:6px;line-height:1.6">${escapeHtml((caption||'Sin caption').substring(0,200))}</div>
+          ${post.permalink?`<a href="${escapeHtml(post.permalink)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--acc);margin-top:4px;display:inline-block">Ver en Instagram →</a>`:''}</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
           ${[['❤️ Likes',likes],['💬 Comentarios',comments],['👁 Alcance',ins.reach||'—'],['⚡ Engagement',ins.engagement||'—'],['🔖 Guardados',ins.saved||'—'],['📊 Impresiones',ins.impressions||'—']].map(([l,v])=>`<div style="background:var(--border-l);border-radius:6px;padding:10px;text-align:center"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-bottom:4px">${l}</div><div style="font-size:16px;font-weight:700;font-family:var(--mono)">${v}</div></div>`).join('')}
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="$('postModal').remove()" style="width:100%">Cerrar</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('postModal').remove()" style="width:100%">Cerrar</button>
       </div>
     </div>`);
 }
@@ -1747,8 +1781,8 @@ function renderParrilla(){
     const fbPosts=(orgData.fb||[]).filter(p=>new Date(p.created_time).getDate()===d&&new Date(p.created_time).getMonth()===m);
     html+=`<div class="cal-day${isToday?' today':''}" onclick="calDayClick(${d})">
       <div class="cal-dn">${d}</div>
-      ${igPosts.map(p=>`<div class="cal-post">📸 ${(p.caption||'Post IG').substring(0,20)}</div>`).join('')}
-      ${fbPosts.map(p=>`<div class="cal-post fb">👥 ${(p.message||'Post FB').substring(0,20)}</div>`).join('')}
+      ${igPosts.map(p=>`<div class="cal-post">📸 ${escapeHtml((p.caption||'Post IG').substring(0,20))}</div>`).join('')}
+      ${fbPosts.map(p=>`<div class="cal-post fb">👥 ${escapeHtml((p.message||'Post FB').substring(0,20))}</div>`).join('')}
     </div>`;
   }
   $('calDays').innerHTML=html;
@@ -1764,32 +1798,32 @@ async function publishPost(){
   const caption=$('postCaption').value.trim();
   const status=$('pubStatus');
   if(!imgUrl||!caption){ status.textContent='Completa imagen y caption.'; status.style.color='var(--r)'; return; }
-  if(!metaToken){ showTab('config'); return; }
+  if(!activePlats.ig && !activePlats.fb){ status.textContent='Selecciona al menos una plataforma.'; status.style.color='var(--r)'; return; }
+  const isLocal = ['localhost','127.0.0.1'].includes(location.hostname);
+  if(isLocal && !metaToken){ showTab('config'); return; }
   status.textContent='Publicando…'; status.style.color='var(--dim)';
   try{
     const results=[];
     if(activePlats.ig){
-      // Step 1: create container
-      const container=await apiCall(`${IG_ACC_ID}/media`,{image_url:imgUrl,caption});
-      if(container.id){
-        const pub=await apiCall(`${IG_ACC_ID}/media_publish`,{creation_id:container.id});
-        if(pub.id) results.push('✅ Instagram publicado');
-        else results.push('⚠️ Instagram: error al publicar');
-      } else results.push('⚠️ Instagram: no se creó el contenedor');
+      const container=await apiCall(`${IG_ACC_ID}/media`,{image_url:imgUrl,caption},{method:'POST'});
+      if(container && container.id){
+        const pub=await apiCall(`${IG_ACC_ID}/media_publish`,{creation_id:container.id},{method:'POST'});
+        if(pub && pub.id) results.push('✅ Instagram publicado');
+        else results.push(`⚠️ Instagram: ${pub?.error?.message||'error al publicar'}`);
+      } else {
+        results.push(`⚠️ Instagram: ${container?.error?.message||'no se creó el contenedor'}`);
+      }
     }
     if(activePlats.fb){
-      const fbRes=await fetch(`${META_BASE}/${FB_PAGE_ID}/photos`,{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({url:imgUrl,caption,access_token:metaToken})
-      });
-      const fbData=await fbRes.json();
-      if(fbData.id) results.push('✅ Facebook publicado');
-      else results.push(`⚠️ Facebook: ${fbData.error?.message||'error'}`);
+      const fb=await apiCall(`${FB_PAGE_ID}/photos`,{url:imgUrl,caption},{method:'POST'});
+      if(fb && fb.id) results.push('✅ Facebook publicado');
+      else results.push(`⚠️ Facebook: ${fb?.error?.message||'error'}`);
     }
+    const allOk=results.every(r=>r.startsWith('✅'));
     status.textContent=results.join(' · ');
-    status.style.color='var(--g)';
-    setTimeout(()=>{ fetchOrganic(); renderParrilla(); },2000);
-  }catch(e){ status.textContent='Error: '+e.message; status.style.color='var(--r)'; }
+    status.style.color=allOk?'var(--g)':'var(--y)';
+    if(allOk) setTimeout(()=>{ fetchOrganic(); renderParrilla(); },2000);
+  }catch(err){ status.textContent='Error: '+err.message; status.style.color='var(--r)'; }
 }
 </script>
 </body>

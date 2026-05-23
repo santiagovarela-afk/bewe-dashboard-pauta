@@ -25,9 +25,11 @@ yarn-error.log*
 
 # IDE
 .agents/
-.claude/
+.claude/launch.json
+.claude/*.json
 .vscode/
 .idea/
+# Mantenemos .claude/agents/ commiteado — definiciones de subagentes Claude Code
 
 # typescript
 *.tsbuildinfo

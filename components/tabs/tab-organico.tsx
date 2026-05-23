@@ -1,0 +1,703 @@
+"use client";
+import * as React from "react";
+import { motion } from "motion/react";
+import {
+  Loader2,
+  RefreshCw,
+  Instagram,
+  Facebook,
+  ImageOff,
+  Heart,
+  MessageCircle,
+  Trophy,
+  ExternalLink,
+  Calendar,
+  TrendingUp,
+  Sparkles,
+  AlertTriangle,
+} from "lucide-react";
+import { fmt } from "@/lib/utils";
+import { SectionHeader } from "@/components/shared/section-header";
+import { TextureCard } from "@/components/fx/texture-card";
+import { SpotlightCard } from "@/components/fx/spotlight-card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { KpiCard } from "@/components/shared/kpi-card";
+import { OnboardingTip } from "@/components/shared/onboarding-tip";
+import { Drawer } from "@/components/shared/drawer";
+import { useOrganic, type IGMedia, type FBPost } from "@/lib/hooks/use-organic";
+
+type SortKey = "date" | "likes" | "comments" | "engagement";
+
+interface NormalizedPost {
+  id: string;
+  source: "ig" | "fb";
+  thumb?: string;
+  text?: string;
+  likes: number;
+  comments: number;
+  date?: string;
+  permalink?: string;
+  type?: string;
+  raw: IGMedia | FBPost;
+}
+
+function normalizeIG(p: IGMedia): NormalizedPost {
+  return {
+    id: p.id,
+    source: "ig",
+    thumb: p.thumbnail_url || p.media_url,
+    text: p.caption,
+    likes: p.like_count ?? 0,
+    comments: p.comments_count ?? 0,
+    date: p.timestamp,
+    permalink: p.permalink,
+    type: p.media_type,
+    raw: p,
+  };
+}
+
+function normalizeFB(p: FBPost): NormalizedPost {
+  return {
+    id: p.id,
+    source: "fb",
+    thumb: p.full_picture,
+    text: p.message,
+    likes: p.reactions?.summary?.total_count ?? 0,
+    comments: p.comments?.summary?.total_count ?? 0,
+    date: p.created_time,
+    permalink: p.permalink_url,
+    raw: p,
+  };
+}
+
+export function TabOrganico() {
+  const [tab, setTab] = React.useState<"ig" | "fb">("ig");
+  const [sortKey, setSortKey] = React.useState<SortKey>("date");
+  const [selected, setSelected] = React.useState<NormalizedPost | null>(null);
+
+  // Trae IG + FB en paralelo, ambos con cache local + revalidación
+  const { ig, fb, loading, error, refresh } = useOrganic({ limit: 50 });
+
+  const igPosts = ig.posts;
+  const fbPosts = fb.posts;
+  const insightsMissing = tab === "ig" ? ig.insightsMissing : fb.insightsMissing;
+
+  const normalized = React.useMemo<NormalizedPost[]>(() => {
+    return tab === "ig" ? igPosts.map(normalizeIG) : fbPosts.map(normalizeFB);
+  }, [tab, igPosts, fbPosts]);
+
+  const sorted = React.useMemo(() => {
+    const sortFn: Record<SortKey, (a: NormalizedPost, b: NormalizedPost) => number> = {
+      date: (a, b) =>
+        new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime(),
+      likes: (a, b) => b.likes - a.likes,
+      comments: (a, b) => b.comments - a.comments,
+      engagement: (a, b) => b.likes + b.comments - (a.likes + a.comments),
+    };
+    return [...normalized].sort(sortFn[sortKey]);
+  }, [normalized, sortKey]);
+
+  // Top 3 by engagement (always, regardless of sort)
+  const top3 = React.useMemo(() => {
+    return [...normalized]
+      .sort((a, b) => b.likes + b.comments - (a.likes + a.comments))
+      .slice(0, 3);
+  }, [normalized]);
+
+  // KPIs
+  const kpis = React.useMemo(() => {
+    const totalLikes = normalized.reduce((s, p) => s + p.likes, 0);
+    const totalComments = normalized.reduce((s, p) => s + p.comments, 0);
+    const totalPosts = normalized.length;
+    const avgEng = totalPosts > 0 ? (totalLikes + totalComments) / totalPosts : 0;
+    return { totalLikes, totalComments, totalPosts, avgEng };
+  }, [normalized]);
+
+  // Comparativo IG vs FB (engagement por post)
+  const comparison = React.useMemo(() => {
+    const igEng =
+      igPosts.length > 0
+        ? igPosts.reduce(
+            (s, p) => s + (p.like_count ?? 0) + (p.comments_count ?? 0),
+            0,
+          ) / igPosts.length
+        : 0;
+    const fbEng =
+      fbPosts.length > 0
+        ? fbPosts.reduce(
+            (s, p) =>
+              s +
+              (p.reactions?.summary?.total_count ?? 0) +
+              (p.comments?.summary?.total_count ?? 0),
+            0,
+          ) / fbPosts.length
+        : 0;
+    return { igEng, fbEng, leader: igEng >= fbEng ? "ig" : "fb" };
+  }, [igPosts, fbPosts]);
+
+  return (
+    <div className="space-y-6 max-w-[1500px]">
+      <OnboardingTip
+        storageKey="organico"
+        steps={[
+          {
+            title: "¿Qué es contenido orgánico?",
+            body: "Aquí están todos los posts publicados sin pauta en Instagram (@bewe) y Facebook (Bewe Page). Te ayuda a medir qué contenido genera engagement de forma natural.",
+          },
+          {
+            title: "Carga automática",
+            body: "IG + FB se traen solos al entrar. El cache local te muestra los últimos posts al instante y revalida en background.",
+          },
+          {
+            title: "Top 3 destacado",
+            body: "Identificamos automáticamente los 3 mejores posts del período por engagement (likes + comentarios). Usa eso para encontrar contenido viralizable.",
+          },
+          {
+            title: "Detalle por post",
+            body: "Haz clic en cualquier post para ver caption completo, fecha exacta, breakdown y link directo a la red. Ordena por fecha, likes o engagement.",
+          },
+        ]}
+      />
+
+      <SectionHeader
+        title="Contenido orgánico · mayo 2026"
+        sub={
+          normalized.length
+            ? `${kpis.totalPosts} posts · ${fmt.int(kpis.totalLikes)} likes · ${fmt.int(kpis.totalComments)} comentarios`
+            : loading
+              ? "Cargando posts…"
+              : "Sin posts (o sin permisos del token)"
+        }
+        right={
+          <>
+            <div className="flex border border-border rounded-full p-0.5 bg-card">
+              {(["ig", "fb"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={cn(
+                    "flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
+                    tab === t
+                      ? t === "ig"
+                        ? "bg-[hsl(var(--brand-violet)/0.18)] text-[hsl(var(--brand-violet))]"
+                        : "bg-[hsl(var(--info)/0.18)] text-[hsl(var(--info))]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t === "ig" ? (
+                    <Instagram className="size-3" />
+                  ) : (
+                    <Facebook className="size-3" />
+                  )}
+                  {t === "ig" ? "Instagram" : "Facebook"}
+                </button>
+              ))}
+            </div>
+            <Button onClick={() => void refresh()} size="sm" variant="glow" disabled={loading}>
+              {loading ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+              {loading ? "Cargando…" : "Recargar"}
+            </Button>
+          </>
+        }
+      />
+
+      {/* KPIs */}
+      {normalized.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KpiCard
+            label="Posts del período"
+            value={kpis.totalPosts}
+            sub={tab === "ig" ? "Instagram" : "Facebook"}
+            tone={tab === "ig" ? "violet" : "info"}
+            format={(v) => fmt.int(v)}
+          />
+          <KpiCard
+            label="Total likes"
+            value={kpis.totalLikes}
+            sub={`media ${(kpis.totalPosts > 0 ? kpis.totalLikes / kpis.totalPosts : 0).toFixed(1)} por post`}
+            tone="ember"
+            delay={0.05}
+            format={(v) => fmt.int(v)}
+          />
+          <KpiCard
+            label="Comentarios"
+            value={kpis.totalComments}
+            sub={`media ${(kpis.totalPosts > 0 ? kpis.totalComments / kpis.totalPosts : 0).toFixed(1)} por post`}
+            tone="cyan"
+            delay={0.1}
+            format={(v) => fmt.int(v)}
+          />
+          <KpiCard
+            label="Engagement / post"
+            value={kpis.avgEng}
+            sub="likes + comentarios"
+            tone="lime"
+            delay={0.15}
+            format={(v) => v.toFixed(1)}
+          />
+        </div>
+      )}
+
+      {/* Aviso de insights faltantes */}
+      {insightsMissing && (
+        <TextureCard className="p-3 border-[hsl(var(--warning)/0.4)] bg-[hsl(var(--warning)/0.06)]">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="size-3.5 text-[hsl(var(--warning))] mt-0.5 shrink-0" />
+            <div className="text-[11px] text-muted-foreground">
+              <strong className="text-[hsl(var(--warning))]">Insights orgánicos no disponibles.</strong>{" "}
+              El token no tiene permisos de{" "}
+              <code className="font-mono text-[10px]">
+                {tab === "ig"
+                  ? "instagram_manage_insights + pages_read_engagement"
+                  : "pages_read_engagement"}
+              </code>
+              . Mostrando solo likes/comments públicos.
+            </div>
+          </div>
+        </TextureCard>
+      )}
+
+      {/* IG vs FB comparativo (cuando hay datos de ambos) */}
+      {igPosts.length > 0 && fbPosts.length > 0 && (
+        <TextureCard className="p-3 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-[11px]">
+            <TrendingUp className="size-3.5 text-[hsl(var(--brand-lime))]" />
+            <span className="font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              IG vs FB
+            </span>
+          </div>
+          <Badge variant={comparison.leader === "ig" ? "violet" : "outline"}>
+            <Instagram className="size-2.5 mr-1" /> {comparison.igEng.toFixed(1)} eng/post
+          </Badge>
+          <Badge variant={comparison.leader === "fb" ? "info" : "outline"}>
+            <Facebook className="size-2.5 mr-1" /> {comparison.fbEng.toFixed(1)} eng/post
+          </Badge>
+          <div className="text-[11px] text-muted-foreground ml-auto">
+            <strong className="text-foreground">
+              {comparison.leader === "ig" ? "Instagram" : "Facebook"}
+            </strong>{" "}
+            lidera este período (
+            {(
+              Math.max(comparison.igEng, comparison.fbEng) /
+              Math.max(0.01, Math.min(comparison.igEng, comparison.fbEng))
+            ).toFixed(1)}
+            × más eng/post)
+          </div>
+        </TextureCard>
+      )}
+
+      {/* Error con detección de permisos */}
+      {error && (
+        <TextureCard className="p-4 border-[hsl(var(--destructive)/0.4)] bg-[hsl(var(--destructive)/0.08)]">
+          <div className="text-[12px] text-[hsl(var(--destructive))] font-mono">⚠ {error}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            {/permission|scope|oauth/i.test(error)
+              ? `El token no tiene permisos suficientes para ${tab === "ig" ? "instagram_basic + pages_read_engagement" : "pages_read_engagement"}.`
+              : "Verifica META_TOKEN en .env.local y que la cuenta tenga posts."}
+          </div>
+        </TextureCard>
+      )}
+
+      {/* Skeletons */}
+      {loading && !normalized.length && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <TextureCard key={i} className="overflow-hidden">
+              <Skeleton className="aspect-square !rounded-none" />
+              <div className="p-3 space-y-2">
+                <Skeleton className="h-2.5 w-full" />
+                <Skeleton className="h-2.5 w-2/3" />
+                <div className="flex gap-3 pt-1">
+                  <Skeleton className="h-2.5 w-8" />
+                  <Skeleton className="h-2.5 w-8" />
+                </div>
+              </div>
+            </TextureCard>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!normalized.length && !loading && !error && (
+        <TextureCard className="p-10 text-center">
+          <div
+            className={cn(
+              "size-14 rounded-2xl mx-auto mb-4 grid place-items-center border",
+              tab === "ig"
+                ? "bg-[hsl(var(--brand-violet)/0.12)] border-[hsl(var(--brand-violet)/0.3)] text-[hsl(var(--brand-violet))]"
+                : "bg-[hsl(var(--info)/0.12)] border-[hsl(var(--info)/0.3)] text-[hsl(var(--info))]",
+            )}
+          >
+            {tab === "ig" ? (
+              <Instagram className="size-6" />
+            ) : (
+              <Facebook className="size-6" />
+            )}
+          </div>
+          <div className="text-sm font-semibold mb-1">
+            Sin posts cargados de {tab === "ig" ? "Instagram" : "Facebook"}
+          </div>
+          <div className="text-[12px] text-muted-foreground max-w-md mx-auto mb-4">
+            Verifica permisos del token o pulsa Recargar.
+          </div>
+          <Button onClick={() => void refresh()} size="sm" variant="glow">
+            <RefreshCw className="size-3.5" /> Recargar
+          </Button>
+        </TextureCard>
+      )}
+
+      {/* TOP 3 */}
+      {top3.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy className="size-3.5 text-[hsl(var(--brand-ember))]" />
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              Top 3 del período · por engagement
+            </h3>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {top3.map((p, i) => (
+              <motion.button
+                key={`top-${p.id}`}
+                onClick={() => setSelected(p)}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06, duration: 0.4 }}
+                className="text-left"
+              >
+                <SpotlightCard
+                  className="overflow-hidden h-full hover:border-[hsl(var(--brand-ember)/0.5)]"
+                  spotlightColor="var(--brand-ember)"
+                >
+                  <div className="flex">
+                    <div className="size-24 shrink-0 bg-secondary/60 relative">
+                      {p.thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.thumb}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 grid place-items-center text-muted-foreground/40">
+                          <ImageOff className="size-5" />
+                        </div>
+                      )}
+                      <div className="absolute -top-1.5 -left-1.5">
+                        <Badge variant="ember" className="!text-[9px] !px-1.5">
+                          #{i + 1}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="p-3 flex-1 min-w-0">
+                      <div className="text-[11px] text-foreground line-clamp-2 mb-2 leading-snug">
+                        {p.text ?? "Sin texto"}
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 font-mono">
+                          <Heart className="size-3" /> {fmt.short(p.likes)}
+                        </span>
+                        <span className="inline-flex items-center gap-1 font-mono">
+                          <MessageCircle className="size-3" /> {fmt.short(p.comments)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </SpotlightCard>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sort bar */}
+      {normalized.length > 0 && (
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles className="size-3 text-muted-foreground" />
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Todos los posts
+          </h3>
+          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+            <SelectTrigger className="h-7 text-[11px] min-w-[150px] ml-auto">
+              <TrendingUp className="size-3 mr-1" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="date">Orden: Más reciente</SelectItem>
+              <SelectItem value="likes">Orden: Más likes</SelectItem>
+              <SelectItem value="comments">Orden: Más comentarios</SelectItem>
+              <SelectItem value="engagement">Orden: Engagement total</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Grid principal */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {sorted.map((p, i) => (
+          <PostCard
+            key={p.id}
+            post={p}
+            delay={Math.min(i * 0.03, 0.4)}
+            onClick={() => setSelected(p)}
+          />
+        ))}
+      </div>
+
+      {/* Drawer */}
+      <PostDrawer post={selected} onClose={() => setSelected(null)} />
+    </div>
+  );
+}
+
+function PostCard({
+  post: p,
+  delay,
+  onClick,
+}: {
+  post: NormalizedPost;
+  delay: number;
+  onClick: () => void;
+}) {
+  const isIg = p.source === "ig";
+  return (
+    <motion.button
+      onClick={onClick}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4 }}
+      className="text-left"
+    >
+      <SpotlightCard className="overflow-hidden h-full hover:border-foreground/30 transition-colors">
+        <div className="aspect-square bg-secondary/60 relative overflow-hidden">
+          {p.thumb ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={p.thumb}
+              alt=""
+              className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+            />
+          ) : (
+            <div className="absolute inset-0 grid place-items-center text-muted-foreground/40">
+              {isIg ? <ImageOff className="size-8" /> : <Facebook className="size-8" />}
+            </div>
+          )}
+          {p.type && (
+            <Badge
+              variant={
+                p.type === "VIDEO"
+                  ? "violet"
+                  : p.type === "CAROUSEL_ALBUM"
+                    ? "ember"
+                    : "info"
+              }
+              className="absolute top-2 left-2 !text-[9px]"
+            >
+              {p.type}
+            </Badge>
+          )}
+        </div>
+        <div className="p-3">
+          <div className="text-[11px] text-muted-foreground line-clamp-2 mb-2 leading-snug">
+            {p.text ?? "—"}
+          </div>
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Heart className="size-3" /> {fmt.short(p.likes)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <MessageCircle className="size-3" /> {fmt.short(p.comments)}
+            </span>
+            {p.date && (
+              <span className="ml-auto font-mono text-[9px] opacity-70">
+                {new Date(p.date).toLocaleDateString("es-ES", {
+                  day: "2-digit",
+                  month: "short",
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+      </SpotlightCard>
+    </motion.button>
+  );
+}
+
+function PostDrawer({
+  post,
+  onClose,
+}: {
+  post: NormalizedPost | null;
+  onClose: () => void;
+}) {
+  if (!post) {
+    return <Drawer open={false} onClose={onClose} />;
+  }
+  const dateLong = post.date
+    ? new Date(post.date).toLocaleString("es-ES", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "Fecha desconocida";
+  const engagement = post.likes + post.comments;
+
+  return (
+    <Drawer
+      open={!!post}
+      onClose={onClose}
+      title={
+        <span className="inline-flex items-center gap-2">
+          {post.source === "ig" ? (
+            <Instagram className="size-3.5 text-[hsl(var(--brand-violet))]" />
+          ) : (
+            <Facebook className="size-3.5 text-[hsl(var(--info))]" />
+          )}
+          Post {post.source === "ig" ? "Instagram" : "Facebook"}
+        </span>
+      }
+      subtitle={dateLong}
+      footer={
+        post.permalink && (
+          <a
+            href={post.permalink}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full"
+          >
+            <Button variant="glow" size="sm" className="w-full">
+              <ExternalLink className="size-3.5" /> Abrir en{" "}
+              {post.source === "ig" ? "Instagram" : "Facebook"}
+            </Button>
+          </a>
+        )
+      }
+    >
+      <div className="space-y-4">
+        {/* Imagen */}
+        <div className="rounded-lg overflow-hidden border border-border bg-secondary/50">
+          {post.thumb ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={post.thumb} alt="" className="w-full h-auto block" />
+          ) : (
+            <div className="aspect-square grid place-items-center text-muted-foreground/40">
+              {post.source === "ig" ? (
+                <Instagram className="size-10" />
+              ) : (
+                <Facebook className="size-10" />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Type badge */}
+        {post.type && (
+          <Badge
+            variant={
+              post.type === "VIDEO"
+                ? "violet"
+                : post.type === "CAROUSEL_ALBUM"
+                  ? "ember"
+                  : "info"
+            }
+            className="!text-[10px]"
+          >
+            {post.type}
+          </Badge>
+        )}
+
+        {/* Caption completo */}
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-1.5">
+            Caption / mensaje
+          </div>
+          <div className="text-[12px] text-foreground leading-relaxed whitespace-pre-wrap">
+            {post.text ?? <span className="text-muted-foreground italic">Sin texto</span>}
+          </div>
+        </div>
+
+        {/* Fecha */}
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-1.5 flex items-center gap-1.5">
+            <Calendar className="size-3" /> Publicado
+          </div>
+          <div className="text-[12px] font-mono">{dateLong}</div>
+        </div>
+
+        {/* Métricas */}
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-2">
+            Engagement
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <MetricCell
+              icon={<Heart className="size-3.5" />}
+              label="Likes"
+              value={fmt.int(post.likes)}
+              tone="ember"
+            />
+            <MetricCell
+              icon={<MessageCircle className="size-3.5" />}
+              label="Comentarios"
+              value={fmt.int(post.comments)}
+              tone="cyan"
+            />
+            <MetricCell
+              icon={<TrendingUp className="size-3.5" />}
+              label="Total"
+              value={fmt.int(engagement)}
+              tone="lime"
+            />
+          </div>
+        </div>
+      </div>
+    </Drawer>
+  );
+}
+
+function MetricCell({
+  icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value: string;
+  tone?: "default" | "violet" | "ember" | "cyan" | "lime";
+}) {
+  const toneColor: Record<string, string> = {
+    default: "text-foreground",
+    violet: "text-[hsl(var(--brand-violet))]",
+    ember: "text-[hsl(var(--brand-ember))]",
+    cyan: "text-[hsl(var(--brand-cyan))]",
+    lime: "text-[hsl(var(--brand-lime))]",
+  };
+  return (
+    <div className="rounded-md border border-border/60 bg-card/60 px-3 py-2.5">
+      <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/80 font-bold flex items-center gap-1">
+        {icon} {label}
+      </div>
+      <div className={cn("font-mono font-bold text-[16px] mt-1", toneColor[tone])}>
+        {value}
+      </div>
+    </div>
+  );
+}

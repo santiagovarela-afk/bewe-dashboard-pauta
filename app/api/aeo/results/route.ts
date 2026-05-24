@@ -8,13 +8,13 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { promises as fs } from "node:fs";
-import path from "node:path";
 import { computeStats, type AeoStore, type AeoRun } from "@/lib/aeo";
+import { resolveDataPath } from "@/lib/data-paths";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DATA_FILE = path.join(process.cwd(), ".data", "aeo-results.json");
+const DATA_FILE = resolveDataPath("aeo-results.json");
 
 async function readStore(): Promise<AeoStore> {
   try {

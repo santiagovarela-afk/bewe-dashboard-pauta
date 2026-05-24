@@ -10,15 +10,15 @@
 // Sufijo `.server.ts` indica intención · sólo importar desde API routes
 // u otras funciones que corran en runtime Node.
 import fs from "node:fs/promises";
-import path from "node:path";
 import { DEFAULT_RULES } from "./ai-memory";
+import { resolveDataDir, resolveDataPath } from "./data-paths";
 import type { AiMemoryFile } from "./types";
 
 const FALLBACK: AiMemoryFile = { rules: DEFAULT_RULES, entries: [] };
 
 /** Lee desde `.data/ai-memory.json`. */
 export async function readMemoryServer(): Promise<AiMemoryFile> {
-  const file = path.join(process.cwd(), ".data", "ai-memory.json");
+  const file = resolveDataPath("ai-memory.json");
   try {
     const txt = await fs.readFile(file, "utf8");
     const data = JSON.parse(txt) as AiMemoryFile;
@@ -33,8 +33,8 @@ export async function readMemoryServer(): Promise<AiMemoryFile> {
 
 /** Escribe a `.data/ai-memory.json` (crea la carpeta si falta). */
 export async function writeMemoryServer(data: AiMemoryFile): Promise<void> {
-  const dir = path.join(process.cwd(), ".data");
-  const file = path.join(dir, "ai-memory.json");
+  const dir = resolveDataDir();
+  const file = resolveDataPath("ai-memory.json");
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(file, JSON.stringify(data, null, 2), "utf8");
 }

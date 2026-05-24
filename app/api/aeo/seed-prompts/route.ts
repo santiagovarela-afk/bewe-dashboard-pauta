@@ -13,16 +13,16 @@
  */
 import { NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
-import path from "node:path";
 import { autogenerateAeoPrompts, type GeneratedAeoPrompt } from "@/lib/aeo-autogenerate";
 import type { AeoPrompt } from "@/lib/aeo";
+import { resolveDataDir, resolveDataPath } from "@/lib/data-paths";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DATA_FILE = path.join(DATA_DIR, "aeo-prompts.json");
+const DATA_DIR = resolveDataDir();
+const DATA_FILE = resolveDataPath("aeo-prompts.json");
 
 interface PromptStore {
   generatedAt: string;

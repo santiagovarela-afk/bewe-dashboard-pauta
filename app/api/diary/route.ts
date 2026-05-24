@@ -11,14 +11,14 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { promises as fs } from "node:fs";
-import path from "node:path";
 import type { DiaryEntry } from "@/lib/diary";
+import { resolveDataDir, resolveDataPath } from "@/lib/data-paths";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DATA_FILE = path.join(DATA_DIR, "diary.json");
+const DATA_DIR = resolveDataDir();
+const DATA_FILE = resolveDataPath("diary.json");
 
 /** Lee el archivo de diario; devuelve [] si no existe o está corrupto. */
 async function readAll(): Promise<DiaryEntry[]> {

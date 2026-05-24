@@ -274,7 +274,18 @@ export function AiDock() {
         });
         const data = await res.json();
         if (!res.ok || data.error) {
-          throw new Error(data.error || `HTTP ${res.status}`);
+          // Quota agotada · mensaje friendly + extraer segundos del retry
+          const rawError = String(data.error || `HTTP ${res.status}`);
+          const isQuota = data.quotaExhausted || /quota|rate.?limit|exceeded|429/i.test(rawError);
+          if (isQuota) {
+            const retryMatch = rawError.match(/retry in (\d+(?:\.\d+)?)s/i);
+            const retrySec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : null;
+            const friendly = retrySec
+              ? `Esperá ${retrySec} segundos y reintentá (cuota de Gemini agotada por minuto).`
+              : "Cuota de Gemini agotada. Esperá unos segundos o activa billing en Google AI Studio.";
+            throw new Error(friendly);
+          }
+          throw new Error(rawError);
         }
         const botMsg: Msg = {
           id: uid(),
@@ -288,14 +299,20 @@ export function AiDock() {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Error desconocido";
-        toast.error("Error consultando Gemini", { description: msg });
+        const isQuotaMsg = /cuota|quota|esperá|wait/i.test(msg);
+        toast.error(
+          isQuotaMsg ? "Cuota de Gemini agotada" : "Error de Mark/Lúa",
+          { description: msg },
+        );
         setMessages((prev) => [
           ...prev,
           {
             id: uid(),
             role: "bot",
             ts: Date.now(),
-            text: `**Error:** ${msg}\n\nRevisa que \`GEMINI_API_KEY\` esté en \`.env.local\`.`,
+            text: isQuotaMsg
+              ? `⏳ **${msg}**\n\nMientras tanto puedo seguirte ayudando con consultas locales. Si seguís tocando el rate limit, activá billing en [Google AI Studio](https://aistudio.google.com/apikey) (sigue siendo barato · ~$0.001/conversación).`
+              : `**Error:** ${msg}\n\nRevisa que \`GEMINI_API_KEY\` esté configurada.`,
           },
         ]);
       } finally {

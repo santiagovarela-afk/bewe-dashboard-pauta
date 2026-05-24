@@ -60,10 +60,10 @@ export function PersonaPicker({ userName }: PersonaPickerProps) {
   const [hovered, setHovered] = React.useState<AiPersona | null>(null);
   const [chosen, setChosen] = React.useState<Choice | null>(null);
 
-  // Después de ~2s en intro, pasar a choose
+  // Pausa de 5.5s en intro para que el usuario lea el saludo · click skipea
   React.useEffect(() => {
     if (phase !== "intro") return;
-    const t = setTimeout(() => setPhase("choose"), 2200);
+    const t = setTimeout(() => setPhase("choose"), 5500);
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -87,7 +87,9 @@ export function PersonaPicker({ userName }: PersonaPickerProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.4 }}
-            className="flex flex-col items-center text-center py-6"
+            onClick={() => setPhase("choose")}
+            className="flex flex-col items-center text-center py-6 cursor-pointer"
+            title="Click para continuar"
           >
             <motion.div
               initial={{ scale: 0.6, rotate: -8 }}
@@ -120,7 +122,7 @@ export function PersonaPicker({ userName }: PersonaPickerProps) {
               className="mt-5 inline-flex items-center gap-1.5 text-[10px] text-muted-foreground/70 font-mono uppercase tracking-wider"
             >
               <span className="size-1 rounded-full bg-muted-foreground/50 animate-pulse" />
-              Pensando…
+              Pensando… <span className="opacity-50">· click para saltar</span>
             </motion.div>
           </motion.div>
         )}

@@ -8,7 +8,7 @@
  */
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
-import path from "node:path";
+import { resolveDataPath } from "@/lib/data-paths";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ function isServerlessProd(): boolean {
 }
 
 export async function GET() {
-  const filePath = path.join(process.cwd(), ".data", "connector-status.json");
+  const filePath = resolveDataPath("connector-status.json");
   try {
     const txt = await fs.readFile(filePath, "utf8");
     const data = JSON.parse(txt);

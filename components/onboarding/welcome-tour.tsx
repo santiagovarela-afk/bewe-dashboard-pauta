@@ -103,6 +103,20 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
     if (open) setStep(0);
   }, [open]);
 
+  // Cerrar welcome y, una vez la animación de salida termina, abrir el role tour.
+  // Esto evita que el spotlight intente destacar el sidebar mientras el
+  // backdrop del welcome aún cubre todo (lo que rompía el flujo antes).
+  function launchRoleTour() {
+    try {
+      localStorage.setItem(STORAGE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    onClose();
+    // El AnimatePresence del modal tarda ~300ms · esperamos 420ms para safety
+    window.setTimeout(() => setShowRoleTour(true), 420);
+  }
+
   // ESC = saltar
   React.useEffect(() => {
     if (!open) return;
@@ -217,13 +231,17 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                     key="s2"
                     role={role}
                     tabs={allowedTabs.map((t) => ({ id: t.id, label: t.label }))}
-                    onShowAround={() => {
-                      setShowRoleTour(true);
-                    }}
+                    onShowAround={launchRoleTour}
                   />
                 )}
                 {step === 3 && <SlideAi key="s3" />}
-                {step === 4 && <SlideReady key="s4" displayName={displayName} />}
+                {step === 4 && (
+                  <SlideReady
+                    key="s4"
+                    displayName={displayName}
+                    onShowAround={launchRoleTour}
+                  />
+                )}
               </AnimatePresence>
 
               {/* Footer nav */}
@@ -469,7 +487,13 @@ function SlideAi() {
   );
 }
 
-function SlideReady({ displayName }: { displayName: string }) {
+function SlideReady({
+  displayName,
+  onShowAround,
+}: {
+  displayName: string;
+  onShowAround: () => void;
+}) {
   return (
     <motion.div
       key="s4"
@@ -490,9 +514,19 @@ function SlideReady({ displayName }: { displayName: string }) {
       <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-2">
         Listo, {displayName}.
       </h2>
-      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto">
-        Si necesitas ver este tour de nuevo, está en{" "}
-        <strong className="text-foreground">Config → Memoria del agente</strong>.
+      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-4">
+        Si quieres un recorrido visual por sidebar, topbar y copiloto, lánzalo ahora.
+      </p>
+      <button
+        type="button"
+        onClick={onShowAround}
+        className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[hsl(var(--brand-violet))] hover:underline underline-offset-4"
+      >
+        Hacer tour visual ahora →
+      </button>
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-md mx-auto mt-3">
+        También puedes re-disparar este tour desde{" "}
+        <strong className="text-foreground/85">Config → Memoria del agente</strong>.
       </p>
     </motion.div>
   );

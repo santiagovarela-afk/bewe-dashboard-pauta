@@ -22,20 +22,29 @@ interface TourStep {
 const STEPS: TourStep[] = [
   {
     selector: "aside nav",
-    title: "Sidebar",
-    body: "Navega entre áreas. Las secciones a las que tu rol no tiene acceso aparecen apagadas.",
+    title: "Sidebar · Navegación",
+    body:
+      "Agrupado por área: Pauta · Contenido · Analítica · Config. Las tabs apagadas son las que tu rol no puede ver.",
     placement: "right",
   },
   {
-    selector: "main > div:first-of-type",
-    title: "Topbar",
-    body: "Atajos rápidos: theme, rango de fechas y refresh manual de la API de Meta.",
+    selector: "main > header",
+    title: "Topbar · Atajos rápidos",
+    body:
+      "Estado del conector Meta, rango de fechas (filtra sin recargar API), toggle claro/oscuro y refresh manual.",
+    placement: "bottom",
+  },
+  {
+    selector: "[aria-label='Toggle theme']",
+    title: "Tema claro / oscuro",
+    body: "Click aquí para alternar. Tu preferencia se guarda y se aplica antes de cualquier hidratación.",
     placement: "bottom",
   },
   {
     selector: "[aria-label='Abrir asistente IA']",
-    title: "Copiloto IA",
-    body: "El chat flotante está disponible en todas las tabs. Atajo Ctrl/Cmd+K.",
+    title: "Copiloto IA · Gemini",
+    body:
+      "Disponible en TODAS las tabs · atajo Ctrl/Cmd+K. Conoce el plan Julián, los datos en vivo y aprende de cada conversación.",
     placement: "left",
   },
 ];

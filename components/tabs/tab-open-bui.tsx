@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Pencil, PenTool, Sparkles } from "lucide-react";
+import { Pencil, PenTool, Sparkles, HelpCircle } from "lucide-react";
 import { SectionHeader } from "@/components/shared/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,13 @@ import { DesignPreview } from "@/components/open-bui/design-preview";
 import { ExportButtons } from "@/components/open-bui/export-buttons";
 import { BrandKitPanel } from "@/components/open-bui/brand-kit-panel";
 import { SKILLS, getSkill } from "@/components/open-bui/skills";
+import {
+  OpenDesignOnboarding,
+  clearOpenDesignOnboardingSeen,
+} from "@/components/open-bui/onboarding-tour";
+import { ReferencesPanel } from "@/components/open-bui/references-panel";
 import { useDashboard } from "@/lib/store";
+import { cn } from "@/lib/utils";
 
 const STORAGE_KEY_SKILL = "bw_open_design_skill";
 const STORAGE_KEY_BRIEF = "bw_open_design_brief";
@@ -23,18 +29,17 @@ const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
 /**
  * Open Design · Bewe OS
  *
- * Inspirado en Open Design (nexu-io). Reemplaza el canvas tldraw como
- * default por un generador AI de piezas:
- *   1. Usuario elige skill (IG post, FB ad, banner…)
- *   2. Escribe brief en lenguaje natural
- *   3. Mark/Lúa genera HTML+CSS via /api/design/generate (Gemini)
- *   4. Preview en iframe sandboxed · export PNG / HTML
+ * Rebuild (Santi feedback may-2026): la visual anterior se veía desordenada.
+ * Nuevo layout en steps numerados 1·2·3 con onboarding dedicado y panel
+ * de referentes orgánicos (IG+FB) que el user puede usar como inspiración
+ * directa en el brief.
+ *
+ *   1. Elige skill (sidebar izquierda)
+ *   2. Describe brief en lenguaje natural (centro)
+ *   3. Preview live + export (derecha)
+ *   + Referentes orgánicos abajo · click → snippet al brief
  *
  * El canvas tldraw queda como "modo manual" accesible por toggle.
- *
- * Manejo de errores:
- *   - 429 (quota Gemini) → mensaje claro + botón Generar deshabilitado 5min.
- *   - El estado de cooldown persiste en localStorage entre recargas.
  */
 export function TabOpenBui() {
   const { aiPersona } = useDashboard();
@@ -49,6 +54,10 @@ export function TabOpenBui() {
   const [variant, setVariant] = React.useState(0);
   const [quotaUntil, setQuotaUntil] = React.useState<number>(0);
   const [now, setNow] = React.useState<number>(() => Date.now());
+  const [forceOnb, setForceOnb] = React.useState(false);
+  const [toast, setToast] = React.useState<string | null>(null);
+
+  const briefRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   // Hidratar último skill, brief, cooldown
   React.useEffect(() => {
@@ -87,6 +96,13 @@ export function TabOpenBui() {
     return () => window.clearInterval(id);
   }, [quotaUntil]);
 
+  // Toast auto-dismiss
+  React.useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 2400);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
   const cooldownRemainingMs = Math.max(0, quotaUntil - now);
   const inCooldown = cooldownRemainingMs > 0;
   const skill = getSkill(skillId);
@@ -114,7 +130,7 @@ export function TabOpenBui() {
           }
           setError(
             data?.hint ||
-              "Gemini agotó cuota del día. El generador estará disponible cuando renueve (~24h) o si activas billing en Google AI Studio. Mientras tanto, usa el Canvas manual.",
+              "Cuota Gemini agotada · prueba con el canvas manual o espera 4h",
           );
         } else {
           setError(data?.error || `Error ${r.status}`);
@@ -139,8 +155,32 @@ export function TabOpenBui() {
     void generate(variant + 1);
   }
 
+  function handleUseReference(snippet: string) {
+    setBrief((prev) => (prev ? prev.trimEnd() + snippet : snippet.trimStart()));
+    setToast("Referencia agregada al brief");
+    // Scroll suave al textarea para que el user vea el cambio
+    window.requestAnimationFrame(() => {
+      briefRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      briefRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  function openOnboarding() {
+    clearOpenDesignOnboardingSeen();
+    setForceOnb(true);
+  }
+
+  function switchToCanvas() {
+    setMode("canvas");
+  }
+
   return (
-    <div className="space-y-4 max-w-[1600px]">
+    <div className="space-y-5 max-w-[1600px]">
+      <OpenDesignOnboarding
+        forceOpen={forceOnb}
+        onClose={() => setForceOnb(false)}
+      />
+
       <SectionHeader
         title="Open Design · Bewe OS"
         sub={
@@ -153,6 +193,17 @@ export function TabOpenBui() {
             <Badge variant="violet" className="font-mono">
               {mode === "design" ? `${personaLabel} · gen` : "tldraw v3"}
             </Badge>
+            {mode === "design" && (
+              <button
+                type="button"
+                onClick={openOnboarding}
+                title="Ver tutorial Open Design"
+                aria-label="Ver tutorial Open Design"
+                className="inline-flex items-center justify-center size-8 rounded-md border border-border bg-card/40 text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              >
+                <HelpCircle className="size-3.5" />
+              </button>
+            )}
             <Button
               variant={mode === "design" ? "outline" : "default"}
               size="sm"
@@ -185,59 +236,75 @@ export function TabOpenBui() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
-            className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.1fr)] gap-4"
+            className="space-y-5"
           >
-            {/* Sidebar: skills + brand kit */}
-            <aside className="lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto lg:pr-1">
-              <SkillPicker activeId={skillId} onSelect={setSkillId} />
-              <BrandKitPanel />
-            </aside>
+            {/* Hero strip */}
+            <DesignHero personaLabel={personaLabel} />
 
-            {/* Centro: brief */}
-            <section>
-              <BriefInput
-                skill={skill}
-                value={brief}
-                onChange={setBrief}
-                onGenerate={onGenerate}
-                onVariant={onVariant}
-                loading={loading}
-                hasResult={html !== null}
-                personaLabel={personaLabel}
-                cooldownRemainingMs={cooldownRemainingMs}
-              />
-              <div className="mt-6 pt-4 border-t border-border">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2 font-bold">
-                  Sobre Open Design
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Inspirado en{" "}
-                  <span className="text-foreground font-semibold">Open Design</span>{" "}
-                  (nexu-io). Replica local-first: 12 skills, brief en lenguaje
-                  natural, AI senior de Bewe te devuelve HTML+CSS listo para
-                  exportar. Si Gemini está caído, puedes dibujar en el Canvas
-                  manual.
-                </p>
-              </div>
-            </section>
+            {/* Steps grid */}
+            <div className="relative grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,1.05fr)] gap-4">
+              <StepConnector />
 
-            {/* Derecha: preview + export */}
-            <section>
-              <DesignPreview
-                skill={skill}
-                html={html}
-                loading={loading}
-                error={error}
-              />
-              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                <div className="text-[10px] text-muted-foreground/70 font-mono">
-                  {html
-                    ? `Variante ${variant} · ${Math.round(html.length / 1024)} KB`
-                    : "Sin pieza · pulsa Generar"}
+              {/* STEP 1 — Skill picker + brand kit */}
+              <StepCard tone="step1">
+                <SkillPicker activeId={skillId} onSelect={setSkillId} />
+                <div className="mt-3">
+                  <BrandKitPanel />
                 </div>
-                <ExportButtons skill={skill} html={html} briefHint={brief} />
+              </StepCard>
+
+              {/* STEP 2 — Brief */}
+              <StepCard tone="step2">
+                <BriefInput
+                  skill={skill}
+                  value={brief}
+                  onChange={setBrief}
+                  onGenerate={onGenerate}
+                  onVariant={onVariant}
+                  loading={loading}
+                  hasResult={html !== null}
+                  personaLabel={personaLabel}
+                  cooldownRemainingMs={cooldownRemainingMs}
+                  textareaRef={briefRef}
+                />
+              </StepCard>
+
+              {/* STEP 3 — Preview + Export */}
+              <StepCard tone="step3">
+                <DesignPreview
+                  skill={skill}
+                  html={html}
+                  loading={loading}
+                  error={error}
+                  onSwitchToCanvas={switchToCanvas}
+                />
+                <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="text-[10px] text-muted-foreground/70 font-mono">
+                    {html
+                      ? `Variante ${variant} · ${Math.round(html.length / 1024)} KB`
+                      : "Sin pieza · pulsa Generar"}
+                  </div>
+                  <ExportButtons skill={skill} html={html} briefHint={brief} />
+                </div>
+              </StepCard>
+            </div>
+
+            {/* References panel */}
+            <ReferencesPanel onUseReference={handleUseReference} />
+
+            {/* About footer (compact) */}
+            <div className="rounded-lg border border-border/60 bg-card/30 px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-1 font-bold">
+                Sobre Open Design
               </div>
-            </section>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Inspirado en{" "}
+                <span className="text-foreground font-semibold">Open Design</span>{" "}
+                (nexu-io). Local-first: 12 skills, brief en lenguaje natural, AI
+                senior de Bewe te devuelve HTML+CSS listo para exportar. Si Gemini
+                está caído, puedes dibujar en el Canvas manual.
+              </p>
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -253,6 +320,94 @@ export function TabOpenBui() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.25 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] pointer-events-none"
+          >
+            <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[hsl(var(--brand-violet))] text-white text-[12px] font-semibold shadow-[0_10px_30px_-10px_hsl(var(--brand-violet))]">
+              <Sparkles className="size-3.5" />
+              {toast}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ---------- Pieces ---------- */
+
+function DesignHero({ personaLabel }: { personaLabel: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className={cn(
+        "relative overflow-hidden rounded-xl border border-[hsl(var(--brand-violet)/0.3)]",
+        "bg-gradient-to-r from-[hsl(var(--brand-violet)/0.08)] via-card to-[hsl(var(--brand-cyan)/0.07)]",
+        "px-5 py-4",
+      )}
+    >
+      <div className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-[hsl(var(--brand-violet)/0.18)] blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-16 -left-16 size-48 rounded-full bg-[hsl(var(--brand-cyan)/0.14)] blur-3xl" />
+      <div className="relative flex items-start gap-3 flex-wrap">
+        <div className="size-9 grid place-items-center rounded-lg border border-[hsl(var(--brand-violet)/0.4)] bg-[hsl(var(--brand-violet)/0.15)] text-[hsl(var(--brand-violet))] shrink-0">
+          <Sparkles className="size-4" />
+        </div>
+        <div className="flex-1 min-w-[260px]">
+          <div className="font-display text-[16px] font-bold leading-tight">
+            Genera piezas con AI · brand kit Bewe
+          </div>
+          <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed max-w-[640px]">
+            Elige un skill, describe tu idea en lenguaje natural y deja que{" "}
+            <span className="text-foreground font-semibold">{personaLabel}</span>{" "}
+            la diseñe respetando colores, tipografía y voz de marca. Usa tus
+            posts orgánicos recientes como referencia visual.
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function StepCard({
+  tone,
+  children,
+}: {
+  tone: "step1" | "step2" | "step3";
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: tone === "step1" ? 0 : tone === "step2" ? 0.06 : 0.12 }}
+      className={cn(
+        "relative rounded-xl border border-border bg-card/40 p-4",
+        "shadow-[0_2px_10px_-4px_hsl(var(--foreground)/0.08)]",
+      )}
+    >
+      {children}
+    </motion.section>
+  );
+}
+
+function StepConnector() {
+  // Línea punteada decorativa entre los 3 step cards en desktop.
+  return (
+    <div
+      className="pointer-events-none absolute hidden lg:block left-0 right-0 top-[44px] h-px z-0"
+      aria-hidden
+    >
+      <div className="mx-[130px] h-px bg-gradient-to-r from-transparent via-[hsl(var(--brand-violet)/0.35)] to-transparent" />
     </div>
   );
 }

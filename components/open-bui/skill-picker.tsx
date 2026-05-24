@@ -15,12 +15,33 @@ interface SkillPickerProps {
  * El skill activo se marca con check + ring violeta.
  */
 export function SkillPicker({ activeId, onSelect }: SkillPickerProps) {
+  const activeSkill = SKILLS.find((s) => s.id === activeId);
   return (
-    <div className="space-y-2">
-      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground px-1">
-        Skills
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <div className="flex items-center gap-2">
+          <div className="size-5 grid place-items-center rounded-md bg-[hsl(var(--brand-violet)/0.15)] border border-[hsl(var(--brand-violet)/0.4)] text-[10px] font-bold font-mono text-[hsl(var(--brand-violet))]">
+            1
+          </div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-foreground">
+            Elige skill
+          </div>
+        </div>
+        <div className="text-[9px] font-mono text-muted-foreground/70">
+          {SKILLS.length} formatos
+        </div>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
+      {activeSkill && (
+        <div className="rounded-md border border-[hsl(var(--brand-violet)/0.3)] bg-[hsl(var(--brand-violet)/0.06)] px-2 py-1.5 text-[10px]">
+          <span className="font-semibold text-foreground">
+            {activeSkill.label}
+          </span>{" "}
+          <span className="font-mono text-muted-foreground/70">
+            · {activeSkill.size}
+          </span>
+        </div>
+      )}
+      <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 max-h-[42vh] lg:max-h-[44vh] overflow-y-auto pr-1 -mr-1">
         {SKILLS.map((s, i) => (
           <SkillCard
             key={s.id}

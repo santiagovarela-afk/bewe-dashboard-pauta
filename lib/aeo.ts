@@ -252,6 +252,42 @@ export function computeStats(run: AeoRun): AeoStats {
   };
 }
 
+/**
+ * Carga la lista de prompts AEO desde el server (POST /api/aeo/seed-prompts).
+ * Si la API responde con prompts, los devuelve. Si todo falla, devuelve los
+ * AEO_PROMPTS defaults para no dejar la UI vacía.
+ *
+ * SOLO para uso en client components (hace fetch).
+ */
+export async function loadPromptsClient(): Promise<{
+  prompts: AeoPrompt[];
+  source: "existing" | "generated" | "fallback" | "defaults";
+  count: number;
+}> {
+  try {
+    const r = await fetch("/api/aeo/seed-prompts", {
+      method: "POST",
+      cache: "no-store",
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = (await r.json()) as {
+      prompts?: AeoPrompt[];
+      source?: "existing" | "generated" | "fallback";
+      count?: number;
+    };
+    if (Array.isArray(j.prompts) && j.prompts.length > 0) {
+      return {
+        prompts: j.prompts,
+        source: j.source ?? "existing",
+        count: j.count ?? j.prompts.length,
+      };
+    }
+  } catch {
+    // fallthrough → defaults
+  }
+  return { prompts: AEO_PROMPTS, source: "defaults", count: AEO_PROMPTS.length };
+}
+
 /** System prompt usado al consultar Gemini · simula un usuario buscando software. */
 export const AEO_SYSTEM_PROMPT =
   "Eres un asistente útil. Responde la pregunta del usuario sobre software de gestión empresarial con recomendaciones concretas. " +

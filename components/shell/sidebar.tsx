@@ -16,6 +16,7 @@ import {
   Search,
   Gauge,
   Palette,
+  Brain,
 } from "lucide-react";
 import { TABS, TAB_GROUPS, ROLE_TABS, PLAN } from "@/lib/config";
 import { useDashboard } from "@/lib/store";
@@ -35,6 +36,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Search,
   Gauge,
   Palette,
+  Brain,
 };
 
 export function Sidebar() {

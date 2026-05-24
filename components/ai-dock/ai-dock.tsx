@@ -37,8 +37,18 @@ import {
 } from "@/lib/ai-memory";
 import type { AiMemoryFile } from "@/lib/types";
 
-const STORAGE_KEY = "bw_ai_messages";
+const STORAGE_KEY_BASE = "bw_ai_messages";
 const MAX_PERSISTED = 50;
+
+/** Devuelve la clave de storage scopeada al usuario.
+ *  Antes: clave global compartida entre usuarios → al cambiar de sesión veías
+ *  la conversación del anterior ("pegada"). Ahora cada email tiene su propio
+ *  historial aislado.
+ */
+function storageKeyFor(email?: string): string {
+  if (!email) return STORAGE_KEY_BASE; // pre-login fallback
+  return `${STORAGE_KEY_BASE}:${email.toLowerCase()}`;
+}
 
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -62,10 +72,10 @@ function makeGreeting(
   };
 }
 
-function loadPersisted(): Msg[] | null {
+function loadPersisted(email?: string): Msg[] | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKeyFor(email));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Msg[];
     if (!Array.isArray(parsed)) return null;
@@ -75,13 +85,23 @@ function loadPersisted(): Msg[] | null {
   }
 }
 
-function persist(messages: Msg[]) {
+function persist(messages: Msg[], email?: string) {
   if (typeof window === "undefined") return;
   try {
     const trimmed = messages.slice(-MAX_PERSISTED);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    localStorage.setItem(storageKeyFor(email), JSON.stringify(trimmed));
   } catch {
     /* quota / private mode → ignore */
+  }
+}
+
+/** Limpia el historial UI + storage del usuario actual. */
+function clearStorageFor(email?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(storageKeyFor(email));
+  } catch {
+    /* ignore */
   }
 }
 
@@ -112,9 +132,11 @@ export function AiDock() {
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const dragControls = useDragControls();
 
-  // Hydration: cargar mensajes persistidos solo en cliente
+  // Hydration: cargar mensajes persistidos del usuario actual.
+  // Re-corre cuando cambia user.email (login/logout entre sesiones) para que
+  // cada cuenta vea solo su propia historia.
   React.useEffect(() => {
-    const persisted = loadPersisted();
+    const persisted = loadPersisted(user?.email);
     if (persisted && persisted.length > 0) {
       setMessages(persisted);
     } else {
@@ -122,7 +144,7 @@ export function AiDock() {
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.email]);
 
   // Cargar memoria persistente del agente
   const refreshMemory = React.useCallback(async () => {
@@ -138,10 +160,10 @@ export function AiDock() {
     return () => window.removeEventListener("bw:memory-changed", handler);
   }, [refreshMemory]);
 
-  // Persistir cada cambio
+  // Persistir cada cambio, scopeado al usuario actual
   React.useEffect(() => {
-    if (hydrated) persist(messages);
-  }, [messages, hydrated]);
+    if (hydrated) persist(messages, user?.email);
+  }, [messages, hydrated, user?.email]);
 
   // Atajos globales
   React.useEffect(() => {
@@ -313,8 +335,9 @@ export function AiDock() {
   }
 
   function clearChat() {
+    clearStorageFor(user?.email);
     setMessages([makeGreeting(tab, aiPersona, user?.name)]);
-    toast.success("Conversación limpiada");
+    toast.success("Conversación limpiada · solo tu cuenta");
   }
 
   function openConfigPersona() {

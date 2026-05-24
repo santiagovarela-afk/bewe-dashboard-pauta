@@ -15,6 +15,7 @@ import { TabInforme } from "@/components/tabs/tab-informe";
 import { TabConfig } from "@/components/tabs/tab-config";
 import { TabPaid } from "@/components/tabs/tab-paid";
 import { TabSeo } from "@/components/tabs/tab-seo";
+import { TabAeo } from "@/components/tabs/tab-aeo";
 import { TabPerformance } from "@/components/tabs/tab-performance";
 import { TabOpenBui } from "@/components/tabs/tab-open-bui";
 import { NoiseBackdrop } from "@/components/fx/noise";
@@ -30,6 +31,7 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   organico: TabOrganico,
   parrilla: TabParrilla,
   seo: TabSeo,
+  aeo: TabAeo,
   performance: TabPerformance,
   "open-bui": TabOpenBui,
   informe: TabInforme,

@@ -18,6 +18,8 @@ interface BriefInputProps {
   personaLabel: string;
   /** Si > 0 · cooldown activo tras 429 de Gemini (ms restantes). */
   cooldownRemainingMs?: number;
+  /** Permite scroll-into-view cuando se agrega un reference. */
+  textareaRef?: React.Ref<HTMLTextAreaElement>;
 }
 
 const PLACEHOLDER =
@@ -40,14 +42,20 @@ export function BriefInput({
   hasResult,
   personaLabel,
   cooldownRemainingMs = 0,
+  textareaRef,
 }: BriefInputProps) {
   const inCooldown = cooldownRemainingMs > 0;
   const cooldownMmSs = formatMmSs(cooldownRemainingMs);
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          Brief
+        <div className="flex items-center gap-2">
+          <div className="size-5 grid place-items-center rounded-md bg-[hsl(var(--brand-violet)/0.15)] border border-[hsl(var(--brand-violet)/0.4)] text-[10px] font-bold font-mono text-[hsl(var(--brand-violet))]">
+            2
+          </div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-foreground">
+            Describe tu idea
+          </div>
         </div>
         <Badge variant="violet" className="font-mono">
           {skill.label}
@@ -61,10 +69,11 @@ export function BriefInput({
         className="relative"
       >
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={PLACEHOLDER}
-          rows={6}
+          rows={7}
           disabled={loading}
           className={cn(
             "w-full rounded-lg border border-border bg-card/60 px-3 py-3 text-sm",

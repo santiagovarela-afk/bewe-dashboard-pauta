@@ -25,6 +25,8 @@ interface DashboardState {
   /* AI persona · Mark OS o Lúa OS */
   aiPersona: AiPersona;
   setAiPersona: (p: AiPersona) => void;
+  /** Si el usuario ya eligió persona explícitamente. False = primer contacto, hay que mostrar picker. */
+  aiPersonaChosen: boolean;
 
   /* nav */
   tab: string;
@@ -197,6 +199,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [tab, setTab] = React.useState<string>("dashboard");
   const [theme, setThemeState] = React.useState<ThemeMode>("dark");
   const [aiPersona, setAiPersonaState] = React.useState<AiPersona>("mark");
+  const [aiPersonaChosen, setAiPersonaChosen] = React.useState<boolean>(false);
   const [datePreset, setDatePreset] = React.useState<DatePreset>("this_month");
   const [dateRange, setDateRangeState] = React.useState<DateRange>(() => rangeFromPreset("this_month"));
 
@@ -225,6 +228,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       }
       const p = localStorage.getItem("bw_ai_persona");
       if (p === "mark" || p === "lua") setAiPersonaState(p);
+      const pc = localStorage.getItem("bw_ai_persona_chosen");
+      if (pc === "1") setAiPersonaChosen(true);
     } catch {
       /* ignore */
     }
@@ -232,8 +237,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   const setAiPersona = React.useCallback((p: AiPersona) => {
     setAiPersonaState(p);
+    setAiPersonaChosen(true);
     try {
       localStorage.setItem("bw_ai_persona", p);
+      localStorage.setItem("bw_ai_persona_chosen", "1");
     } catch {
       /* ignore */
     }
@@ -524,6 +531,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     hasDailyBreakdown,
     aiPersona,
     setAiPersona,
+    aiPersonaChosen,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

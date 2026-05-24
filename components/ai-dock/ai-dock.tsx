@@ -30,7 +30,7 @@ import { Message, TypingIndicator, type Msg } from "./messages";
 import { DockButton } from "./dock-button";
 import { labelFor, promptsFor } from "./contextual-prompts";
 import { MemoryPill } from "./memory-pill";
-import { IntroCard, useIntroSeen } from "./intro-card";
+import { PersonaPicker } from "./persona-picker";
 import {
   appendMemoryClient,
   DEFAULT_RULES,
@@ -88,8 +88,7 @@ function persist(messages: Msg[]) {
 }
 
 export function AiDock() {
-  const { tab, campaigns, daysElapsed, user, aiPersona, setTab } = useDashboard();
-  const { seen: introSeen, markSeen: markIntroSeen } = useIntroSeen();
+  const { tab, campaigns, daysElapsed, user, aiPersona, aiPersonaChosen, setTab } = useDashboard();
 
   const [open, setOpen] = React.useState(false);
   const [minimized, setMinimized] = React.useState(false);
@@ -323,7 +322,6 @@ export function AiDock() {
   function openConfigPersona() {
     setTab("config");
     setOpen(false);
-    markIntroSeen();
     // Pequeño hint visual
     setTimeout(() => {
       const el = document.querySelector("[data-persona-selector]");
@@ -500,12 +498,9 @@ export function AiDock() {
             {/* Cuerpo + footer · oculto si minimized */}
             {!minimized && (
               <>
-                {!introSeen ? (
+                {!aiPersonaChosen ? (
                   <div className="relative flex-1 overflow-hidden">
-                    <IntroCard
-                      onDismiss={markIntroSeen}
-                      onOpenConfig={openConfigPersona}
-                    />
+                    <PersonaPicker userName={user?.name} />
                   </div>
                 ) : (
                   <div
@@ -528,8 +523,8 @@ export function AiDock() {
                   </div>
                 )}
 
-                {/* Footer · oculto durante la intro card */}
-                {introSeen && (
+                {/* Footer · oculto durante el persona picker */}
+                {aiPersonaChosen && (
                 <div className="relative shrink-0 border-t border-border/60 bg-background/40 backdrop-blur-sm">
                   {/* Chips contextuales */}
                   {prompts.length > 0 && (

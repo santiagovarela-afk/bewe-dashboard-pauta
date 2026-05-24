@@ -284,6 +284,7 @@ function StoryMock({
   imageUrl?: string;
   username: string;
 }) {
+  const { visible, truncated } = truncateForVerMas(caption, 22);
   return (
     <div className="rounded-2xl border border-border/60 bg-black overflow-hidden shadow-lg max-w-[240px] mx-auto relative">
       <ImageOrPlaceholder src={imageUrl} aspect="aspect-[9/16]" />
@@ -309,8 +310,9 @@ function StoryMock({
       </div>
       {/* Caption overlay */}
       <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 text-center">
-        <div className="bg-white/90 text-black rounded px-2 py-1 text-[11px] font-semibold leading-snug whitespace-pre-wrap line-clamp-6">
-          {caption.trim() || "Tu texto sobre imagen"}
+        <div className="bg-white/90 text-black rounded px-2 py-1 text-[11px] font-semibold leading-snug whitespace-pre-wrap" title={caption}>
+          {(visible || caption.trim()) || "Tu texto sobre imagen"}
+          {truncated && <span className="text-neutral-500 ml-1">… más</span>}
         </div>
       </div>
       {/* Reply bar */}

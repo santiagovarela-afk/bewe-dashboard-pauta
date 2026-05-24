@@ -484,7 +484,7 @@ export function TabAeo() {
                             </Badge>
                           )}
                         </div>
-                        <div className="text-[12px] font-medium truncate">{r.promptText}</div>
+                        <div className="text-[12px] font-medium line-clamp-2 whitespace-normal" title={r.promptText}>{r.promptText}</div>
                         {r.competitorsMentioned.length > 0 && !open && (
                           <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
                             competidores: {r.competitorsMentioned.join(", ")}

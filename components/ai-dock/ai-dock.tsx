@@ -14,6 +14,8 @@ import {
   Bot,
   ChevronDown,
   Loader2,
+  Maximize2,
+  Minimize2,
   Send,
   Sparkles,
   Trash2,
@@ -110,7 +112,9 @@ export function AiDock() {
 
   const [open, setOpen] = React.useState(false);
   const [minimized, setMinimized] = React.useState(false);
-  // expanded eliminado · el chat se mantiene siempre 420×640 (sin opción ampliar)
+  // Tamaño del chat · 'compact' (default 460×640) o 'wide' (680×720).
+  // Persisted en localStorage `bw_ai_dock_size` para no resetear cada vez.
+  const [dockSize, setDockSize] = React.useState<"compact" | "wide">("compact");
   const [messages, setMessages] = React.useState<Msg[]>(() => [
     makeGreeting("dashboard", "mark"),
   ]);
@@ -131,6 +135,21 @@ export function AiDock() {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const dragControls = useDragControls();
+
+  // Persistencia del tamaño del chat
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("bw_ai_dock_size");
+      if (saved === "wide" || saved === "compact") setDockSize(saved);
+    } catch { /* ignore */ }
+  }, []);
+  const toggleSize = React.useCallback(() => {
+    setDockSize((prev) => {
+      const next = prev === "compact" ? "wide" : "compact";
+      try { localStorage.setItem("bw_ai_dock_size", next); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
 
   // Hydration: cargar mensajes persistidos del usuario actual.
   // Re-corre cuando cambia user.email (login/logout entre sesiones) para que
@@ -392,6 +411,13 @@ export function AiDock() {
             dragListener={false}
             dragMomentum={false}
             dragElastic={0.04}
+            // Constraints para que el panel nunca se pierda fuera del viewport
+            dragConstraints={{
+              left: -360,
+              right: 60,
+              top: -480,
+              bottom: 60,
+            }}
             initial={{
               opacity: 0,
               scale: 0.18,
@@ -415,14 +441,16 @@ export function AiDock() {
               "fixed z-[60] flex flex-col overflow-hidden",
               // Mobile (default) — ocupa pantalla con margen 1rem
               "top-4 bottom-4 left-4 right-4",
-              // Desktop — anclado al bottom-right con tamaño fijo
-              // (left/top en auto · md:right-6 + md:bottom-6 dictan posición)
+              // Desktop — anclado al bottom-right · tamaño según dockSize
               "md:left-auto md:top-auto md:right-6 md:bottom-6",
               minimized
-                ? "h-12 md:w-[300px] md:h-12"
-                : "md:w-[420px] md:h-[640px]",
+                ? "h-12 md:w-[320px] md:h-12"
+                : dockSize === "wide"
+                  ? "md:w-[680px] md:h-[720px]"
+                  : "md:w-[460px] md:h-[640px]",
               "rounded-2xl border border-border bg-card/95 backdrop-blur-xl",
               "shadow-[0_24px_60px_-20px_hsl(var(--brand-violet)/0.45),0_8px_24px_-12px_hsl(var(--background)/0.8)]",
+              "transition-[width,height] duration-300",
             )}
             style={{
               touchAction: minimized ? "auto" : "none",
@@ -472,21 +500,40 @@ export function AiDock() {
                   <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-[hsl(var(--success))] border-2 border-card" />
                 </div>
                 <div className="min-w-0 flex flex-col">
-                  <span className="text-sm font-semibold leading-tight truncate flex items-center gap-1.5">
+                  <span className="text-sm font-semibold leading-tight truncate">
                     {personaLabel}
-                    <MemoryPill
-                      count={memory.entries.length}
-                      rulesCount={memory.rules.length}
-                    />
                   </span>
-                  <span className="text-[10px] text-muted-foreground font-mono leading-tight truncate">
-                    en {tabLabel} · online
+                  <span className="text-[10px] text-muted-foreground font-mono leading-tight truncate flex items-center gap-1.5">
+                    <span className="truncate">en {tabLabel} · online</span>
+                    {!minimized && (
+                      <MemoryPill
+                        count={memory.entries.length}
+                        rulesCount={memory.rules.length}
+                      />
+                    )}
                   </span>
                 </div>
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
-                {/* Botón ampliar eliminado · el chat se mantiene siempre 420×640 */}
+                {!minimized && (
+                  <button
+                    type="button"
+                    onClick={toggleSize}
+                    className="hidden md:grid place-items-center size-7 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-foreground transition"
+                    title={
+                      dockSize === "wide"
+                        ? "Reducir a tamaño normal"
+                        : "Ampliar el chat (más espacio para mensajes largos)"
+                    }
+                  >
+                    {dockSize === "wide" ? (
+                      <Minimize2 className="size-3.5" />
+                    ) : (
+                      <Maximize2 className="size-3.5" />
+                    )}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setMinimized((v) => !v)}

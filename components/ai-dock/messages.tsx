@@ -129,7 +129,7 @@ export function Message({ msg, showTime = false, onSaveMemory }: MessageProps) {
           <BotAvatar />
         </div>
       )}
-      <div className={cn("flex flex-col max-w-[78%]", isUser ? "items-end" : "items-start")}>
+      <div className={cn("flex flex-col max-w-[88%]", isUser ? "items-end" : "items-start")}>
         <div
           className={cn(
             "rounded-2xl px-3 py-2 text-sm leading-relaxed break-words",

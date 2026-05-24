@@ -91,7 +91,22 @@ const FALLBACK: PrivateConfig = {
 
 // ─── LOADERS ────────────────────────────────────────────────────────────
 
-function parseJSON<T>(raw: string | undefined, fallback: T): T {
+/**
+ * Lee una env var por su nombre canónico. Si no existe, intenta también
+ * con el prefijo `NEXT_PUBLIC_` para evitar duplicar variables en Vercel.
+ * (En el repo público, sólo usamos NEXT_PUBLIC_ para Meta/plan IDs · este
+ * loader server-side los lee igual sin duplicar.)
+ */
+function envVar(name: string): string | undefined {
+  const direct = process.env[name];
+  if (direct && direct.length > 0) return direct;
+  const pub = process.env[`NEXT_PUBLIC_${name}`];
+  if (pub && pub.length > 0) return pub;
+  return undefined;
+}
+
+function parseJSON<T>(name: string, fallback: T): T {
+  const raw = envVar(name);
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;
@@ -100,10 +115,15 @@ function parseJSON<T>(raw: string | undefined, fallback: T): T {
   }
 }
 
-function parseNumber(raw: string | undefined, fallback: number): number {
+function parseNumber(name: string, fallback: number): number {
+  const raw = envVar(name);
   if (!raw) return fallback;
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function envStr(name: string, fallback: string): string {
+  return envVar(name) ?? fallback;
 }
 
 let cache: PrivateConfig | null = null;
@@ -114,31 +134,30 @@ export function getPrivateConfig(): PrivateConfig {
 
   cache = {
     meta: {
-      accountId: process.env.META_ACCOUNT_ID ?? FALLBACK.meta.accountId,
-      accountIdNumeric:
-        process.env.META_ACCOUNT_ID_NUMERIC ?? FALLBACK.meta.accountIdNumeric,
-      pageId: process.env.META_PAGE_ID ?? FALLBACK.meta.pageId,
-      igAccountId: process.env.META_IG_ID ?? FALLBACK.meta.igAccountId,
-      apiVersion: process.env.META_API_VERSION ?? FALLBACK.meta.apiVersion,
+      accountId: envStr("META_ACCOUNT_ID", FALLBACK.meta.accountId),
+      accountIdNumeric: envStr("META_ACCOUNT_ID_NUMERIC", FALLBACK.meta.accountIdNumeric),
+      pageId: envStr("META_PAGE_ID", FALLBACK.meta.pageId),
+      igAccountId: envStr("META_IG_ID", FALLBACK.meta.igAccountId),
+      apiVersion: envStr("META_API_VERSION", FALLBACK.meta.apiVersion),
     },
     plan: {
-      monthLabel: process.env.PLAN_MONTH_LABEL ?? FALLBACK.plan.monthLabel,
-      launchISO: process.env.PLAN_LAUNCH_ISO ?? FALLBACK.plan.launchISO,
-      endISO: process.env.PLAN_END_ISO ?? FALLBACK.plan.endISO,
-      day7ISO: process.env.PLAN_DAY7_ISO ?? FALLBACK.plan.day7ISO,
-      day14ISO: process.env.PLAN_DAY14_ISO ?? FALLBACK.plan.day14ISO,
-      totalDays: parseNumber(process.env.PLAN_TOTAL_DAYS, FALLBACK.plan.totalDays),
-      budget: parseNumber(process.env.PLAN_BUDGET, FALLBACK.plan.budget),
-      contingency: parseNumber(process.env.PLAN_CONTINGENCY, FALLBACK.plan.contingency),
+      monthLabel: envStr("PLAN_MONTH_LABEL", FALLBACK.plan.monthLabel),
+      launchISO: envStr("PLAN_LAUNCH_ISO", FALLBACK.plan.launchISO),
+      endISO: envStr("PLAN_END_ISO", FALLBACK.plan.endISO),
+      day7ISO: envStr("PLAN_DAY7_ISO", FALLBACK.plan.day7ISO),
+      day14ISO: envStr("PLAN_DAY14_ISO", FALLBACK.plan.day14ISO),
+      totalDays: parseNumber("PLAN_TOTAL_DAYS", FALLBACK.plan.totalDays),
+      budget: parseNumber("PLAN_BUDGET", FALLBACK.plan.budget),
+      contingency: parseNumber("PLAN_CONTINGENCY", FALLBACK.plan.contingency),
       cpt: {
-        aggressive: parseNumber(process.env.PLAN_CPT_AGGRESSIVE, FALLBACK.plan.cpt.aggressive),
-        target: parseNumber(process.env.PLAN_CPT_TARGET, FALLBACK.plan.cpt.target),
-        warn: parseNumber(process.env.PLAN_CPT_WARN, FALLBACK.plan.cpt.warn),
-        critical: parseNumber(process.env.PLAN_CPT_CRITICAL, FALLBACK.plan.cpt.critical),
+        aggressive: parseNumber("PLAN_CPT_AGGRESSIVE", FALLBACK.plan.cpt.aggressive),
+        target: parseNumber("PLAN_CPT_TARGET", FALLBACK.plan.cpt.target),
+        warn: parseNumber("PLAN_CPT_WARN", FALLBACK.plan.cpt.warn),
+        critical: parseNumber("PLAN_CPT_CRITICAL", FALLBACK.plan.cpt.critical),
       },
     },
-    campaigns: parseJSON<PrivateCampaign[]>(process.env.CAMPAIGNS_JSON, FALLBACK.campaigns),
-    users: parseJSON<PrivateUser[]>(process.env.AUTH_USERS_JSON, FALLBACK.users),
+    campaigns: parseJSON<PrivateCampaign[]>("CAMPAIGNS_JSON", FALLBACK.campaigns),
+    users: parseJSON<PrivateUser[]>("AUTH_USERS_JSON", FALLBACK.users),
   };
 
   return cache;

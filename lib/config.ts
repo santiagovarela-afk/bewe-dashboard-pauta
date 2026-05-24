@@ -10,26 +10,24 @@
  * Los valores reales se cargan desde `NEXT_PUBLIC_*` env vars en runtime
  * (cliente) y desde `lib/private-config.server.ts` en el server.
  *
- * Si las env vars faltan, los placeholders (cadenas vacías / ceros) hacen
- * que la UI muestre "—" donde corresponda.
+ * IMPORTANTE Next.js: las env vars `NEXT_PUBLIC_*` se inlinean en el bundle
+ * SOLO si se acceden con literal estático (`process.env.NEXT_PUBLIC_X`).
+ * Acceso dinámico tipo `process.env[varName]` da undefined en cliente.
  */
 
-// ─── Helpers ───────────────────────────────────────────────────────────
+// ─── Helpers SOLO para JSON / coerciones ────────────────────────────────
 
-function envStr(k: string, fallback = ""): string {
-  const v = process.env[k];
+function pickStr(v: string | undefined, fallback: string): string {
   return typeof v === "string" && v.length > 0 ? v : fallback;
 }
 
-function envNum(k: string, fallback = 0): number {
-  const v = process.env[k];
+function pickNum(v: string | undefined, fallback: number): number {
   if (!v) return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
 
-function envJSON<T>(k: string, fallback: T): T {
-  const v = process.env[k];
+function pickJSON<T>(v: string | undefined, fallback: T): T {
   if (!v) return fallback;
   try {
     return JSON.parse(v) as T;
@@ -38,29 +36,29 @@ function envJSON<T>(k: string, fallback: T): T {
   }
 }
 
-// ─── PLAN · cargado desde env vars NEXT_PUBLIC_* ────────────────────────
+// ─── PLAN · cargado desde env vars NEXT_PUBLIC_* (acceso literal) ──────
 
 export const PLAN = {
-  monthLabel: envStr("NEXT_PUBLIC_PLAN_MONTH_LABEL", "—"),
-  launchISO: envStr("NEXT_PUBLIC_PLAN_LAUNCH_ISO", "2026-01-01T00:00:00"),
-  endISO: envStr("NEXT_PUBLIC_PLAN_END_ISO", "2026-01-31T23:59:59"),
-  day7ISO: envStr("NEXT_PUBLIC_PLAN_DAY7_ISO", "2026-01-08T00:00:00"),
-  day14ISO: envStr("NEXT_PUBLIC_PLAN_DAY14_ISO", "2026-01-15T00:00:00"),
-  totalDays: envNum("NEXT_PUBLIC_PLAN_TOTAL_DAYS", 30),
-  budget: envNum("NEXT_PUBLIC_PLAN_BUDGET", 0),
-  contingency: envNum("NEXT_PUBLIC_PLAN_CONTINGENCY", 0),
+  monthLabel: pickStr(process.env.NEXT_PUBLIC_PLAN_MONTH_LABEL, "—"),
+  launchISO: pickStr(process.env.NEXT_PUBLIC_PLAN_LAUNCH_ISO, "2026-01-01T00:00:00"),
+  endISO: pickStr(process.env.NEXT_PUBLIC_PLAN_END_ISO, "2026-01-31T23:59:59"),
+  day7ISO: pickStr(process.env.NEXT_PUBLIC_PLAN_DAY7_ISO, "2026-01-08T00:00:00"),
+  day14ISO: pickStr(process.env.NEXT_PUBLIC_PLAN_DAY14_ISO, "2026-01-15T00:00:00"),
+  totalDays: pickNum(process.env.NEXT_PUBLIC_PLAN_TOTAL_DAYS, 30),
+  budget: pickNum(process.env.NEXT_PUBLIC_PLAN_BUDGET, 0),
+  contingency: pickNum(process.env.NEXT_PUBLIC_PLAN_CONTINGENCY, 0),
   cpt: {
-    aggressive: envNum("NEXT_PUBLIC_PLAN_CPT_AGGRESSIVE", 1.5),
-    target: envNum("NEXT_PUBLIC_PLAN_CPT_TARGET", 2.2),
-    warn: envNum("NEXT_PUBLIC_PLAN_CPT_WARN", 3.0),
-    critical: envNum("NEXT_PUBLIC_PLAN_CPT_CRITICAL", 5.5),
+    aggressive: pickNum(process.env.NEXT_PUBLIC_PLAN_CPT_AGGRESSIVE, 1.5),
+    target: pickNum(process.env.NEXT_PUBLIC_PLAN_CPT_TARGET, 2.2),
+    warn: pickNum(process.env.NEXT_PUBLIC_PLAN_CPT_WARN, 3.0),
+    critical: pickNum(process.env.NEXT_PUBLIC_PLAN_CPT_CRITICAL, 5.5),
   },
   meta: {
-    accountId: envStr("NEXT_PUBLIC_META_ACCOUNT_ID", ""),
-    accountIdNumeric: envStr("NEXT_PUBLIC_META_ACCOUNT_ID_NUMERIC", ""),
-    pageId: envStr("NEXT_PUBLIC_META_PAGE_ID", ""),
-    igAccountId: envStr("NEXT_PUBLIC_META_IG_ID", ""),
-    apiVersion: envStr("NEXT_PUBLIC_META_API_VERSION", "v22.0"),
+    accountId: pickStr(process.env.NEXT_PUBLIC_META_ACCOUNT_ID, ""),
+    accountIdNumeric: pickStr(process.env.NEXT_PUBLIC_META_ACCOUNT_ID_NUMERIC, ""),
+    pageId: pickStr(process.env.NEXT_PUBLIC_META_PAGE_ID, ""),
+    igAccountId: pickStr(process.env.NEXT_PUBLIC_META_IG_ID, ""),
+    apiVersion: pickStr(process.env.NEXT_PUBLIC_META_API_VERSION, "v22.0"),
   },
 };
 
@@ -78,8 +76,8 @@ interface CampaignMapEntry {
   replacedBy?: string;
 }
 
-const CAMPAIGNS_ARRAY = envJSON<CampaignMapEntry[]>(
-  "NEXT_PUBLIC_CAMPAIGNS_JSON",
+const CAMPAIGNS_ARRAY = pickJSON<CampaignMapEntry[]>(
+  process.env.NEXT_PUBLIC_CAMPAIGNS_JSON,
   [],
 );
 

@@ -82,12 +82,12 @@ export function Drawer({
             <header className="flex items-start justify-between gap-3 p-5 border-b border-border/60 shrink-0">
               <div className="min-w-0">
                 {title && (
-                  <h3 className="text-[13px] font-semibold leading-tight truncate">
+                  <h3 className="text-[13px] font-semibold leading-tight truncate" title={typeof title === "string" ? title : undefined}>
                     {title}
                   </h3>
                 )}
                 {subtitle && (
-                  <div className="text-[11px] text-muted-foreground mt-1 truncate">
+                  <div className="text-[11px] text-muted-foreground mt-1 truncate" title={typeof subtitle === "string" ? subtitle : undefined}>
                     {subtitle}
                   </div>
                 )}

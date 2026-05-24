@@ -523,7 +523,7 @@ function ActionStack({
                       </span>
                       <div className="text-[11px] font-semibold truncate">{c.name}</div>
                     </div>
-                    <div className="text-[10px] text-muted-foreground line-clamp-2 leading-snug">
+                    <div className="text-[10px] text-muted-foreground line-clamp-4 leading-snug" title={action.detail}>
                       {action.detail}
                     </div>
                   </div>

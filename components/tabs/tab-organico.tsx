@@ -404,7 +404,7 @@ export function TabOrganico() {
                       </div>
                     </div>
                     <div className="p-3 flex-1 min-w-0">
-                      <div className="text-[11px] text-foreground line-clamp-2 mb-2 leading-snug">
+                      <div className="text-[11px] text-foreground line-clamp-3 mb-2 leading-snug" title={p.text}>
                         {p.text ?? "Sin texto"}
                       </div>
                       <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
@@ -512,7 +512,7 @@ function PostCard({
           )}
         </div>
         <div className="p-3">
-          <div className="text-[11px] text-muted-foreground line-clamp-2 mb-2 leading-snug">
+          <div className="text-[11px] text-muted-foreground line-clamp-3 mb-2 leading-snug" title={p.text}>
             {p.text ?? "—"}
           </div>
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">

@@ -468,7 +468,7 @@ function MemoryConfigSection() {
                 <div className="text-[12.5px] font-semibold text-foreground/95 mb-0.5 break-words">
                   {e.topic}
                 </div>
-                <div className="text-[11.5px] text-muted-foreground leading-relaxed line-clamp-3 whitespace-pre-wrap break-words">
+                <div className="text-[11.5px] text-muted-foreground leading-relaxed line-clamp-none whitespace-pre-wrap break-words max-h-[200px] overflow-y-auto">
                   {e.body}
                 </div>
               </li>

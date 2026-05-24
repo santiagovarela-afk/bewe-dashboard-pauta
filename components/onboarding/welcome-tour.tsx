@@ -404,7 +404,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
 
   // Cerrar welcome y, una vez la animación de salida termina, abrir el role tour.
   function launchRoleTour() {
-    pendingReturnStepRef.current = closingStep;
+    pendingReturnStepRef.current = Math.min(step + 1, closingStep);
     onClose();
     window.setTimeout(() => setShowRoleTour(true), 420);
   }
@@ -498,8 +498,8 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className={cn(
                 "relative w-full max-w-2xl rounded-2xl border border-border bg-card/95 backdrop-blur-2xl",
-                "shadow-[0_40px_80px_-30px_hsl(var(--brand-violet)/0.5)] p-7 md:p-10",
-                "max-h-[88vh] overflow-y-auto",
+                "shadow-[0_40px_80px_-30px_hsl(var(--brand-violet)/0.5)] p-5 md:p-8",
+                "max-h-[92vh] overflow-y-auto",
               )}
             >
               {/* Progress dots */}

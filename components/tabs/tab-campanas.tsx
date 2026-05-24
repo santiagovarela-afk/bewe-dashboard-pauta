@@ -438,7 +438,7 @@ function AttentionCard({
             <div className="text-[12px] font-semibold leading-tight truncate">
               {c.vertical} · {c.geo}
             </div>
-            <div className="text-[10px] text-muted-foreground font-mono truncate">{c.name}</div>
+            <div className="text-[10px] text-muted-foreground font-mono truncate" title={c.name}>{c.name}</div>
           </div>
         </div>
         <HealthPill severity={sev} />
@@ -794,7 +794,7 @@ function DetailPanel({
           >
             {campaign.code}
           </span>
-          <span className="font-mono text-[12px] font-medium truncate">{campaign.name}</span>
+          <span className="font-mono text-[12px] font-medium truncate" title={campaign.name}>{campaign.name}</span>
           <HealthPill severity={sev} />
           <Badge variant="outline" className="!text-[9px]">
             {adsets.length} adsets
@@ -997,7 +997,7 @@ function DetailPanel({
                   transition={{ delay: i * 0.04, duration: 0.3 }}
                   className="border-b border-border/30 hover:bg-secondary/60 transition-colors"
                 >
-                  <td className="px-4 py-2 font-mono text-[11px] text-foreground/90 max-w-[260px] truncate">
+                  <td className="px-4 py-2 font-mono text-[11px] text-foreground/90 max-w-[260px] truncate" title={a.name}>
                     <span className="flex items-center gap-1.5">
                       {a.warn && (
                         <AlertOctagon className="size-3 text-[hsl(var(--warning))] shrink-0" />

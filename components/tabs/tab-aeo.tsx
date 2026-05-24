@@ -46,6 +46,10 @@ import { TextureCard } from "@/components/fx/texture-card";
 import { Reveal } from "@/components/fx/reveal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AeoRecommendations } from "@/components/aeo/recommendations";
+import { AeoModelComparison } from "@/components/aeo/model-comparison";
+import { AeoHowTheyFindYou } from "@/components/aeo/how-they-find-you";
+import { AeoKeywordsCloud } from "@/components/aeo/keywords-cloud";
 
 interface ResultsPayload {
   hasData: boolean;
@@ -476,6 +480,22 @@ export function TabAeo() {
           </TextureCard>
         </div>
       )}
+
+      {/* ─────── HOW THEY FIND YOU · hits highlight ─────── */}
+      {results?.hasData && results.latest && (
+        <AeoHowTheyFindYou run={results.latest} />
+      )}
+
+      {/* ─────── RECOMENDACIONES IA ─────── */}
+      <AeoRecommendations hasData={!!results?.hasData} />
+
+      {/* ─────── KEYWORDS CLOUD ─────── */}
+      {results?.hasData && results.latest && (
+        <AeoKeywordsCloud run={results.latest} />
+      )}
+
+      {/* ─────── COMPARATIVA MULTI-MODELO ─────── */}
+      <AeoModelComparison />
 
       {/* ─────── BY CATEGORY ─────── */}
       {stats && stats.byCategory.length > 0 && (

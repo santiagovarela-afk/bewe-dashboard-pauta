@@ -154,41 +154,43 @@ export function PersonaPicker({ userName }: PersonaPickerProps) {
                   onMouseLeave={() => setHovered(null)}
                   onClick={() => pick(c)}
                   className={cn(
-                    "group relative flex flex-col items-center text-center rounded-2xl border bg-card/60 px-3 py-5 transition-all overflow-hidden",
-                    "hover:border-foreground/40 hover:scale-[1.02] hover:shadow-xl",
+                    "group relative flex flex-col items-center text-center rounded-2xl border bg-card px-3 py-5 transition-all",
+                    "hover:scale-[1.02]",
                     "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    hovered === c.id ? "border-foreground/30" : "border-border",
+                    hovered === c.id
+                      ? "border-foreground/30 shadow-[0_0_0_3px_hsl(var(--brand-violet)/0.18),0_16px_40px_-12px_hsl(var(--brand-violet)/0.35)]"
+                      : "border-border",
                   )}
                 >
                   <div
                     className={cn(
-                      "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br pointer-events-none",
-                      c.gradient,
-                    )}
-                    style={{ filter: "blur(40px)", transform: "scale(0.7)" }}
-                  />
-                  <div
-                    className={cn(
-                      "relative size-14 rounded-2xl bg-gradient-to-br grid place-items-center text-white shadow-lg mb-3 transition-transform group-hover:scale-110",
+                      "size-14 rounded-2xl bg-gradient-to-br grid place-items-center text-white shadow-lg mb-3 transition-transform group-hover:scale-110 relative",
                       c.gradient,
                     )}
                   >
                     <c.Icon className="size-6" />
-                    <span className="absolute -bottom-1 -right-1 size-6 rounded-full bg-card border border-border grid place-items-center text-[10px] font-display font-bold">
+                    <span className="absolute -bottom-1 -right-1 size-6 rounded-full bg-card border border-border grid place-items-center text-[10px] font-display font-bold text-foreground">
                       {c.letter}
                     </span>
                   </div>
-                  <div className="relative text-[13px] font-semibold mb-0.5">{c.name}</div>
-                  <div className="relative text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                  <div className="text-[13px] font-semibold mb-0.5 text-foreground">
+                    {c.name}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
                     {c.gender}
                   </div>
-                  <p className="relative text-[11px] text-muted-foreground leading-relaxed mb-2">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed mb-2.5">
                     {c.vibe}
                   </p>
-                  <div className="relative text-[10px] italic text-foreground/70 bg-background/60 border border-border/60 rounded-md px-2 py-1.5 min-h-[44px]">
+                  <div className="text-[10px] italic text-foreground/80 bg-secondary/60 border border-border/60 rounded-md px-2 py-1.5 min-h-[48px] leading-relaxed">
                     “{c.sample}”
                   </div>
-                  <div className="relative mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-[hsl(var(--brand-violet))] opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div
+                    className={cn(
+                      "mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-[hsl(var(--brand-violet))] transition-opacity",
+                      hovered === c.id ? "opacity-100" : "opacity-0",
+                    )}
+                  >
                     Elegir <ChevronRight className="size-3" />
                   </div>
                 </motion.button>

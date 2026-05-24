@@ -396,11 +396,16 @@ export function AiDock() {
             transition={BLOSSOM_TRANSITION}
             className={cn(
               "fixed z-[60] flex flex-col overflow-hidden",
-              "bottom-4 right-4 md:bottom-6 md:right-6",
-              "inset-x-4 md:inset-x-auto",
+              // Mobile (default) — ocupa pantalla con margen 1rem
+              "top-4 bottom-4 left-4 right-4",
+              // Desktop — anclado al bottom-right con tamaño fijo
+              // (left/top en auto · md:right-6 + md:bottom-6 dictan posición)
+              "md:left-auto md:top-auto md:right-6 md:bottom-6",
               minimized
-                ? "md:w-[300px] md:h-12 h-12"
-                : `top-4 md:top-auto ${widthClass} ${heightClass}`,
+                ? "h-12 md:w-[300px] md:h-12"
+                : expanded
+                  ? "md:w-[520px] md:h-[720px]"
+                  : "md:w-[420px] md:h-[640px]",
               "rounded-2xl border border-border bg-card/95 backdrop-blur-xl",
               "shadow-[0_24px_60px_-20px_hsl(var(--brand-violet)/0.45),0_8px_24px_-12px_hsl(var(--background)/0.8)]",
             )}

@@ -1,12 +1,17 @@
 /**
  * POST /api/aeo/run
  *
- * Corre los prompts de `lib/aeo.ts` contra Gemini, los analiza con la
- * heurística local y persiste el resultado en `.data/aeo-results.json`.
+ * Corre los prompts de `lib/aeo.ts` contra **Groq (Llama 3.3 70B)** como
+ * LLM primario · si Groq falla, fallback a Gemini 2.5 Flash. Analiza las
+ * respuestas con heurística local y persiste el resultado en `.data/`.
+ *
+ * Por qué Groq como primario:
+ * - Free tier 30 RPM (vs 20 RPM de Gemini) · alcanza para 30 prompts
+ * - Llama 3.3 70B = calidad similar a Gemini 2.5 Flash
+ * - Latencia <1s · vs ~3-5s de Gemini
  *
  * Body opcional: { ids?: string[] }  → corre solo un subset.
- *
- * Devuelve: { run: AeoRun, stats: AeoStats }
+ * Devuelve: { run: AeoRun, stats: AeoStats, provider: "groq" | "gemini" | "mixed" }
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { promises as fs } from "node:fs";
@@ -20,6 +25,7 @@ import {
   type AeoResult,
 } from "@/lib/aeo";
 import { resolveDataDir, resolveDataPath } from "@/lib/data-paths";
+import { askGroq } from "@/lib/aeo-groq";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,14 +75,15 @@ async function askGemini(key: string, model: string, question: string): Promise<
 }
 
 export async function POST(req: NextRequest) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!groqKey && !geminiKey) {
     return NextResponse.json(
-      { error: "GEMINI_API_KEY no configurado en .env.local" },
+      { error: "Falta GROQ_API_KEY o GEMINI_API_KEY · al menos uno requerido" },
       { status: 500 },
     );
   }
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   let ids: string[] | undefined;
   try {
@@ -96,13 +103,50 @@ export async function POST(req: NextRequest) {
 
   const t0 = Date.now();
   const results: AeoResult[] = [];
-  // Secuencial para no saturar la cuota gratuita
+  let groqWins = 0;
+  let geminiWins = 0;
+  let consecutiveGroqQuotas = 0;
+
+  // Secuencial · Groq primario · si quota, espera o fallback a Gemini
   for (const p of prompts) {
-    try {
-      const text = await askGemini(key, model, p.text);
+    let text: string | null = null;
+    let provider: "groq" | "gemini" | null = null;
+    let errorMsg = "";
+
+    // 1. Intentar Groq (Llama 3.3 70B · 30 RPM free)
+    if (groqKey && consecutiveGroqQuotas < 3) {
+      const groqRes = await askGroq(p.text, {
+        system: AEO_SYSTEM_PROMPT,
+        maxTokens: 600,
+        temperature: 0.5,
+      });
+      if (groqRes.ok && groqRes.text) {
+        text = groqRes.text;
+        provider = "groq";
+        groqWins++;
+        consecutiveGroqQuotas = 0;
+      } else if (groqRes.quotaExhausted) {
+        consecutiveGroqQuotas++;
+        errorMsg = groqRes.error || "Groq quota";
+      } else {
+        errorMsg = groqRes.error || "Groq error";
+      }
+    }
+
+    // 2. Fallback a Gemini si Groq falló
+    if (!text && geminiKey) {
+      try {
+        text = await askGemini(geminiKey, geminiModel, p.text);
+        provider = "gemini";
+        geminiWins++;
+      } catch (err) {
+        errorMsg = err instanceof Error ? err.message : "Gemini error";
+      }
+    }
+
+    if (text && provider) {
       results.push(analyzeResponse(p, text));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "error desconocido";
+    } else {
       results.push({
         promptId: p.id,
         promptText: p.text,
@@ -113,12 +157,21 @@ export async function POST(req: NextRequest) {
         competitorsMentioned: [],
         industriesDetected: [],
         errored: true,
-        errorMessage: msg,
+        errorMessage: errorMsg || "ambos providers fallaron",
       });
     }
-    // Pequeño throttle para no quemar la cuota gratuita (60 RPM aprox.)
-    await new Promise((r) => setTimeout(r, 250));
+    // Throttle suave · Groq aguanta más pero no abusemos
+    await new Promise((r) => setTimeout(r, 150));
   }
+
+  const provider: "groq" | "gemini" | "mixed" | "failed" =
+    groqWins > 0 && geminiWins > 0
+      ? "mixed"
+      : groqWins > 0
+        ? "groq"
+        : geminiWins > 0
+          ? "gemini"
+          : "failed";
 
   const run: AeoRun = {
     runAt: new Date().toISOString(),
@@ -138,5 +191,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ run, stats: computeStats(run) });
+  return NextResponse.json({
+    run,
+    stats: computeStats(run),
+    provider,
+    providerBreakdown: { groq: groqWins, gemini: geminiWins },
+  });
 }

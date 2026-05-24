@@ -248,7 +248,10 @@ export function TabAeo() {
                 AEO · Answer Engine Optimization
               </div>
               <Badge variant="violet" className="font-mono">
-                vía Gemini · gratuito
+                vía Groq · Llama 3.3 70B
+              </Badge>
+              <Badge variant="outline" className="font-mono text-[9px]">
+                gratuito · 30 RPM
               </Badge>
               {promptsSource && (
                 <Badge variant="outline" className="font-mono text-[9px]">
@@ -263,7 +266,9 @@ export function TabAeo() {
                   <span className="text-aurora">LLM?</span>
                 </h1>
                 <p className="text-sm text-muted-foreground max-w-[640px] leading-relaxed">
-                  AEO mide la visibilidad de Bewe en ChatGPT, Claude y Gemini.
+                  AEO mide la visibilidad de Bewe en LLMs · este análisis corre con{" "}
+                  <strong className="text-foreground/85">Groq</strong> (Llama 3.3 70B ·
+                  free tier 30 req/min) con fallback automático a Gemini si Groq satura.
                   Corremos {promptsTotal || 30} prompts categorizados (belleza, comercio,
                   servicios, marca, adyacentes), detectamos menciones, posición en listas,
                   competidores mencionados e industrias que el LLM ya asocia al rubro.
@@ -292,7 +297,7 @@ export function TabAeo() {
                   }
                   sub={
                     running
-                      ? "Evaluando con Gemini…"
+                      ? "Evaluando con Groq…"
                       : lastRun
                         ? `último: ${lastRun}`
                         : seeding
@@ -406,7 +411,7 @@ export function TabAeo() {
                 respuestas de Gemini.
               </p>
               <p className="text-[11px] text-muted-foreground/80 mt-2">
-                Coste · ~0€ (cuota gratuita de Gemini). Duración · 1–2 min por run · auto-run al entrar.
+                Coste · ~0€ (Groq Llama 3.3 70B free tier · 30 req/min sin tarjeta). Duración · ~1 min por run · auto-run al entrar.
               </p>
             </div>
           </div>

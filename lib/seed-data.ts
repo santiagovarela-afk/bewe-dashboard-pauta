@@ -3,6 +3,14 @@
  * Se usan como semilla cuando aún no se hace fetch live desde el cliente.
  *
  * Fuente: mcp tool ads_get_ad_entities, account act_929824683759001.
+ *
+ * Estado al 22-may:
+ *  - C1, C2, C4 ACTIVE (las 3 CR originales, números reales del MCP).
+ *  - C3 MX_SERVICIOS (IC) PAUSED por anomalía pixel · números congelados.
+ *  - C5, C6 (IC) PAUSED por Plan B Julián · números congelados.
+ *  - C3.NEW MX_SERVICIOS_CR (CR) ACTIVE · creada 22-may · números bajos honestos.
+ *  - C7 RETARGETING (CR mixed) ACTIVE · activada día 14 · spend ~€0 (recién activada).
+ *  - C8 LATAM_TOOLS NO se crea hasta junio.
  */
 import type { Adset, Campaign } from "./types";
 import { CAMPAIGN_MAP } from "./config";
@@ -126,6 +134,42 @@ export const SEED_CAMPAIGNS: Campaign[] = [
     cpt: 0.33,
     flag: null,
   },
+  // C3.NEW MX_SERVICIOS_CR — ACTIVE — recién creada 22-may, números bajos honestos
+  {
+    ...CAMPAIGN_MAP["52551557600000"],
+    status: "ACTIVE",
+    spend: 15.20,
+    impressions: 2840,
+    clicks: 72,
+    ctr: 2.54,
+    cpm: 5.35,
+    reach: 2310,
+    freq: 1.23,
+    evContact: 3,
+    evInitCheckout: 4,
+    evCompleteReg: 1,
+    conversions: 1,
+    cpt: 15.20,
+    flag: flag("52551557600000", 15.20),
+  },
+  // C7 RETARGETING — ACTIVE — recién activada día 14, spend ~€0
+  {
+    ...CAMPAIGN_MAP["52551557700000"],
+    status: "ACTIVE",
+    spend: 0.42,
+    impressions: 180,
+    clicks: 6,
+    ctr: 3.33,
+    cpm: 2.33,
+    reach: 160,
+    freq: 1.13,
+    evContact: 0,
+    evInitCheckout: 0,
+    evCompleteReg: 0,
+    conversions: 0,
+    cpt: null,
+    flag: null,
+  },
 ];
 
 export const SEED_ADSETS: Adset[] = [
@@ -144,6 +188,11 @@ export const SEED_ADSETS: Adset[] = [
   { cid: "52551557199886", name: "A5.2_LATAM_INT_COMERCIO", spend: 108.71,impressions: 18815, clicks: 3659, ctr: 19.45,cpm: 5.78, reach: 14883, freq: 1.26, conversions: 277,cpt: 0.39 },
   { cid: "52551557419286", name: "A6.1_LATAM_LOK_SERVICIOS",spend: 64.20, impressions: 6080,  clicks: 982,  ctr: 16.15,cpm: 10.56,reach: 4380,  freq: 1.39, conversions: 158,cpt: 0.41 },
   { cid: "52551557419286", name: "A6.2_LATAM_INT_SERVICIOS",spend: 97.33, impressions: 9356,  clicks: 2096, ctr: 22.40,cpm: 10.40,reach: 6771,  freq: 1.38, conversions: 329,cpt: 0.30 },
+  // C3.NEW adset (recién creada 22-may)
+  { cid: "52551557600000", name: "A3N.1_MX_INT_SERVICIOS_CR", spend: 15.20, impressions: 2840, clicks: 72, ctr: 2.54, cpm: 5.35, reach: 2310, freq: 1.23, conversions: 1, cpt: 15.20 },
+  // C7 RETARGETING adsets (mixed CR+IC, recién activada)
+  { cid: "52551557700000", name: "A7.1_RT_WEB_VISITORS",   spend: 0.30, impressions: 130, clicks: 4, ctr: 3.08, cpm: 2.31, reach: 115, freq: 1.13, conversions: 0, cpt: null },
+  { cid: "52551557700000", name: "A7.2_RT_IG_ENGAGERS",    spend: 0.12, impressions: 50,  clicks: 2, ctr: 4.00, cpm: 2.40, reach: 45,  freq: 1.11, conversions: 0, cpt: null },
 ];
 
 export const SEED_SNAPSHOT_LABEL = "Snapshot · 1–23 mayo 2026";

@@ -291,7 +291,7 @@ function JulianModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm grid place-items-center px-4"
+      className="fixed inset-0 z-[200] bg-background/85 backdrop-blur-md grid place-items-center px-4"
       onClick={onClose}
     >
       <motion.div

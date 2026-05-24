@@ -26,7 +26,11 @@ export const PLAN = {
   },
 };
 
-/** Mapeo lógico C1..C6 → campaign id Meta + evento de objetivo + geo + presupuesto */
+/** Mapeo lógico C1..C7 → campaign id Meta + evento de objetivo + geo + presupuesto.
+ *  Estado al 22-may: las campañas IC (C3, C5, C6) quedaron pausadas; C3 reemplazada por C3.NEW (CR),
+ *  y C7 Retargeting activada según plan. C8 LATAM_TOOLS no se crea hasta junio.
+ *  Los IDs de C3.NEW y C7 son placeholders — se reemplazan con IDs reales cuando el token Meta esté conectado.
+ */
 export const CAMPAIGN_MAP: Record<
   string,
   {
@@ -38,6 +42,7 @@ export const CAMPAIGN_MAP: Record<
     vertical: "Belleza" | "Comercio" | "Servicios";
     daily: number;
     total: number;
+    replacedBy?: string;
   }
 > = {
   "52551556599886": {
@@ -69,6 +74,7 @@ export const CAMPAIGN_MAP: Record<
     vertical: "Servicios",
     daily: 16,
     total: 320,
+    replacedBy: "C3.NEW",
   },
   "52551557046086": {
     code: "C4",
@@ -100,9 +106,33 @@ export const CAMPAIGN_MAP: Record<
     daily: 10,
     total: 200,
   },
+  // C3.NEW · creada 22-may para reemplazar C3 (la IC con anomalía pixel) — ahora optimiza CompleteRegistration.
+  // ID placeholder hasta que el token Meta esté conectado.
+  "52551557600000": {
+    code: "C3.NEW",
+    cid: "52551557600000",
+    name: "MX_SERVICIOS_CR_MAY26",
+    event: "CompleteRegistration",
+    geo: "MX",
+    vertical: "Servicios",
+    daily: 16,
+    total: 144,
+  },
+  // C7 RETARGETING · activada por día 14 (según plan Julián). Mixed CR+IC. €90/día × 6 días.
+  // ID placeholder hasta que el token Meta esté conectado.
+  "52551557700000": {
+    code: "C7",
+    cid: "52551557700000",
+    name: "RETARGETING_MAY26",
+    event: "CompleteRegistration",
+    geo: "CR+PA+CL+CO+MX",
+    vertical: "Belleza",
+    daily: 90,
+    total: 540,
+  },
 };
 
-export const CAMPAIGN_CODES = ["C1", "C2", "C3", "C4", "C5", "C6"] as const;
+export const CAMPAIGN_CODES = ["C1", "C2", "C3", "C3.NEW", "C4", "C5", "C6", "C7"] as const;
 export type CampaignCode = (typeof CAMPAIGN_CODES)[number];
 
 export function getByCode(code: CampaignCode) {

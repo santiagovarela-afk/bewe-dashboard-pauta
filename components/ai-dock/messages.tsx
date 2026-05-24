@@ -1,14 +1,35 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { Bot, BookmarkPlus, User } from "lucide-react";
+import { Bot, BookmarkPlus, Sparkles, User } from "lucide-react";
 import { cn, escapeHtml } from "@/lib/utils";
+import { useDashboard } from "@/lib/store";
 
 export interface Msg {
   id: string;
   role: "user" | "bot";
   text: string;
   ts: number;
+}
+
+/** Avatar del bot — cambia entre Mark (violet→cyan + Bot) y Lúa (ember→violet + Sparkles). */
+function BotAvatar({ size = "size-7" }: { size?: string }) {
+  const { aiPersona } = useDashboard();
+  const isMark = aiPersona === "mark";
+  return (
+    <div
+      className={cn(
+        "shrink-0 rounded-full grid place-items-center text-white",
+        size,
+        isMark
+          ? "bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] shadow-[0_4px_12px_-4px_hsl(var(--brand-violet)/0.6)]"
+          : "bg-gradient-to-br from-[hsl(var(--brand-ember))] to-[hsl(var(--brand-violet))] shadow-[0_4px_12px_-4px_hsl(var(--brand-ember)/0.6)]",
+      )}
+      aria-label={isMark ? "Mark OS" : "Lúa OS"}
+    >
+      {isMark ? <Bot className="size-3.5" /> : <Sparkles className="size-3.5" />}
+    </div>
+  );
 }
 
 /**
@@ -99,16 +120,15 @@ export function Message({ msg, showTime = false, onSaveMemory }: MessageProps) {
         isUser ? "justify-end flex-row-reverse" : "justify-start",
       )}
     >
-      <div
-        className={cn(
-          "shrink-0 size-7 rounded-full grid place-items-center mt-0.5",
-          isUser
-            ? "bg-muted border border-border text-muted-foreground"
-            : "bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] text-white shadow-[0_4px_12px_-4px_hsl(var(--brand-violet)/0.6)]",
-        )}
-      >
-        {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
-      </div>
+      {isUser ? (
+        <div className="shrink-0 size-7 rounded-full grid place-items-center mt-0.5 bg-muted border border-border text-muted-foreground">
+          <User className="size-3.5" />
+        </div>
+      ) : (
+        <div className="mt-0.5">
+          <BotAvatar />
+        </div>
+      )}
       <div className={cn("flex flex-col max-w-[78%]", isUser ? "items-end" : "items-start")}>
         <div
           className={cn(
@@ -155,9 +175,7 @@ export function TypingIndicator() {
       exit={{ opacity: 0 }}
       className="flex gap-2 items-start"
     >
-      <div className="shrink-0 size-7 rounded-full grid place-items-center bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] text-white">
-        <Bot className="size-3.5" />
-      </div>
+      <BotAvatar />
       <div className="rounded-2xl rounded-tl-sm px-3 py-2.5 bg-card border border-border flex items-center gap-1">
         <span className="size-1.5 rounded-full bg-[hsl(var(--brand-violet))] animate-bounce [animation-delay:-0.3s]" />
         <span className="size-1.5 rounded-full bg-[hsl(var(--brand-violet))] animate-bounce [animation-delay:-0.15s]" />

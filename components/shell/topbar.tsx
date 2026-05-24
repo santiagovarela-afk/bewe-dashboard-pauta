@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConnectorPill } from "./connector-pill";
 import { DateRangePicker } from "@/components/shared/date-range-picker";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { RestartTourButton } from "@/components/shared/restart-tour-button";
 import { cn } from "@/lib/utils";
 
 export function TopBar() {
@@ -35,6 +36,7 @@ export function TopBar() {
           <ConnectorPill />
           <DateRangePicker />
           <ThemeToggle />
+          <RestartTourButton />
 
           <div
             className={cn(

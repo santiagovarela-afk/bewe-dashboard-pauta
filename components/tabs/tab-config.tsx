@@ -27,6 +27,7 @@ import { SectionHeader } from "@/components/shared/section-header";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Button } from "@/components/ui/button";
 import { MetaTokenSetup } from "@/components/config/meta-token-setup";
+import { PersonaSelector } from "@/components/config/persona-selector";
 import { triggerWelcomeAgain } from "@/components/onboarding/welcome-tour";
 import { cn } from "@/lib/utils";
 
@@ -48,45 +49,84 @@ export function TabConfig() {
     refreshHealth();
   }, [refreshHealth]);
 
+  const isAdmin = user?.role === "admin";
+
   return (
     <div className="space-y-6 max-w-[1100px]">
       <SectionHeader title="Configuración" sub="Tokens, integraciones y datos de cuenta" />
 
+      {/* Persona selector — top of config */}
+      <div data-persona-selector>
+        <PersonaSelector />
+      </div>
+
       <div className="grid md:grid-cols-2 gap-4">
-        <TextureCard className="p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <KeyRound className="size-4 text-[hsl(var(--brand-violet))]" />
-            <h3 className="font-display font-semibold tracking-tight">Meta Graph API</h3>
-          </div>
-          <p className="text-[12px] text-muted-foreground mb-4 leading-relaxed">
-            El token se configura como variable de entorno{" "}
-            <code className="font-mono text-[hsl(var(--brand-lime))]">META_TOKEN</code> en{" "}
-            <code className="font-mono">.env.local</code>. Nunca se envía al cliente.
-          </p>
-
-          <StatusRow ok={health?.metaToken} label="Token configurado" />
-          <StatusRow ok={true} label="Account ID" value={PLAN.meta.accountId} mono />
-          <StatusRow ok={true} label="API version" value={PLAN.meta.apiVersion} mono />
-
-          <MetaTokenSetup initialConfigured={health?.metaToken} onConfigured={refreshHealth} />
-
-          <div className="mt-4 rounded-lg border border-border bg-background/40 p-3 text-[11px] leading-relaxed text-muted-foreground">
-            <div className="font-bold mb-1 text-foreground/90">Alternativa por terminal:</div>
-            <code className="font-mono text-[hsl(var(--brand-lime))]">npm run setup:meta</code>
-            <div className="text-[10px] opacity-70 mt-1">
-              CLI interactivo que te guía paso a paso y valida el token contra Graph API antes de guardar.
+        {isAdmin ? (
+          <TextureCard className="p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <KeyRound className="size-4 text-[hsl(var(--brand-violet))]" />
+              <h3 className="font-display font-semibold tracking-tight">Meta Graph API</h3>
+              <span className="ml-auto text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[hsl(var(--brand-violet)/0.15)] text-[hsl(var(--brand-violet))] border border-[hsl(var(--brand-violet)/0.4)]">
+                Admin
+              </span>
             </div>
-          </div>
-        </TextureCard>
+            <p className="text-[12px] text-muted-foreground mb-4 leading-relaxed">
+              El token se configura como variable de entorno{" "}
+              <code className="font-mono text-[hsl(var(--brand-lime))]">META_TOKEN</code> en{" "}
+              <code className="font-mono">.env.local</code>. Nunca se envía al cliente.
+            </p>
+
+            <StatusRow ok={health?.metaToken} label="Token configurado" />
+            <StatusRow ok={true} label="Account ID" value={PLAN.meta.accountId} mono />
+            <StatusRow ok={true} label="API version" value={PLAN.meta.apiVersion} mono />
+
+            <MetaTokenSetup initialConfigured={health?.metaToken} onConfigured={refreshHealth} />
+
+            <div className="mt-4 rounded-lg border border-border bg-background/40 p-3 text-[11px] leading-relaxed text-muted-foreground">
+              <div className="font-bold mb-1 text-foreground/90">Alternativa por terminal:</div>
+              <code className="font-mono text-[hsl(var(--brand-lime))]">npm run setup:meta</code>
+              <div className="text-[10px] opacity-70 mt-1">
+                CLI interactivo que te guía paso a paso y valida el token contra Graph API antes de guardar.
+              </div>
+            </div>
+          </TextureCard>
+        ) : (
+          <TextureCard className="p-6 border-dashed">
+            <div className="flex items-center gap-2 mb-1">
+              <KeyRound className="size-4 text-muted-foreground" />
+              <h3 className="font-display font-semibold tracking-tight text-muted-foreground">
+                Meta Graph API
+              </h3>
+              <span className="ml-auto text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground border border-border">
+                Restringido
+              </span>
+            </div>
+            <p className="text-[12px] text-muted-foreground leading-relaxed">
+              Esta cuenta no tiene permisos para configurar tokens. Contacta a{" "}
+              <strong className="text-foreground/85">Santi</strong>,{" "}
+              <strong className="text-foreground/85">Julián</strong> o{" "}
+              <strong className="text-foreground/85">Wendy</strong>.
+            </p>
+            <div className="mt-3 rounded-lg border border-border/60 bg-background/40 p-3 text-[11px] text-muted-foreground">
+              Estado actual del token:{" "}
+              {health?.metaToken ? (
+                <span className="text-[hsl(var(--success))] font-mono">activo</span>
+              ) : (
+                <span className="text-[hsl(var(--destructive))] font-mono">no configurado</span>
+              )}
+            </div>
+          </TextureCard>
+        )}
 
         <TextureCard className="p-6">
           <div className="flex items-center gap-2 mb-1">
             <Bot className="size-4 text-[hsl(var(--brand-cyan))]" />
-            <h3 className="font-display font-semibold tracking-tight">Gemini Flash</h3>
+            <h3 className="font-display font-semibold tracking-tight">Cerebro IA · Gemini</h3>
           </div>
           <p className="text-[12px] text-muted-foreground mb-4 leading-relaxed">
-            Variable <code className="font-mono text-[hsl(var(--brand-lime))]">GEMINI_API_KEY</code>{" "}
-            en <code className="font-mono">.env.local</code>. Gratis en{" "}
+            Mark OS y Lúa OS corren sobre Gemini. Variable{" "}
+            <code className="font-mono text-[hsl(var(--brand-lime))]">GEMINI_API_KEY</code> en{" "}
+            <code className="font-mono">.env.local</code>. Gratis en{" "}
             <a
               href="https://aistudio.google.com/app/apikey"
               target="_blank"

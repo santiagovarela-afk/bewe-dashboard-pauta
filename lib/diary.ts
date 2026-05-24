@@ -215,6 +215,222 @@ export function buildJulianMessage(
   return lines.join("\n");
 }
 
+/** Email ejecutivo · 1 página, dirigido al equipo. Plain-text con marcadores ligeros. */
+export function buildEmailReport(
+  campaigns: Campaign[],
+  daysElapsed: number,
+  totalDays: number,
+): string {
+  const m = computeMetrics(campaigns);
+  const yest = syntheticYesterday(campaigns, daysElapsed);
+  const dSpend = delta(m.spend, yest.spend);
+  const dCR = delta(m.totalConvCR, yest.cr);
+
+  const crit = campaigns.filter((c) => c.flag === "critical");
+  const warn = campaigns.filter((c) => c.flag === "warn" || c.flag === "anomaly");
+  const ok = campaigns.filter((c) => c.flag === null);
+
+  const cptStr = m.cptReg
+    ? m.cptReg <= 2.2
+      ? "en objetivo"
+      : m.cptReg <= 3
+        ? "por encima del target"
+        : "crítico"
+    : "sin lecturas suficientes";
+
+  const today = new Date().toLocaleDateString("es", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const subject = `Pauta May26 · D${daysElapsed}/${totalDays} · resumen ejecutivo`;
+
+  const lines: string[] = [];
+  lines.push(`Asunto: ${subject}`);
+  lines.push("");
+  lines.push(`Equipo,`);
+  lines.push("");
+  lines.push(
+    `Resumen de pauta a día ${daysElapsed} de ${totalDays} (${today}). ` +
+      `Llevamos gastado €${m.spend.toFixed(0)} de los €3.000 (${Math.round(m.budgetPct)}%), ` +
+      `con ${m.totalConvCR} registros completados y ${m.totalConvIC} inicios de pago. ` +
+      `El CPT de registro está ${cptStr} (€${m.cptReg?.toFixed(2) ?? "—"}).`,
+  );
+  lines.push("");
+  lines.push(
+    `Destacados: ${ok.length > 0 ? `${ok.map((c) => `${c.code} ${c.vertical}`).join(", ")} dentro de target` : "sin campañas plenamente en objetivo todavía"}. ` +
+      `Crecimiento día vs día: ${dSpend.dir === "up" ? "+" : ""}${dSpend.diff.toFixed(0)}€ gasto, ${dCR.dir === "up" ? "+" : ""}${dCR.diff} registros.`,
+  );
+  lines.push("");
+  if (crit.length > 0 || warn.length > 0) {
+    lines.push(
+      `Pendientes: ` +
+        [
+          crit.length > 0 ? `${crit.length} campañas en estado crítico (${crit.map((c) => c.code).join(", ")})` : null,
+          warn.length > 0 ? `${warn.length} con señales a verificar (${warn.map((c) => c.code).join(", ")})` : null,
+        ]
+          .filter(Boolean)
+          .join("; ") +
+        ".",
+    );
+  } else {
+    lines.push(`Pendientes: sin críticos abiertos · seguimiento normal.`);
+  }
+  lines.push("");
+  lines.push(`Puntos clave:`);
+  if (crit.length > 0) {
+    for (const c of crit) {
+      const act = suggestedAction(c);
+      lines.push(
+        `  · ${c.code} ${c.vertical}: CPT €${c.cpt?.toFixed(2) ?? "—"} · ${act.label}`,
+      );
+    }
+  }
+  if (ok.length > 0) {
+    const ref = ok
+      .filter((c) => c.cpt !== null)
+      .sort((a, b) => (a.cpt ?? 99) - (b.cpt ?? 99))
+      .slice(0, 2);
+    for (const c of ref) {
+      lines.push(
+        `  · ${c.code} ${c.vertical}: CPT €${c.cpt?.toFixed(2)} · ${c.conversions} conv (referencia)`,
+      );
+    }
+  }
+  lines.push(`  · Gasto restante: €${(3000 - m.spend).toFixed(0)} para ${totalDays - daysElapsed} días.`);
+  lines.push("");
+  const nextDecision = daysElapsed < 7 ? "Día 7 · 19 mayo" : daysElapsed < 14 ? "Día 14 · 26 mayo" : "Cierre · 31 mayo";
+  lines.push(
+    `Próxima decisión: ${nextDecision}. Si tienen cambios o input antes de esa fecha, respondan a este hilo.`,
+  );
+  lines.push("");
+  lines.push(`— Bewe Pauta OS`);
+  return lines.join("\n");
+}
+
+/** Reporte largo para Julián · "como si Santi se lo escribiera por Slack pero estructurado". */
+export function buildJulianFullReport(
+  campaigns: Campaign[],
+  daysElapsed: number,
+  totalDays: number,
+): string {
+  const m = computeMetrics(campaigns);
+  const yest = syntheticYesterday(campaigns, daysElapsed);
+  const dSpend = delta(m.spend, yest.spend);
+  const dCR = delta(m.totalConvCR, yest.cr);
+  const dIC = delta(m.totalConvIC, yest.ic);
+
+  const crit = campaigns.filter((c) => c.flag === "critical");
+  const warn = campaigns.filter((c) => c.flag === "warn");
+  const anom = campaigns.filter((c) => c.flag === "anomaly");
+  const ok = campaigns.filter((c) => c.flag === null);
+
+  const today = new Date().toLocaleDateString("es", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  const lines: string[] = [];
+  lines.push(`Julián,`);
+  lines.push("");
+  lines.push(`Te paso el detalle de día ${daysElapsed}/${totalDays} · ${today}.`);
+  lines.push("");
+  lines.push(`▌ Resumen ejecutivo (5 líneas)`);
+  lines.push(`────────────────────────────────`);
+  lines.push(
+    `1. Gasto: €${m.spend.toFixed(0)} / €3.000 (${Math.round(m.budgetPct)}%). Ritmo ${
+      m.budgetPct / (daysElapsed / totalDays) > 1.1
+        ? "adelantado"
+        : m.budgetPct / (daysElapsed / totalDays) < 0.9
+          ? "atrasado"
+          : "alineado"
+    } al pacing teórico.`,
+  );
+  lines.push(`2. Registros: ${m.totalConvCR} (${dCR.dir === "up" ? "+" : ""}${dCR.diff} vs ayer). Inicios pago: ${m.totalConvIC} (${dIC.dir === "up" ? "+" : ""}${dIC.diff}).`);
+  lines.push(`3. CPT registro €${m.cptReg?.toFixed(2) ?? "—"} · target €2.20 · ${m.cptReg && m.cptReg <= 2.2 ? "estamos OK" : m.cptReg && m.cptReg <= 3 ? "por encima pero recuperable" : "fuera de rango"}.`);
+  lines.push(`4. Campañas: ${ok.length} en objetivo · ${warn.length} en aviso · ${anom.length} con anomalía pixel · ${crit.length} críticas.`);
+  lines.push(
+    `5. Decisión hoy: ${crit.length > 0 ? `actuar sobre ${crit.map((c) => c.code).join(", ")}` : "no requiere intervención mayor · seguimos vigilando"}.`,
+  );
+  lines.push("");
+
+  lines.push(`▌ Estado por campaña`);
+  lines.push(`────────────────────────────────`);
+  campaigns.forEach((c) => {
+    const sev =
+      c.flag === "critical"
+        ? "[CRÍTICO]"
+        : c.flag === "anomaly"
+          ? "[ANOMALÍA]"
+          : c.flag === "warn"
+            ? "[AVISO]"
+            : "[OK]";
+    const yc = yest.perCampaign.find((p) => p.code === c.code);
+    const dCRc = yc ? delta(c.evCompleteReg, yc.cr) : null;
+    lines.push(`${c.code} · ${c.vertical} · ${c.geo} ${sev}`);
+    lines.push(
+      `   gasto €${c.spend.toFixed(2)} · CR ${c.evCompleteReg}${dCRc ? ` (${dCRc.dir === "up" ? "+" : ""}${dCRc.diff} vs ayer)` : ""} · IC ${c.evInitCheckout} · CPT €${c.cpt?.toFixed(2) ?? "—"} · CTR ${c.ctr.toFixed(2)}%`,
+    );
+    const act = suggestedAction(c);
+    lines.push(`   → ${act.label}`);
+    lines.push("");
+  });
+
+  lines.push(`▌ Tendencias (día vs día sintético)`);
+  lines.push(`────────────────────────────────`);
+  lines.push(
+    `Gasto: ${dSpend.dir === "up" ? "↑" : dSpend.dir === "down" ? "↓" : "→"} €${Math.abs(dSpend.diff).toFixed(0)} (${dSpend.pct >= 0 ? "+" : ""}${dSpend.pct.toFixed(1)}%)`,
+  );
+  lines.push(
+    `CR: ${dCR.dir === "up" ? "↑" : dCR.dir === "down" ? "↓" : "→"} ${Math.abs(dCR.diff)} (${dCR.pct >= 0 ? "+" : ""}${dCR.pct.toFixed(1)}%)`,
+  );
+  lines.push(
+    `IC: ${dIC.dir === "up" ? "↑" : dIC.dir === "down" ? "↓" : "→"} ${Math.abs(dIC.diff)} (${dIC.pct >= 0 ? "+" : ""}${dIC.pct.toFixed(1)}%)`,
+  );
+  lines.push(`CPM: €${m.cpm.toFixed(2)} · CTR ${m.ctr.toFixed(2)}%`);
+  lines.push("");
+
+  lines.push(`▌ Decisiones recomendadas`);
+  lines.push(`────────────────────────────────`);
+  if (crit.length === 0 && warn.length === 0) {
+    lines.push(`No hay acciones urgentes hoy · mantener configuración actual.`);
+  } else {
+    for (const c of [...crit, ...warn]) {
+      const act = suggestedAction(c);
+      lines.push(`• ${c.code} ${c.vertical}: ${act.label}`);
+    }
+  }
+  for (const c of anom) {
+    lines.push(`• ${c.code} ${c.vertical}: confirmar pixel en Eventos Manager — no pausar todavía`);
+  }
+  lines.push("");
+
+  lines.push(`▌ Pendientes operativos`);
+  lines.push(`────────────────────────────────`);
+  lines.push(`[H] Plan B C2 si CompleteReg sigue plano · switch a InitiateCheckout`);
+  lines.push(`[H] Verificar pixel C3 (anomalía CAPI) · excluir de CPT global mientras tanto`);
+  lines.push(`[M] Watchpoint geo-leakage Colombia C4/C5/C6 · si ≥40% → bid cap`);
+  lines.push(`[M] Confirmar UTMs en CRM · que las nuevas campañas estén loggeando origen`);
+  lines.push(`[L] Día 14 (26 may): evaluar C7 RT si ≥1000 visits + ≥30 trials`);
+  lines.push(`[L] Preparar shell de C8 LATAM_TOOLS para junio`);
+  lines.push("");
+
+  const nextDecision =
+    daysElapsed < 7
+      ? "Día 7 · 19 mayo (revisión intermedia)"
+      : daysElapsed < 14
+        ? "Día 14 · 26 mayo (decisión C7 RT)"
+        : "Día 20 · 31 mayo (cierre + retro)";
+  lines.push(`▌ Próxima decisión: ${nextDecision}`);
+  lines.push("");
+  lines.push(`Cualquier cosa me dices. Si querés que pause algo antes del check-in, avisame por slack.`);
+  lines.push("");
+  lines.push(`— S.`);
+  return lines.join("\n");
+}
+
 /** Versión 3 líneas para Slack. */
 export function buildSlackShort(
   campaigns: Campaign[],

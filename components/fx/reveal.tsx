@@ -2,13 +2,25 @@
 import * as React from "react";
 import { motion, type Variants } from "motion/react";
 
-const fadeUpVariants: Variants = {
-  hidden: { opacity: 0, y: 16, filter: "blur(8px)" },
+/**
+ * Reveal · masked editorial reveal
+ *
+ * Antes: fade + blur + y-translate (genérico).
+ * Ahora: la región se "descubre" como cortina de izquierda a derecha
+ * (clip-path inset desde 100% a 0%) + una sutil sombra ascendente.
+ * Más editorial, más distintivo, sigue siendo respetuoso con motion-reduce.
+ */
+const maskedRevealVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 8,
+    clipPath: "inset(0 100% 0 0)",
+  },
   visible: {
     opacity: 1,
     y: 0,
-    filter: "blur(0px)",
-    transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
+    clipPath: "inset(0 0% 0 0)",
+    transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
   },
 };
 
@@ -32,7 +44,7 @@ export function Reveal({
       whileInView="visible"
       viewport={{ once: true, margin: "0px 0px -10% 0px" }}
       transition={{ delay }}
-      variants={fadeUpVariants}
+      variants={maskedRevealVariants}
     >
       {children}
     </Component>
@@ -42,7 +54,7 @@ export function Reveal({
 export function StaggerGroup({
   children,
   delayChildren = 0,
-  stagger = 0.06,
+  stagger = 0.08,
   className,
 }: {
   children: React.ReactNode;
@@ -74,7 +86,7 @@ export function StaggerItem({
   className?: string;
 }) {
   return (
-    <motion.div className={className} variants={fadeUpVariants}>
+    <motion.div className={className} variants={maskedRevealVariants}>
       {children}
     </motion.div>
   );

@@ -1,39 +1,51 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { Copy, Check, Sparkles, Download, MessageSquareText, Hash } from "lucide-react";
+import { Copy, Check, Sparkles, Download, MessageSquareText, Hash, Mail, FileText } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { PLAN } from "@/lib/config";
-import { fmt, daysUntil } from "@/lib/utils";
+import { fmt, daysUntil, cn } from "@/lib/utils";
 import { computeMetrics } from "@/lib/selectors";
-import { buildSlackShort } from "@/lib/diary";
+import { buildSlackShort, buildEmailReport, buildJulianFullReport } from "@/lib/diary";
 import { SectionHeader } from "@/components/shared/section-header";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
+type Format = "exec" | "slack" | "email" | "julian";
+
+const FORMAT_META: Record<Format, { label: string; sub: string; Icon: typeof Hash; tone: string }> = {
+  exec: { label: "Informe completo", sub: "Operativo detallado · interno", Icon: FileText, tone: "violet" },
+  slack: { label: "Slack · 3 líneas", sub: "Pegar en #bewe-pauta o WhatsApp", Icon: Hash, tone: "cyan" },
+  email: { label: "Email ejecutivo", sub: "1 página · al equipo", Icon: Mail, tone: "lime" },
+  julian: { label: "Julián · completo", sub: "Reporte largo · estructurado", Icon: MessageSquareText, tone: "ember" },
+};
+
 export function TabInforme() {
   const { campaigns, daysElapsed, snapshot } = useDashboard();
   const m = computeMetrics(campaigns);
   const dToD7 = daysUntil(PLAN.day7ISO);
 
-  const [generated, setGenerated] = React.useState<string>("");
+  const [format, setFormat] = React.useState<Format>("exec");
+  const [execText, setExecText] = React.useState<string>("");
   const [copied, setCopied] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
-  const [slackCopied, setSlackCopied] = React.useState(false);
 
   const slackText = React.useMemo(
     () => buildSlackShort(campaigns, daysElapsed, PLAN.totalDays),
     [campaigns, daysElapsed],
   );
+  const emailText = React.useMemo(
+    () => buildEmailReport(campaigns, daysElapsed, PLAN.totalDays),
+    [campaigns, daysElapsed],
+  );
+  const julianText = React.useMemo(
+    () => buildJulianFullReport(campaigns, daysElapsed, PLAN.totalDays),
+    [campaigns, daysElapsed],
+  );
 
-  React.useEffect(() => {
-    generate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaigns, daysElapsed]);
-
-  function generate() {
+  const generate = React.useCallback(() => {
     setGenerating(true);
     let r = "";
     r += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -92,39 +104,49 @@ export function TabInforme() {
 
     r += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     r += `Generado por Bewe Pauta OS · ${new Date().toLocaleString("es")}\n`;
-    setGenerated(r);
+    setExecText(r);
     setTimeout(() => setGenerating(false), 400);
-  }
+  }, [campaigns, daysElapsed, m, snapshot, dToD7]);
+
+  React.useEffect(() => {
+    generate();
+  }, [generate]);
+
+  const currentText = React.useMemo(() => {
+    switch (format) {
+      case "slack":
+        return slackText;
+      case "email":
+        return emailText;
+      case "julian":
+        return julianText;
+      default:
+        return execText;
+    }
+  }, [format, slackText, emailText, julianText, execText]);
 
   function copy() {
-    navigator.clipboard.writeText(generated);
+    navigator.clipboard.writeText(currentText);
     setCopied(true);
-    toast.success("Informe copiado al portapapeles");
+    toast.success(`${FORMAT_META[format].label} copiado al portapapeles`);
     setTimeout(() => setCopied(false), 2200);
   }
 
   function download() {
-    const blob = new Blob([generated], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([currentText], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `bewe-informe-pauta-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `bewe-${format}-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-  }
-
-  function copySlack() {
-    navigator.clipboard.writeText(slackText);
-    setSlackCopied(true);
-    toast.success("Mensaje Slack copiado · 3 líneas listas para pegar");
-    setTimeout(() => setSlackCopied(false), 2200);
   }
 
   return (
     <div className="max-w-[920px] mx-auto space-y-5">
       <SectionHeader
         title="Informe de estado · mayo 2026"
-        sub="Resumen ejecutivo + estado por campaña + pendientes"
+        sub="Cuatro formatos · operativo, Slack, email ejecutivo, reporte para Julián"
         right={
           <>
             <Button onClick={generate} size="sm" variant="glow">
@@ -143,46 +165,70 @@ export function TabInforme() {
         }
       />
 
-      {/* Mensaje corto para Slack (3 líneas) */}
+      {/* Selector de formato */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {(Object.keys(FORMAT_META) as Format[]).map((f) => {
+          const meta = FORMAT_META[f];
+          const active = format === f;
+          return (
+            <button
+              key={f}
+              onClick={() => setFormat(f)}
+              className={cn(
+                "group relative text-left px-3 py-2.5 rounded-xl border transition-all",
+                active
+                  ? "border-[hsl(var(--brand-violet)/0.55)] bg-[hsl(var(--brand-violet)/0.08)]"
+                  : "border-border bg-card/30 hover:border-foreground/30 hover:bg-card/50",
+              )}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <meta.Icon
+                  className="size-3.5"
+                  style={{ color: `hsl(var(--brand-${meta.tone}))` }}
+                />
+                <div className="text-[11px] font-bold leading-none">{meta.label}</div>
+                {active && (
+                  <Badge variant="violet" className="ml-auto text-[9px] px-1.5 py-0">
+                    activo
+                  </Badge>
+                )}
+              </div>
+              <div className="text-[10px] text-muted-foreground leading-snug">{meta.sub}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Output */}
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        key={format + currentText.length}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45 }}
+        transition={{ duration: 0.35 }}
       >
         <TextureCard className="p-0 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-background/40">
             <div className="flex items-center gap-2">
-              <Hash className="size-4 text-[hsl(var(--brand-cyan))]" />
-              <h3 className="text-[12px] font-bold">Mensaje corto para Slack</h3>
-              <Badge variant="cyan">3 líneas</Badge>
+              {(() => {
+                const Icon = FORMAT_META[format].Icon;
+                return (
+                  <Icon
+                    className="size-4"
+                    style={{ color: `hsl(var(--brand-${FORMAT_META[format].tone}))` }}
+                  />
+                );
+              })()}
+              <h3 className="text-[12px] font-bold">{FORMAT_META[format].label}</h3>
+              <Badge variant="outline" className="font-mono text-[9px]">
+                {currentText.split("\n").length} líneas · {currentText.length} chars
+              </Badge>
             </div>
-            <Button onClick={copySlack} size="sm" variant="outline">
-              {slackCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-              {slackCopied ? "Copiado" : "Copiar Slack"}
-            </Button>
           </div>
-          <div className="p-4">
-            <pre className="font-mono text-[12px] whitespace-pre-wrap leading-relaxed text-foreground/90 bg-background/60 rounded-lg border border-border/60 p-3">
-              {slackText}
+          <div className="p-5 max-h-[640px] overflow-y-auto">
+            <pre className="font-mono text-[12px] whitespace-pre-wrap leading-relaxed text-foreground/90">
+              {currentText}
             </pre>
-            <div className="mt-2 text-[10px] text-muted-foreground/70 flex items-center gap-1.5">
-              <MessageSquareText className="size-3" />
-              Pegar tal cual en #bewe-pauta o WhatsApp · se actualiza con los datos en vivo.
-            </div>
           </div>
-        </TextureCard>
-      </motion.div>
-
-      <motion.div
-        key={generated.length}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <TextureCard className="p-6 max-h-[640px] overflow-y-auto">
-          <pre className="font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-foreground/90">
-            {generated}
-          </pre>
         </TextureCard>
       </motion.div>
     </div>

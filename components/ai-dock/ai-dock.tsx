@@ -11,6 +11,7 @@
 import * as React from "react";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import {
+  Bot,
   ChevronDown,
   Loader2,
   Maximize2,
@@ -29,9 +30,11 @@ import { Message, TypingIndicator, type Msg } from "./messages";
 import { DockButton } from "./dock-button";
 import { labelFor, promptsFor } from "./contextual-prompts";
 import { MemoryPill } from "./memory-pill";
+import { IntroCard, useIntroSeen } from "./intro-card";
 import {
   appendMemoryClient,
   DEFAULT_RULES,
+  personaName,
   readMemoryClient,
 } from "@/lib/ai-memory";
 import type { AiMemoryFile } from "@/lib/types";
@@ -43,12 +46,21 @@ function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-function makeGreeting(tab: string): Msg {
+function makeGreeting(
+  tab: string,
+  persona: "mark" | "lua" = "mark",
+  userName?: string,
+): Msg {
+  const who = userName ?? "ahí";
+  const head =
+    persona === "mark"
+      ? `Buenas ${who} · soy **Mark OS**. Estás en **${labelFor(tab)}** — disparas tú o uso una sugerencia. Sin presión.`
+      : `Hola ${who} · soy **Lúa OS** ✦ estás en **${labelFor(tab)}**. Cuéntame en qué andas o toca una sugerencia abajo.`;
   return {
     id: "greeting",
     role: "bot",
     ts: Date.now(),
-    text: `Hola, soy tu copiloto de pauta. Estás en **${labelFor(tab)}** — pregúntame lo que necesites o usa una sugerencia abajo.`,
+    text: head,
   };
 }
 
@@ -76,12 +88,15 @@ function persist(messages: Msg[]) {
 }
 
 export function AiDock() {
-  const { tab, campaigns, daysElapsed, user } = useDashboard();
+  const { tab, campaigns, daysElapsed, user, aiPersona, setTab } = useDashboard();
+  const { seen: introSeen, markSeen: markIntroSeen } = useIntroSeen();
 
   const [open, setOpen] = React.useState(false);
   const [minimized, setMinimized] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
-  const [messages, setMessages] = React.useState<Msg[]>(() => [makeGreeting("dashboard")]);
+  const [messages, setMessages] = React.useState<Msg[]>(() => [
+    makeGreeting("dashboard", "mark"),
+  ]);
   const [input, setInput] = React.useState("");
   const [thinking, setThinking] = React.useState(false);
   const [unread, setUnread] = React.useState(0);
@@ -106,7 +121,7 @@ export function AiDock() {
     if (persisted && persisted.length > 0) {
       setMessages(persisted);
     } else {
-      setMessages([makeGreeting(tab)]);
+      setMessages([makeGreeting(tab, aiPersona, user?.name)]);
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,7 +225,10 @@ export function AiDock() {
       setThinking(true);
 
       try {
-        const system = buildPlanContext(campaigns, daysElapsed, memory);
+        const system = buildPlanContext(campaigns, daysElapsed, memory, {
+          persona: aiPersona,
+          userName: user?.name,
+        });
         const res = await fetch("/api/gemini", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -246,7 +264,7 @@ export function AiDock() {
         setThinking(false);
       }
     },
-    [input, thinking, campaigns, daysElapsed, open, minimized, memory],
+    [input, thinking, campaigns, daysElapsed, open, minimized, memory, aiPersona, user?.name],
   );
 
   // Abrir modal "Guardar en memoria" pre-rellenado con el contenido del mensaje
@@ -298,17 +316,36 @@ export function AiDock() {
   }
 
   function clearChat() {
-    setMessages([makeGreeting(tab)]);
+    setMessages([makeGreeting(tab, aiPersona, user?.name)]);
     toast.success("Conversación limpiada");
+  }
+
+  function openConfigPersona() {
+    setTab("config");
+    setOpen(false);
+    markIntroSeen();
+    // Pequeño hint visual
+    setTimeout(() => {
+      const el = document.querySelector("[data-persona-selector]");
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 240);
   }
 
   const prompts = promptsFor(tab);
   const tabLabel = labelFor(tab);
   const displayName = user?.name ?? "tú";
+  const isMark = aiPersona === "mark";
+  const personaLabel = personaName(aiPersona);
 
   // Tamaño según expanded
   const widthClass = expanded ? "md:w-[520px]" : "md:w-[420px]";
   const heightClass = expanded ? "md:h-[720px]" : "md:h-[640px]";
+
+  // Easing y duración para la animación blossom (FAB ↔ panel)
+  const BLOSSOM_TRANSITION = {
+    duration: 0.35,
+    ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
+  };
 
   return (
     <>
@@ -330,7 +367,7 @@ export function AiDock() {
         </AnimatePresence>
       </div>
 
-      {/* Panel abierto */}
+      {/* Panel abierto — animación "blossom" desde la esquina del FAB */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -340,10 +377,25 @@ export function AiDock() {
             dragListener={false}
             dragMomentum={false}
             dragElastic={0.04}
-            initial={{ opacity: 0, scale: 0.85, y: 40, x: 0 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 30 }}
-            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            initial={{
+              opacity: 0,
+              scale: 0.18,
+              borderRadius: "50%",
+              filter: "blur(6px)",
+            }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              borderRadius: "1rem",
+              filter: "blur(0px)",
+            }}
+            exit={{
+              opacity: 0,
+              scale: 0.22,
+              borderRadius: "50%",
+              filter: "blur(4px)",
+            }}
+            transition={BLOSSOM_TRANSITION}
             className={cn(
               "fixed z-[60] flex flex-col overflow-hidden",
               "bottom-4 right-4 md:bottom-6 md:right-6",
@@ -354,7 +406,10 @@ export function AiDock() {
               "rounded-2xl border border-border bg-card/95 backdrop-blur-xl",
               "shadow-[0_24px_60px_-20px_hsl(var(--brand-violet)/0.45),0_8px_24px_-12px_hsl(var(--background)/0.8)]",
             )}
-            style={{ touchAction: minimized ? "auto" : "none" }}
+            style={{
+              touchAction: minimized ? "auto" : "none",
+              transformOrigin: "100% 100%",
+            }}
           >
             {/* Border gradient halo */}
             <div
@@ -374,20 +429,33 @@ export function AiDock() {
               }}
               className={cn(
                 "relative flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border/60",
-                "bg-gradient-to-r from-[hsl(var(--brand-violet)/0.18)] via-transparent to-[hsl(var(--brand-cyan)/0.14)]",
+                isMark
+                  ? "bg-gradient-to-r from-[hsl(var(--brand-violet)/0.18)] via-transparent to-[hsl(var(--brand-cyan)/0.14)]"
+                  : "bg-gradient-to-r from-[hsl(var(--brand-ember)/0.18)] via-transparent to-[hsl(var(--brand-violet)/0.14)]",
                 !minimized && "cursor-grab active:cursor-grabbing",
               )}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <div className="relative">
-                  <div className="size-8 rounded-lg bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] grid place-items-center shadow-[0_4px_12px_-4px_hsl(var(--brand-violet)/0.6)]">
-                    <Sparkles className="size-4 text-white" />
+                  <div
+                    className={cn(
+                      "size-8 rounded-lg grid place-items-center shadow-[0_4px_12px_-4px_hsl(var(--brand-violet)/0.6)] bg-gradient-to-br",
+                      isMark
+                        ? "from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))]"
+                        : "from-[hsl(var(--brand-ember))] to-[hsl(var(--brand-violet))]",
+                    )}
+                  >
+                    {isMark ? (
+                      <Bot className="size-4 text-white" />
+                    ) : (
+                      <Sparkles className="size-4 text-white" />
+                    )}
                   </div>
                   <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-[hsl(var(--success))] border-2 border-card" />
                 </div>
                 <div className="min-w-0 flex flex-col">
                   <span className="text-sm font-semibold leading-tight truncate flex items-center gap-1.5">
-                    Copiloto Bewe
+                    {personaLabel}
                     <MemoryPill
                       count={memory.entries.length}
                       rulesCount={memory.rules.length}
@@ -432,26 +500,36 @@ export function AiDock() {
             {/* Cuerpo + footer · oculto si minimized */}
             {!minimized && (
               <>
-                <div
-                  ref={scrollRef}
-                  className="relative flex-1 overflow-y-auto px-3 py-3 space-y-3 scrollbar-thin"
-                  style={{
-                    scrollbarColor: "hsl(var(--border)) transparent",
-                    scrollbarWidth: "thin",
-                  }}
-                >
-                  {messages.map((m, i) => (
-                    <Message
-                      key={m.id}
-                      msg={m}
-                      showTime={i === messages.length - 1 && m.role === "bot"}
-                      onSaveMemory={openSaveModal}
+                {!introSeen ? (
+                  <div className="relative flex-1 overflow-hidden">
+                    <IntroCard
+                      onDismiss={markIntroSeen}
+                      onOpenConfig={openConfigPersona}
                     />
-                  ))}
-                  <AnimatePresence>{thinking && <TypingIndicator key="typing" />}</AnimatePresence>
-                </div>
+                  </div>
+                ) : (
+                  <div
+                    ref={scrollRef}
+                    className="relative flex-1 overflow-y-auto px-3 py-3 space-y-3 scrollbar-thin"
+                    style={{
+                      scrollbarColor: "hsl(var(--border)) transparent",
+                      scrollbarWidth: "thin",
+                    }}
+                  >
+                    {messages.map((m, i) => (
+                      <Message
+                        key={m.id}
+                        msg={m}
+                        showTime={i === messages.length - 1 && m.role === "bot"}
+                        onSaveMemory={openSaveModal}
+                      />
+                    ))}
+                    <AnimatePresence>{thinking && <TypingIndicator key="typing" />}</AnimatePresence>
+                  </div>
+                )}
 
-                {/* Footer */}
+                {/* Footer · oculto durante la intro card */}
+                {introSeen && (
                 <div className="relative shrink-0 border-t border-border/60 bg-background/40 backdrop-blur-sm">
                   {/* Chips contextuales */}
                   {prompts.length > 0 && (
@@ -532,6 +610,7 @@ export function AiDock() {
                     </span>
                   </div>
                 </div>
+                )}
               </>
             )}
           </motion.div>

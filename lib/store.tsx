@@ -15,10 +15,16 @@ import { CPT_THRESHOLDS, daysSince } from "./utils";
 
 export type DatePreset = "last_3d" | "last_7d" | "last_14d" | "this_month";
 
+export type AiPersona = "mark" | "lua";
+
 interface DashboardState {
   /* auth */
   user: SessionUser | null;
   setUser: (u: SessionUser | null) => void;
+
+  /* AI persona · Mark OS o Lúa OS */
+  aiPersona: AiPersona;
+  setAiPersona: (p: AiPersona) => void;
 
   /* nav */
   tab: string;
@@ -190,6 +196,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<SessionUser | null>(null);
   const [tab, setTab] = React.useState<string>("dashboard");
   const [theme, setThemeState] = React.useState<ThemeMode>("dark");
+  const [aiPersona, setAiPersonaState] = React.useState<AiPersona>("mark");
   const [datePreset, setDatePreset] = React.useState<DatePreset>("this_month");
   const [dateRange, setDateRangeState] = React.useState<DateRange>(() => rangeFromPreset("this_month"));
 
@@ -216,6 +223,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(r) as DateRange;
         if (parsed?.from && parsed?.to) setDateRangeState(parsed);
       }
+      const p = localStorage.getItem("bw_ai_persona");
+      if (p === "mark" || p === "lua") setAiPersonaState(p);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setAiPersona = React.useCallback((p: AiPersona) => {
+    setAiPersonaState(p);
+    try {
+      localStorage.setItem("bw_ai_persona", p);
     } catch {
       /* ignore */
     }
@@ -504,6 +522,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     refresh,
     daysElapsed,
     hasDailyBreakdown,
+    aiPersona,
+    setAiPersona,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

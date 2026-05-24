@@ -104,31 +104,11 @@ export async function deleteMemoryEntryClient(id: string) {
   return (await r.json()) as { ok: boolean };
 }
 
-/** Server: lee desde disco (.data/ai-memory.json). */
-export async function readMemoryServer(): Promise<AiMemoryFile> {
-  const fs = await import("node:fs/promises");
-  const path = await import("node:path");
-  const file = path.join(process.cwd(), ".data", "ai-memory.json");
-  try {
-    const txt = await fs.readFile(file, "utf8");
-    const data = JSON.parse(txt) as AiMemoryFile;
-    return {
-      rules: data.rules?.length ? data.rules : DEFAULT_RULES,
-      entries: Array.isArray(data.entries) ? data.entries : [],
-    };
-  } catch {
-    return { ...FALLBACK };
-  }
-}
-
-export async function writeMemoryServer(data: AiMemoryFile) {
-  const fs = await import("node:fs/promises");
-  const path = await import("node:path");
-  const dir = path.join(process.cwd(), ".data");
-  const file = path.join(dir, "ai-memory.json");
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(file, JSON.stringify(data, null, 2), "utf8");
-}
+// NOTA: readMemoryServer / writeMemoryServer se movieron a
+// `lib/ai-memory.server.ts` porque sus imports de `node:fs/promises` y
+// `node:path` arrastraban node-only schemes al bundle del cliente
+// (UnhandledSchemeError en webpack). Importalas desde API routes así:
+//   import { readMemoryServer } from "@/lib/ai-memory.server"
 
 /** Construye el bloque de memoria para meter en el system prompt. */
 export function memoryToPromptBlock(mem: AiMemoryFile, opts: { lastN?: number } = {}): string {

@@ -144,11 +144,10 @@ type Html2CanvasFn = (
 ) => Promise<HTMLCanvasElement>;
 
 async function loadHtml2Canvas(): Promise<Html2CanvasFn | null> {
-  // Estrategia 1: dynamic import (si está en package.json)
+  // Estrategia 1: dynamic import (html2canvas en package.json)
   try {
-    // @ts-expect-error — dep opcional
     const mod = await import("html2canvas");
-    const fn = (mod?.default ?? mod) as Html2CanvasFn | undefined;
+    const fn = (mod?.default ?? mod) as unknown as Html2CanvasFn | undefined;
     if (typeof fn === "function") return fn;
   } catch {
     /* fallthrough a CDN */

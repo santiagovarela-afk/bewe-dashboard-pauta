@@ -3,7 +3,8 @@
  * Persiste en `.data/ai-memory.json`.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { readMemoryServer, writeMemoryServer, DEFAULT_RULES } from "@/lib/ai-memory";
+import { DEFAULT_RULES } from "@/lib/ai-memory";
+import { readMemoryServer, writeMemoryServer } from "@/lib/ai-memory.server";
 import type { AiMemoryEntry } from "@/lib/types";
 
 export const runtime = "nodejs";

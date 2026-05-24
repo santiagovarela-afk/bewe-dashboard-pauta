@@ -415,7 +415,72 @@ function NextDecisionSub({ daysElapsed }: { daysElapsed: number }) {
 function RulesGrid() {
   const { daysElapsed, campaigns } = useDashboard();
   const c2 = campaigns.find((c) => c.code === "C2");
+  const c4 = campaigns.find((c) => c.code === "C4");
+  const c7 = campaigns.find((c) => c.code === "C7");
   const d14 = daysUntil(PLAN.day14ISO);
+
+  // ── Plan B C2 · dinámico ────────────────────────────────────────────
+  // Trigger Julián: si C2 lleva <20 CR al día 7+ → switch a IC.
+  // Estado real:
+  //   · C2 PAUSED  → switch NO ejecutado, regla descartada (IC tampoco convierte · ver C3/C5/C6)
+  //   · C2 ACTIVE + CR<20 + día≥7 → pendiente
+  //   · C2 ACTIVE + CR≥20 → trigger no alcanzado, regla OK
+  const c2CR = c2?.evCompleteReg ?? 0;
+  const c2Paused = c2?.status === "PAUSED";
+  let planBTitle = "Plan B C2 — switch a InitiateCheckout";
+  let planBDesc = "C2 no encontrada en el rango activo.";
+  let planBState: "ok" | "alert" | "watch" = "watch";
+  if (c2) {
+    if (c2Paused) {
+      planBTitle = "Plan B C2 — descartado";
+      planBDesc = `C2 PAUSED · regla NO ejecutada (aprendizaje: IC convierte 8× peor). ${c2CR} CR acumulados antes de pausar.`;
+      planBState = "ok";
+    } else if (daysElapsed >= 7 && c2CR < 20) {
+      planBDesc = `Día ${daysElapsed} · ${c2CR} CR < 20. Trigger alcanzado · revisar con Julián antes del switch.`;
+      planBState = "alert";
+    } else if (c2CR >= 20) {
+      planBTitle = "Plan B C2 — trigger no alcanzado";
+      planBDesc = `${c2CR} CR ≥ 20 · regla OK, mantener objetivo CompleteRegistration.`;
+      planBState = "ok";
+    } else {
+      planBDesc = `Día ${daysElapsed} · ${c2CR} CR · evaluación día 7.`;
+      planBState = "watch";
+    }
+  }
+
+  // ── Día 14 · evaluar C7 Retargeting · condición ≥1.000 visits + ≥30 trials
+  // Sin breakdown de visitas en client. Si tenemos C7 con conversiones reales,
+  // mostramos lo que sabemos; sino dejamos "pendiente data".
+  let c7Title = "Día 14 (26 may) — evaluar C7 Retargeting";
+  let c7Desc = "";
+  let c7State: "ok" | "alert" | "watch" = "watch";
+  if (d14 > 0) {
+    c7Desc = `En ${d14}d. Condición: ≥1.000 visits + ≥30 trials. Pendiente data de visitas (revisar en Ads Manager).`;
+    c7State = "watch";
+  } else if (c7) {
+    const c7Conv = c7.conversions;
+    if (c7Conv >= 30) {
+      c7Title = "Día 14 — C7 cumple condición";
+      c7Desc = `${c7Conv} conv ≥ 30 · contingencia €1.000 activable si ≥2 camps CPT<€3.`;
+      c7State = "ok";
+    } else {
+      c7Desc = `Pasado · C7 lleva ${c7Conv} conv (< 30 trials). Visitas pendientes de revisar en Ads Manager.`;
+      c7State = "alert";
+    }
+  } else {
+    c7Desc = "Pasado · C7 no creada todavía. Visitas pendientes manual en Ads Manager.";
+    c7State = "alert";
+  }
+
+  // ── Watchpoint Colombia · pendiente data (no tenemos breakdown por país) ──
+  const c4Spend = c4?.spend ?? 0;
+  const watchCODesc = c4
+    ? `C4 LATAM_BELLEZA lleva ${fmt.eur(c4Spend, { decimals: 0 })} en el rango. Breakdown CO no disponible en client · revisar manual en Ads Manager.`
+    : "Pendiente · revisar % gasto CO en Ads Manager (no tenemos breakdown por país aquí).";
+
+  // ── ABO · Reasignación libre hasta 20% · regla estática (límite operativo) ──
+  const aboDesc = "Cualquier movimiento >20% del budget requiere aprobación de Julián. Regla activa.";
+
   const rules: Array<{
     icon: React.ReactNode;
     title: string;
@@ -425,37 +490,37 @@ function RulesGrid() {
     {
       icon: <CheckCircle2 className="size-4" />,
       title: "ABO · Reasignación libre hasta 20%",
-      desc: "Cualquier movimiento >20% del budget requiere aprobación de Julián.",
+      desc: aboDesc,
       state: "ok",
     },
     {
-      icon: <AlertOctagon className="size-4" />,
-      title: `Plan B C2 — switch a InitiateCheckout`,
-      desc: `C2 llegó al día ${daysElapsed} con ${c2?.evCompleteReg ?? 0} CR. Umbral <20. Pendiente ejecución del switch.`,
-      state: "alert",
+      icon: planBState === "alert" ? <AlertOctagon className="size-4" /> : <CheckCircle2 className="size-4" />,
+      title: planBTitle,
+      desc: planBDesc,
+      state: planBState,
     },
     {
-      icon: <AlertTriangle className="size-4" />,
-      title: `Día 14 (26 may) — evaluar C7 Retargeting`,
-      desc: `${d14 > 0 ? `En ${d14}d` : "Pasado"}. Condición: ≥1.000 visits + ≥30 trials. Contingencia €1.000 si ≥2 camps CPT<€3.`,
-      state: "watch",
+      icon: c7State === "alert" ? <AlertOctagon className="size-4" /> : <AlertTriangle className="size-4" />,
+      title: c7Title,
+      desc: c7Desc,
+      state: c7State,
     },
     {
       icon: <AlertTriangle className="size-4" />,
       title: "Watchpoint Colombia — geo leakage",
-      desc: "Si CO representa >40% de las conversiones LATAM → activar bid cap €2. Revisar en Ads Manager.",
+      desc: watchCODesc,
       state: "watch",
     },
     {
       icon: <CheckCircle2 className="size-4" />,
       title: "Atribución 7d clic / 1d view",
-      desc: "Configurada correctamente en todas las campañas desde el lanzamiento.",
+      desc: "Configurada correctamente en todas las campañas desde el lanzamiento (setup decision · no se modifica).",
       state: "ok",
     },
     {
       icon: <CheckCircle2 className="size-4" />,
       title: "Dominio verificado bewe.ai · CAPI activo",
-      desc: "Pixel eliminado · CAPI activo desde 15 mayo.",
+      desc: "Pixel eliminado · CAPI puro desde 16 mayo. Setup histórico · datos limpios desde esa fecha.",
       state: "ok",
     },
   ];

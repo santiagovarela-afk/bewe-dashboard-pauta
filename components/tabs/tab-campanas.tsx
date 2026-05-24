@@ -43,7 +43,7 @@ import { AnimatedNumber } from "@/components/fx/animated-number";
 import { ExplainedMetric } from "@/components/shared/explained-metric";
 import { HealthPill, SeverityDot } from "@/components/shared/health-pill";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
-import type { Adset, Campaign } from "@/lib/types";
+import type { Adset, Campaign, DailyRow } from "@/lib/types";
 
 const VERT_COLOR = {
   Belleza: "var(--brand-violet)",
@@ -61,8 +61,61 @@ const SEV_BADGE: Record<Severity, { label: string; tone: "danger" | "warning" | 
 type SortKey = "code" | "spend" | "cpt" | "conv" | "ctr" | "pacing";
 type SortDir = "asc" | "desc";
 
+/** Recorrido histórico ·  últimos 7 días vs 7 días anteriores · para contexto en cards de atención. */
+interface CampaignTrail {
+  spend7d: number;
+  conv7d: number;
+  cpt7d: number | null;
+  cptPrev7d: number | null;
+  cptTrend: "up" | "down" | "flat";
+  freq: number;
+}
+
+function computeTrail(campaignId: string, event: Campaign["event"], daily: DailyRow[], freq: number): CampaignTrail {
+  const today = new Date();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const todayIso = iso(today);
+  const d7Ago = new Date(today);
+  d7Ago.setDate(d7Ago.getDate() - 6);
+  const d7AgoIso = iso(d7Ago);
+  const d14Ago = new Date(today);
+  d14Ago.setDate(d14Ago.getDate() - 13);
+  const d14AgoIso = iso(d14Ago);
+  const d8Ago = new Date(today);
+  d8Ago.setDate(d8Ago.getDate() - 7);
+  const d8AgoIso = iso(d8Ago);
+
+  // Solo rows campaign-level (sin adsetId) y de esta campaña
+  const rows = daily.filter((r) => !r.adsetId && r.campaignId === campaignId);
+  const last7 = rows.filter((r) => r.date >= d7AgoIso && r.date <= todayIso);
+  const prev7 = rows.filter((r) => r.date >= d14AgoIso && r.date <= d8AgoIso);
+
+  const sumSpend = (arr: DailyRow[]) => arr.reduce((s, r) => s + r.spend, 0);
+  const sumConv = (arr: DailyRow[]) =>
+    arr.reduce(
+      (s, r) => s + (event === "CompleteRegistration" ? r.evCompleteReg : r.evInitCheckout),
+      0,
+    );
+
+  const spend7d = sumSpend(last7);
+  const conv7d = sumConv(last7);
+  const spendPrev7 = sumSpend(prev7);
+  const convPrev7 = sumConv(prev7);
+
+  const cpt7d = conv7d > 0 ? spend7d / conv7d : null;
+  const cptPrev7d = convPrev7 > 0 ? spendPrev7 / convPrev7 : null;
+
+  let cptTrend: "up" | "down" | "flat" = "flat";
+  if (cpt7d !== null && cptPrev7d !== null) {
+    const diffPct = ((cpt7d - cptPrev7d) / cptPrev7d) * 100;
+    if (diffPct > 8) cptTrend = "up";
+    else if (diffPct < -8) cptTrend = "down";
+  }
+  return { spend7d, conv7d, cpt7d, cptPrev7d, cptTrend, freq };
+}
+
 export function TabCampanas() {
-  const { campaigns, adsets, daysElapsed } = useDashboard();
+  const { campaigns, adsets, daysElapsed, daily } = useDashboard();
   const [selected, setSelected] = React.useState<string | null>(null);
   const [sortBy, setSortBy] = React.useState<SortKey>("spend");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
@@ -210,6 +263,7 @@ export function TabCampanas() {
                   c={c}
                   onOpen={() => setSelected(c.cid)}
                   daysElapsed={daysElapsed}
+                  daily={daily}
                 />
               </StaggerItem>
             ))}
@@ -400,10 +454,12 @@ function AttentionCard({
   c,
   onOpen,
   daysElapsed,
+  daily,
 }: {
   c: Campaign;
   onOpen: () => void;
   daysElapsed: number;
+  daily: DailyRow[];
 }) {
   const sev = severityOf(c);
   const color =
@@ -417,6 +473,11 @@ function AttentionCard({
   const action = suggestedAction(c);
   const vertColor = VERT_COLOR[c.vertical];
   const pacing = pacingPct(c, daysElapsed);
+  const trail = React.useMemo(
+    () => computeTrail(c.cid, c.event, daily, c.freq),
+    [c.cid, c.event, c.freq, daily],
+  );
+  const hasTrailData = daily.length > 0;
 
   return (
     <SpotlightCard spotlightColor={color} intensity={0.32} className="p-0 overflow-hidden">
@@ -485,6 +546,55 @@ function AttentionCard({
         </div>
       </div>
 
+      {/* Recorrido · contexto histórico antes de decidir */}
+      <div className="px-4 py-3 border-t border-border/40 bg-background/40">
+        <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/80 mb-2 font-bold">
+          Recorrido · últimos 7d
+        </div>
+        {hasTrailData ? (
+          <div className="grid grid-cols-4 gap-2">
+            <TrailMetric
+              label="7d Gasto"
+              value={fmt.eur(trail.spend7d, { decimals: 0 })}
+            />
+            <TrailMetric
+              label={c.event === "CompleteRegistration" ? "7d CR" : "7d IC"}
+              value={fmt.int(trail.conv7d)}
+              tone={trail.conv7d > 0 ? "default" : "muted"}
+            />
+            <TrailMetric
+              label="CPT trend"
+              value={
+                trail.cpt7d !== null
+                  ? `${fmt.eur(trail.cpt7d)} ${trail.cptTrend === "up" ? "↑" : trail.cptTrend === "down" ? "↓" : "→"}`
+                  : "—"
+              }
+              tone={
+                trail.cptTrend === "down"
+                  ? "success"
+                  : trail.cptTrend === "up"
+                    ? "danger"
+                    : "muted"
+              }
+              sub={
+                trail.cptPrev7d !== null
+                  ? `vs €${trail.cptPrev7d.toFixed(2)} prev`
+                  : "sin prev 7d"
+              }
+            />
+            <TrailMetric
+              label="Frecuencia"
+              value={`${trail.freq.toFixed(2)}×`}
+              tone={trail.freq > 1.9 ? "danger" : trail.freq > 1.5 ? "warning" : "default"}
+            />
+          </div>
+        ) : (
+          <div className="text-[10px] text-muted-foreground/70 italic">
+            Sin breakdown diario · pulsá "Actualizar" para cargar histórico.
+          </div>
+        )}
+      </div>
+
       <div className="px-4 py-2.5 flex items-center justify-end gap-2 border-t border-border/40 bg-background/30">
         <Button
           size="sm"
@@ -540,6 +650,41 @@ function SmallStat({
       <div className={cn("font-mono font-bold text-[13px] tabular leading-none", cls)}>
         {value}
       </div>
+    </div>
+  );
+}
+
+function TrailMetric({
+  label,
+  value,
+  sub,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "default" | "success" | "warning" | "danger" | "muted";
+}) {
+  const cls = {
+    default: "text-foreground",
+    success: "text-[hsl(var(--success))]",
+    warning: "text-[hsl(var(--warning))]",
+    danger: "text-[hsl(var(--destructive))]",
+    muted: "text-muted-foreground/70",
+  }[tone];
+  return (
+    <div className="px-2 py-1.5 rounded-md bg-secondary/40 border border-border/30">
+      <div className="text-[8px] uppercase tracking-[0.1em] text-muted-foreground leading-none">
+        {label}
+      </div>
+      <div className={cn("font-mono font-bold text-[12px] tabular leading-tight mt-1", cls)}>
+        {value}
+      </div>
+      {sub && (
+        <div className="text-[9px] text-muted-foreground/70 mt-0.5 font-mono leading-none">
+          {sub}
+        </div>
+      )}
     </div>
   );
 }

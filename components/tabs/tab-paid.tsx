@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { PLAN } from "@/lib/config";
-import { computeMetrics, fakeTrend } from "@/lib/selectors";
+import { computeMetrics, describeRange, fakeTrend } from "@/lib/selectors";
 import { cn, fmt, cptTone } from "@/lib/utils";
 import { SectionHeader } from "@/components/shared/section-header";
 import { KpiCard } from "@/components/shared/kpi-card";
@@ -42,8 +42,15 @@ type Platform = {
 };
 
 export function TabPaid() {
-  const { campaigns } = useDashboard();
-  const m = computeMetrics(campaigns);
+  // CRÍTICO: usamos `campaigns` (ya filtrado por dateRange en el store, NUNCA
+  // `rawCampaigns`). Toda métrica derivada de esta variable respeta el rango
+  // del topbar sin necesidad de re-fetch.
+  const { campaigns, dateRange } = useDashboard();
+  const m = React.useMemo(() => computeMetrics(campaigns), [campaigns]);
+  const rangeCtx = React.useMemo(
+    () => describeRange(dateRange.from, dateRange.to),
+    [dateRange.from, dateRange.to],
+  );
   const [connectOpen, setConnectOpen] = React.useState<null | "google" | "tiktok">(null);
 
   // ── Cross-platform composite (Meta real + placeholders Google/TikTok) ──
@@ -97,12 +104,18 @@ export function TabPaid() {
   ];
 
   // ── Top / Bottom Meta campaigns by CPT (excluyendo anomalía y sin conv) ──
-  const ranked = campaigns
-    .filter((c) => c.cpt !== null && c.flag !== "anomaly" && c.conversions > 0)
-    .slice()
-    .sort((a, b) => (a.cpt ?? 9999) - (b.cpt ?? 9999));
-  const best3 = ranked.slice(0, 3);
-  const worst3 = ranked.slice(-3).reverse();
+  // Memoizado contra `campaigns` para que cambie con el rango sin recomputar
+  // todo el árbol.
+  const { best3, worst3 } = React.useMemo(() => {
+    const ranked = campaigns
+      .filter((c) => c.cpt !== null && c.flag !== "anomaly" && c.conversions > 0)
+      .slice()
+      .sort((a, b) => (a.cpt ?? 9999) - (b.cpt ?? 9999));
+    return {
+      best3: ranked.slice(0, 3),
+      worst3: ranked.slice(-3).reverse(),
+    };
+  }, [campaigns]);
 
   return (
     <div className="space-y-7 max-w-[1500px]">
@@ -118,6 +131,9 @@ export function TabPaid() {
               <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-3">
                 <Layers className="size-3" />
                 Paid Media · vista cross-platform
+                <span className="ml-2 px-1.5 py-0.5 rounded-md bg-[hsl(var(--brand-violet)/0.14)] text-[hsl(var(--brand-violet))] font-mono normal-case tracking-normal">
+                  {rangeCtx.label}
+                </span>
               </div>
               <h1 className="font-display font-bold tracking-[-0.025em] text-3xl md:text-4xl leading-[1.05] mb-3">
                 Inversión paid <span className="text-aurora">multi-canal.</span>
@@ -241,7 +257,7 @@ export function TabPaid() {
 
       {/* ─────── COMPARATIVE TABLE ─────── */}
       <section>
-        <SectionHeader title="Comparativa cross-platform" sub="Plataforma × métrica · agregado del rango activo" />
+        <SectionHeader title="Comparativa cross-platform" sub={`Plataforma × métrica · ${rangeCtx.label.toLowerCase()}`} />
         <TextureCard className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">

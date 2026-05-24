@@ -128,7 +128,8 @@ function aggregateCampaigns(
   return baseCampaigns.map((c) => {
     const rows = byCid.get(c.cid) ?? [];
     if (!rows.length) {
-      // si no hay rows en el rango, dejamos los valores 0
+      // si no hay rows en el rango, dejamos las métricas en 0 PERO
+      // preservamos status (PAUSED/ACTIVE) y meta del seed/API
       return { ...c, spend: 0, impressions: 0, clicks: 0, reach: 0, ctr: 0, cpm: 0, freq: 0, evContact: 0, evInitCheckout: 0, evCompleteReg: 0, conversions: 0, cpt: null };
     }
     const spend = rows.reduce((s, r) => s + r.spend, 0);
@@ -322,14 +323,41 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return u.toString();
       };
 
-      const [cAgg, aAgg, cDaily, aDaily] = await Promise.all([
-        // Aggregate (resumen del mes)
+      // Endpoint para STATUS real de campaña (no viene en /insights)
+      const statusUrl = (() => {
+        const u = new URL("/api/meta", window.location.origin);
+        u.searchParams.set("endpoint", `${PLAN.meta.accountId}/campaigns`);
+        u.searchParams.set(
+          "fields",
+          "id,name,status,effective_status,daily_budget,lifetime_budget,objective,created_time,updated_time",
+        );
+        u.searchParams.set("limit", "50");
+        return u.toString();
+      })();
+
+      const [cAgg, aAgg, cDaily, aDaily, statusResp] = await Promise.all([
         fetch(buildUrl({ level: "campaign", fields, limit: "30" })).then((r) => r.json()),
         fetch(buildUrl({ level: "adset", fields: adsetFields, limit: "200" })).then((r) => r.json()),
-        // Daily breakdown · time_increment=1
         fetch(buildUrl({ level: "campaign", fields, limit: "1000", time_increment: "1" })).then((r) => r.json()),
         fetch(buildUrl({ level: "adset", fields: adsetFields, limit: "1000", time_increment: "1" })).then((r) => r.json()),
+        fetch(statusUrl).then((r) => r.json()),
       ]);
+
+      // Mapa de campaign_id → status real (ACTIVE / PAUSED / DELETED)
+      const statusByCid = new Map<string, string>();
+      if (Array.isArray(statusResp?.data)) {
+        for (const c of statusResp.data as Array<{ id: string; effective_status?: string; status?: string }>) {
+          // effective_status es lo que Meta realmente reporta (ej. CAMPAIGN_PAUSED).
+          // Normalizamos a ACTIVE/PAUSED/DELETED.
+          const raw = c.effective_status || c.status || "";
+          const norm = /ACTIVE/i.test(raw)
+            ? "ACTIVE"
+            : /DELETED|ARCHIVED/i.test(raw)
+              ? "DELETED"
+              : "PAUSED";
+          statusByCid.set(c.id, norm);
+        }
+      }
 
       if (cAgg.error) throw new Error(cAgg.error.message ?? "Meta API error");
       if (aAgg.error) throw new Error(aAgg.error.message ?? "Meta API error");
@@ -350,7 +378,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           frequency: string;
           actions?: Array<{ action_type: string; value: string }>;
         }>).find((r) => r.campaign_id === c.cid);
-        if (!row) return c;
+        // Status real desde /campaigns endpoint (sobreescribe el seed)
+        const liveStatus = statusByCid.get(c.cid) || c.status;
+        if (!row) return { ...c, status: liveStatus };
         const evCR = getAction(row.actions, ACTION_KEYS.completeReg);
         const evIC = getAction(row.actions, ACTION_KEYS.initCheckout);
         const evCT = getAction(row.actions, ACTION_KEYS.contact);
@@ -369,6 +399,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                   : null;
         return {
           ...c,
+          status: liveStatus,
           spend,
           impressions: parseInt(row.impressions, 10) || 0,
           clicks: parseInt(row.clicks, 10) || 0,

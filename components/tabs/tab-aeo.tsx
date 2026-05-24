@@ -320,7 +320,7 @@ export function TabAeo() {
                 {running ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
                 {running
                   ? `Corriendo… ${runProgress}/${promptsTotal || 30}`
-                  : `Correr análisis · ${promptsTotal || 30} prompts × Gemini`}
+                  : `Correr análisis · ${promptsTotal || 30} prompts × Groq`}
               </Button>
               <Button onClick={loadResults} size="sm" variant="outline" disabled={loading}>
                 <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />

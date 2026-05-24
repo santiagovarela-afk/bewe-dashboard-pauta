@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildCreativeContextBlock } from "@/lib/creative-docs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,9 +41,23 @@ export async function POST(req: NextRequest) {
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const maxOutputTokens = body.maxTokens ?? Number(process.env.GEMINI_MAX_TOKENS ?? "2048");
 
+  // Inyectar contexto creativo (briefs · brand guide · tono) si existen docs
+  // en _docs/creative/. Si la carpeta está vacía devuelve "" y no contamina.
+  let systemFinal = body.system || "";
+  try {
+    const creative = await buildCreativeContextBlock();
+    if (creative) {
+      systemFinal = systemFinal
+        ? `${systemFinal}\n\n${creative}`
+        : creative;
+    }
+  } catch {
+    // si el loader falla, seguimos sin él · nunca tirar la request
+  }
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const payload: Record<string, unknown> = {
-    system_instruction: body.system ? { parts: [{ text: body.system }] } : undefined,
+    system_instruction: systemFinal ? { parts: [{ text: systemFinal }] } : undefined,
     contents: [{ parts: [{ text: body.question }] }],
     generationConfig: {
       maxOutputTokens,

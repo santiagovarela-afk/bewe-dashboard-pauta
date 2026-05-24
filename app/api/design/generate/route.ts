@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SKILLS, BRAND } from "@/components/open-bui/skills";
+import { buildCreativeContextBlock } from "@/lib/creative-docs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,7 +61,16 @@ export async function POST(req: NextRequest) {
   const variant = Math.max(0, Math.floor(body.variant ?? 0));
   const persona: "mark" | "lua" = body.persona === "lua" ? "lua" : "mark";
 
-  const system = buildSystemPrompt(skill, variant, persona);
+  let system = buildSystemPrompt(skill, variant, persona);
+  // Adjuntar contexto creativo (briefs + guías de marca) si existen docs
+  try {
+    const creative = await buildCreativeContextBlock();
+    if (creative) {
+      system = `${system}\n\n${creative}`;
+    }
+  } catch {
+    // si falla, seguimos sin él
+  }
   const userMsg = `Brief del usuario: "${brief}"\nVariante: ${variant}\n\nDevuelve SOLO el documento HTML completo, sin markdown, sin triple backticks, sin texto antes ni después.`;
 
   // Modelo fijo · NO usar "gemini-flash-latest" (alias que rota a 2.5+/3.x).

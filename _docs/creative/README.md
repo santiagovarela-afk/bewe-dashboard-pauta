@@ -1,48 +1,75 @@
 # Bewe · Creative Docs
 
-> Carpeta donde subes el material creativo y de marca. Mark/Lúa OS lo leen
-> automáticamente al arrancar el dev server y lo usan como contexto para:
+> Carpeta donde subes el material creativo y de marca. Mark/Lúa OS y
+> Open Design los leen automáticamente y los usan como contexto para:
 > - Generar ideas de posts (Parrilla → Idea Generator)
 > - Generar diseños (Open Design)
-> - Sugerencias de copy y hashtags
-> - Tono y voz al responder en el chat
+> - Sugerencias de copy, tono, hashtags
+> - Respuestas en el chat con tono Bewe correcto
 
-## Estructura sugerida
+## Cómo funciona el loader
 
-```
-_docs/creative/
-├── README.md                           ← este archivo
-├── brief-creativo-may-2026.md          ← el brief mensual de pauta
-├── bewe-design-guide.md                ← guía visual / tipografía / colores / do's & don'ts
-├── tono-de-voz.md                      ← cómo habla Bewe (slogans, frases prohibidas, etc)
-├── canva-templates-pymes.md            ← referencias de templates Canva que funcionan
-├── posts-ejemplares/
-│   ├── ig-belleza-octubre.png          ← screenshots o links de tus mejores posts
-│   ├── fb-comercio-marzo.png
-│   └── reels-servicios.md              ← URLs de reels con buenos resultados
-└── briefs-mensuales/
-    ├── may-2026.md
-    ├── jun-2026.md
-    └── ...
-```
+1. Pones archivos `.md` o `.txt` en esta carpeta
+2. El loader (`lib/creative-docs.ts`) los lee en server-side
+3. Se cachean **10 minutos**
+4. Se inyectan al **system prompt** de:
+   - `/api/gemini` → Mark/Lúa chat
+   - `/api/design/generate` → Open Design
+5. Cuando agregas/editas un doc, podés forzar reload sin reiniciar:
+   ```bash
+   curl -X POST http://localhost:3000/api/creative-docs \
+     -H "Content-Type: application/json" \
+     -d '{"action":"reload"}'
+   ```
+6. Para ver qué docs están cargados:
+   ```bash
+   curl http://localhost:3000/api/creative-docs
+   ```
 
 ## Formatos aceptados
 
-- `.md` · markdown (preferido · Mark lo lee directo)
-- `.txt` · texto plano
-- `.png` / `.jpg` / `.webp` · imágenes de referencia
-- `.pdf` · documentos largos (Mark los lee si están bajo 10MB)
-- `.json` · si tienes brand kit estructurado
+| Formato | Soportado | Notas |
+|---|---|---|
+| `.md` | ✅ | Preferido · markdown puro |
+| `.txt` | ✅ | Texto plano |
+| `.docx` | ❌ | Binario · NO se lee · re-exportá como `.md` o `.txt` |
+| `.pdf`  | ❌ | NO soportado en esta versión |
+| imágenes | ❌ | NO se procesan · sólo texto |
 
-## Cómo se integra con Mark/Lúa
+> ⚠️ El archivo `bewe_design_guideline.md.docx` que subiste **no se está
+> leyendo** porque es Word (`.docx`). Abrílo en Word → "Guardar como" →
+> elegí "Texto sin formato (.txt)" o pegá el contenido en un nuevo `.md`.
 
-Cuando inicia el dev server, un loader lee todos los `.md` de esta carpeta y
-los agrega como contexto adicional al system prompt de Mark/Lúa. No hace falta
-configurar nada · solo poner archivos aquí y reiniciar `npm run dev`.
+## Límites
 
-Para forzar reload sin reiniciar:
-```bash
-curl -X PUT http://localhost:3000/api/ai-memory -d '{"action":"reload-creative-docs"}'
+- Cada doc se trunca a **12.000 caracteres** si excede
+- Total combinado: **40.000 caracteres** (safety net)
+- Si pasás eso, se cortan los últimos docs · ponelos por prioridad
+
+## Estructura recomendada
+
+```
+_docs/creative/
+├── README.md                           ← este archivo (se ignora)
+├── brand-guide.md                      ← guía visual · tipo · color · don'ts
+├── tono-de-voz.md                      ← cómo habla Bewe · frases prohibidas
+├── brief-mensual-may-2026.md           ← brief de campaña vigente
+├── IAparaPymes-Canva-Brief.md          ← brief del live show ✅
+└── posts-ejemplares.md                 ← descripción de tus mejores posts
 ```
 
-(El endpoint lo construyo en el siguiente turno si lo necesitas).
+## Cómo verificar que Mark/Lúa los está usando
+
+1. Subí un brief con una palabra muy específica (ej. "TacoBell-violet")
+2. Abrí Mark/Lúa
+3. Preguntá: *"qué color debo usar para el CTA principal?"*
+4. Si responde mencionando esa palabra, el contexto está enchufado ✅
+
+## Cómo limpiar el cache forzado
+
+Si editaste un doc y querés que el cambio se note YA:
+```bash
+curl -X POST http://localhost:3000/api/creative-docs -d '{"action":"reload"}'
+```
+
+O simplemente reiniciá `npm run dev`.

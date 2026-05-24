@@ -13,8 +13,10 @@ export function BrandKitPanel() {
   const swatches: Array<{ name: string; hex: string; key: keyof typeof BRAND.colors }> = [
     { name: "Primary", hex: BRAND.colors.primary, key: "primary" },
     { name: "Secondary", hex: BRAND.colors.secondary, key: "secondary" },
-    { name: "Accent", hex: BRAND.colors.accent, key: "accent" },
-    { name: "Ember", hex: BRAND.colors.ember, key: "ember" },
+    { name: "Accent IA", hex: BRAND.colors.accentAi, key: "accentAi" },
+    { name: "Ink Deep", hex: BRAND.colors.inkDeep, key: "inkDeep" },
+    { name: "Surface Aqua", hex: BRAND.colors.surfaceAqua, key: "surfaceAqua" },
+    { name: "Surface Cream", hex: BRAND.colors.surfaceCream, key: "surfaceCream" },
   ];
 
   return (
@@ -47,12 +49,12 @@ export function BrandKitPanel() {
 
       <div className="border-t border-border/60 pt-2 space-y-0.5">
         <div className="text-[10px] flex items-center gap-1.5">
-          <span className="font-serif text-foreground text-sm leading-none">Aa</span>
-          <span className="text-muted-foreground/80">Inter</span>
+          <span className="font-display text-foreground text-sm leading-none font-extrabold">Aa</span>
+          <span className="text-muted-foreground/80">Inter ExtraBold</span>
         </div>
         <div className="text-[10px] flex items-center gap-1.5">
-          <span className="font-mono text-foreground text-sm leading-none">Aa</span>
-          <span className="text-muted-foreground/80">JetBrains Mono</span>
+          <span className="font-serif text-foreground text-sm leading-none italic">IA</span>
+          <span className="text-muted-foreground/80">Merriweather italic · solo IA/Linda</span>
         </div>
       </div>
 

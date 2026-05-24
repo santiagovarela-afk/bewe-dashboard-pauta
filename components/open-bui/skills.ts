@@ -139,25 +139,48 @@ export function getSkill(id: string): Skill {
 
 /**
  * Brand kit Bewe — fuente de verdad para el AI generator.
- * Mantener sincronizado con tokens CSS en globals.css.
+ * Fuente: _docs/creative/IAparaPymes-Canva-Brief (2).md (Linda · pastel orgánico cálido).
+ * NO usar violeta/cyan saturado · NO frío · NO Merriweather salvo IA/Linda.
  */
 export const BRAND = {
   name: "Bewe",
   tagline: "Software de gestión para servicios profesionales",
   colors: {
-    primary: "#8B5CF6", // violeta
-    secondary: "#06B6D4", // cyan
-    accent: "#A3E635", // lime
-    ember: "#FB923C", // ember
-    dark: "#0F0F12",
+    primary: "#60A5FA", // azul Bewe
+    secondary: "#34D399", // verde emerald
+    accentAi: "#FAD19E", // naranja cálido · accent IA
+    inkDeep: "#0A2540", // navy texto
+    surfaceAqua: "#CCFBF1", // mint pastel fondo
+    surfaceCream: "#FEF3C7", // cream pastel fondo
+    error: "#F87171", // rojo errores
     light: "#FAFAFC",
+    dark: "#0A2540",
+  },
+  gradients: {
+    linda: "linear-gradient(135deg, #B0D2FC 0%, #CCFBF1 45%, #FAD19E 100%)",
+    lindaSoft: "linear-gradient(120deg, #DFEDFE 0%, #FFFFFF 40%, #D6F6EB 100%)",
+    ctaLinda: "linear-gradient(90deg, #60A5FA 0%, #34D399 50%, #60A5FA 100%)",
+    dawn: "linear-gradient(135deg, #FAD19E 0%, #FEF3C7 50%, #60A5FA 100%)",
   },
   fonts: {
     display: "Inter, system-ui, sans-serif",
     body: "Inter, system-ui, sans-serif",
-    mono: "JetBrains Mono, monospace",
+    italic: "Merriweather, serif", // SOLO para palabras IA/Linda
   },
-  voice: "Profesional · cálido · accionable · sin tecnicismos innecesarios",
+  voice:
+    "Inteligente · proactivo · conciso · alentador · trato informal (tú) · español neutro LATAM/España",
+  rules: [
+    "Sin Merriweather italic excepto para palabras IA/Linda",
+    "Inter siempre, ExtraBold para display, Regular para body",
+    "Tipografía Inter ExtraBold con kerning -0.035em",
+    "Sentence case en headlines (no ALL CAPS excepto micro-labels ≤14px)",
+    "NO emojis en marketing/UI",
+    "Esquinas redondeadas (cards 16px, botones pill 999px)",
+    "Sombras navy-tinted suaves",
+    "Arrow → como único decorativo en CTAs",
+    "Whitespace generoso · aire",
+    "Vibe orgánico pastel · cálido · NO frío violeta saturado",
+  ],
 } as const;
 
 export type Brand = typeof BRAND;

@@ -175,7 +175,25 @@ export function TabOpenBui() {
   }
 
   return (
-    <div className="space-y-5 max-w-[1600px]">
+    <div className="open-design-liquid relative -mx-4 -my-4 px-4 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 rounded-2xl">
+      {/* Liquid glass theme override · brand kit Bewe pastel · NO toca theme global */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 rounded-2xl opacity-90 dark:opacity-60"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(176,210,252,0.25) 0%, rgba(204,251,241,0.18) 45%, rgba(250,209,158,0.22) 100%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 rounded-2xl opacity-70 dark:opacity-30"
+        style={{
+          background:
+            "radial-gradient(60% 50% at 20% 10%, rgba(96,165,250,0.18), transparent 70%), radial-gradient(50% 50% at 90% 80%, rgba(52,211,153,0.16), transparent 70%)",
+        }}
+      />
+      <div className="space-y-5 max-w-[1600px] relative">
       <OpenDesignOnboarding
         forceOpen={forceOnb}
         onClose={() => setForceOnb(false)}
@@ -331,13 +349,20 @@ export function TabOpenBui() {
             transition={{ duration: 0.25 }}
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] pointer-events-none"
           >
-            <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[hsl(var(--brand-violet))] text-white text-[12px] font-semibold shadow-[0_10px_30px_-10px_hsl(var(--brand-violet))]">
+            <div
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-white text-[12px] font-semibold shadow-[0_10px_30px_-10px_rgba(10,37,64,0.4)]"
+              style={{
+                background:
+                  "linear-gradient(90deg, #60A5FA 0%, #34D399 50%, #60A5FA 100%)",
+              }}
+            >
               <Sparkles className="size-3.5" />
               {toast}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }

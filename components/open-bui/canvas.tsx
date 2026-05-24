@@ -23,7 +23,8 @@ const TldrawDynamic = dynamic(
     // Cargar CSS PRIMERO · si esto falla, el editor se monta sin estilos
     // y se ve como un cuadro vacío. Hacemos await del CSS antes del módulo.
     try {
-      // @ts-expect-error — side-effect CSS import (no type declarations)
+      // side-effect CSS import (Next 16 ya resuelve types CSS · si vuelve a fallar
+      // type-check añadir @ts-ignore en su lugar)
       await import("tldraw/tldraw.css");
     } catch (e) {
       console.error("[open-design] no se pudo cargar tldraw/tldraw.css", e);

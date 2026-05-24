@@ -85,6 +85,9 @@ export function TabAeo() {
   const [loading, setLoading] = React.useState(false);
   const [results, setResults] = React.useState<ResultsPayload | null>(null);
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
+  const [runProgress, setRunProgress] = React.useState<number>(0);
+  const [quotaBlocked, setQuotaBlocked] = React.useState<string | null>(null);
+  const didAutoRun = React.useRef(false);
 
   // Auto-seed al entrar a la tab
   React.useEffect(() => {
@@ -122,25 +125,64 @@ export function TabAeo() {
     loadResults();
   }, [loadResults]);
 
-  async function runAnalysis() {
-    if (running) return;
-    setRunning(true);
-    toast.info("Corriendo análisis AEO · puede tardar 1–2 min");
-    try {
-      const r = await fetch("/api/aeo/run", { method: "POST" });
-      const j = await r.json();
-      if (j.error) {
-        toast.error(j.error);
-      } else {
-        toast.success(`Análisis completado · ${j.run?.results?.length ?? 0} prompts`);
-        await loadResults();
+  const runAnalysis = React.useCallback(
+    async (opts: { silent?: boolean } = {}) => {
+      if (running) return;
+      setRunning(true);
+      setRunProgress(0);
+      setQuotaBlocked(null);
+      if (!opts.silent) toast.info("Corriendo análisis AEO · puede tardar 1–2 min");
+      // Progress simulado mientras Gemini procesa (no hay SSE en el endpoint)
+      const total = prompts.length || 30;
+      const tick = window.setInterval(() => {
+        setRunProgress((p) => (p < total - 1 ? p + 1 : p));
+      }, 2200);
+      try {
+        const r = await fetch("/api/aeo/run", { method: "POST" });
+        const j = await r.json();
+        window.clearInterval(tick);
+        if (j.error) {
+          const isQuota = /quota|rate.?limit|exceeded|429/i.test(String(j.error));
+          if (isQuota) {
+            setQuotaBlocked(
+              "Cuota Gemini agotada · datos pendientes · reintentar mañana (reset ~24h)",
+            );
+            if (!opts.silent) toast.error("Cuota Gemini agotada · UI en modo preview");
+          } else if (!opts.silent) {
+            toast.error(j.error);
+          }
+        } else {
+          if (!opts.silent)
+            toast.success(`Análisis completado · ${j.run?.results?.length ?? 0} prompts`);
+          await loadResults();
+        }
+      } catch (err) {
+        window.clearInterval(tick);
+        if (!opts.silent)
+          toast.error(err instanceof Error ? err.message : "error desconocido");
+      } finally {
+        window.clearInterval(tick);
+        setRunning(false);
+        setRunProgress(0);
       }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "error desconocido");
-    } finally {
-      setRunning(false);
+    },
+    [running, prompts.length, loadResults],
+  );
+
+  // Auto-run UNA vez si no hay results previos y los prompts ya cargaron
+  React.useEffect(() => {
+    if (didAutoRun.current) return;
+    if (seeding) return;
+    if (prompts.length === 0) return;
+    if (loading) return;
+    if (results === null) return; // esperar primera carga de results
+    if (results.hasData) {
+      didAutoRun.current = true;
+      return;
     }
-  }
+    didAutoRun.current = true;
+    void runAnalysis({ silent: true });
+  }, [seeding, prompts.length, loading, results, runAnalysis]);
 
   async function regeneratePrompts() {
     setSeeding(true);
@@ -243,8 +285,20 @@ export function TabAeo() {
                 />
                 <HeroStat
                   label="Prompts run"
-                  value={`${promptsRun}/${promptsTotal || 30}`}
-                  sub={lastRun ? `último: ${lastRun}` : "nunca corrido"}
+                  value={
+                    running
+                      ? `${runProgress}/${promptsTotal || 30}`
+                      : `${promptsRun}/${promptsTotal || 30}`
+                  }
+                  sub={
+                    running
+                      ? "Evaluando con Gemini…"
+                      : lastRun
+                        ? `último: ${lastRun}`
+                        : seeding
+                          ? "Cargando…"
+                          : "Auto-run al entrar"
+                  }
                   accent="var(--brand-lime)"
                 />
                 <HeroStat
@@ -257,9 +311,11 @@ export function TabAeo() {
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <Button onClick={runAnalysis} size="sm" variant="glow" disabled={running || prompts.length === 0}>
+              <Button onClick={() => void runAnalysis()} size="sm" variant="glow" disabled={running || prompts.length === 0}>
                 {running ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                {running ? "Corriendo…" : `Correr análisis · ${promptsTotal || 30} prompts × Gemini`}
+                {running
+                  ? `Corriendo… ${runProgress}/${promptsTotal || 30}`
+                  : `Correr análisis · ${promptsTotal || 30} prompts × Gemini`}
               </Button>
               <Button onClick={loadResults} size="sm" variant="outline" disabled={loading}>
                 <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
@@ -274,8 +330,60 @@ export function TabAeo() {
         </div>
       </Reveal>
 
+      {/* ─────── PROGRESS BAR (durante run) ─────── */}
+      {running && (
+        <TextureCard className="p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <Loader2 className="size-4 animate-spin text-[hsl(var(--brand-violet))]" />
+            <div className="text-[12px] font-semibold">
+              Evaluando {runProgress}/{promptsTotal || 30} prompts con Gemini…
+            </div>
+          </div>
+          <div className="h-1.5 w-full bg-secondary/40 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: "hsl(var(--brand-violet))" }}
+              animate={{
+                width: `${Math.min(100, (runProgress / Math.max(1, promptsTotal || 30)) * 100)}%`,
+              }}
+              transition={{ duration: 0.4 }}
+            />
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-2">
+            Tarda 1–2 min · puedes seguir navegando otras tabs.
+          </div>
+        </TextureCard>
+      )}
+
+      {/* ─────── QUOTA BLOCKED BANNER ─────── */}
+      {quotaBlocked && !running && (
+        <TextureCard className="p-4 border-[hsl(var(--brand-ember)/0.35)]">
+          <div className="flex items-start gap-3">
+            <div
+              className="size-9 grid place-items-center rounded-xl shrink-0"
+              style={{
+                background: `hsl(var(--brand-ember) / 0.16)`,
+                border: `1px solid hsl(var(--brand-ember) / 0.4)`,
+                color: `hsl(var(--brand-ember))`,
+              }}
+            >
+              <Bot className="size-4" />
+            </div>
+            <div className="flex-1">
+              <div className="text-[12px] font-semibold mb-0.5">
+                Datos pendientes · quota agotada
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {quotaBlocked}. La UI muestra el formato esperado; los números reales
+                aparecerán cuando se resetee la cuota gratuita de Gemini.
+              </p>
+            </div>
+          </div>
+        </TextureCard>
+      )}
+
       {/* ─────── EMPTY STATE ─────── */}
-      {!results?.hasData && (
+      {!results?.hasData && !running && !quotaBlocked && (
         <TextureCard className="p-6">
           <div className="flex items-start gap-4">
             <div
@@ -289,15 +397,16 @@ export function TabAeo() {
               <Bot className="size-5" />
             </div>
             <div className="flex-1">
-              <h3 className="text-[14px] font-semibold mb-1">Aún no hay datos de AEO</h3>
+              <h3 className="text-[14px] font-semibold mb-1">
+                {seeding ? "Cargando prompts…" : "Preparando primer run automático…"}
+              </h3>
               <p className="text-[12px] text-muted-foreground leading-relaxed max-w-[680px]">
-                Ya cargué {promptsTotal || "—"} prompts ({promptsSource ?? "cargando…"}). Dale a
-                <strong className="text-foreground/90"> Correr análisis </strong>
-                para mandarlos a Gemini, parsear las respuestas y medir cómo aparece Bewe vs.
-                competidores (Booksy, Mindbody, Fresha…).
+                Ya cargué {promptsTotal || "—"} prompts ({promptsSource ?? "cargando…"}). En cuanto
+                terminen verás cómo aparece Bewe vs. competidores (Booksy, Mindbody, Fresha…) en
+                respuestas de Gemini.
               </p>
               <p className="text-[11px] text-muted-foreground/80 mt-2">
-                Coste · ~0€ (cuota gratuita de Gemini). Duración · 1–2 min por run.
+                Coste · ~0€ (cuota gratuita de Gemini). Duración · 1–2 min por run · auto-run al entrar.
               </p>
             </div>
           </div>

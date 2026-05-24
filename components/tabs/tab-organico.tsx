@@ -9,7 +9,6 @@ import {
   ImageOff,
   Heart,
   MessageCircle,
-  Trophy,
   ExternalLink,
   Calendar,
   TrendingUp,
@@ -35,6 +34,13 @@ import { KpiCard } from "@/components/shared/kpi-card";
 import { OnboardingTip } from "@/components/shared/onboarding-tip";
 import { Drawer } from "@/components/shared/drawer";
 import { useOrganic, type IGMedia, type FBPost } from "@/lib/hooks/use-organic";
+import { TemporalHeatmap } from "@/components/organico/temporal-heatmap";
+import { FormatPerformance } from "@/components/organico/format-performance";
+import { VideoAnalytics } from "@/components/organico/video-analytics";
+import { TopBottomAnalysis } from "@/components/organico/top-bottom-analysis";
+import { RecommendationsAI } from "@/components/organico/recommendations-ai";
+import { TrendsPymes } from "@/components/organico/trends-pymes";
+import type { AnalyticsPost } from "@/lib/organic-analytics";
 
 type SortKey = "date" | "likes" | "comments" | "engagement";
 
@@ -48,10 +54,21 @@ interface NormalizedPost {
   date?: string;
   permalink?: string;
   type?: string;
+  video_views?: number;
+  media_product_type?: string;
   raw: IGMedia | FBPost;
 }
 
 function normalizeIG(p: IGMedia): NormalizedPost {
+  // Extraer reach/impressions de insights si vinieron (sirve como proxy de views)
+  let videoViews: number | undefined;
+  const insights = p.insights?.data;
+  if (Array.isArray(insights)) {
+    const reach = insights.find((i) => i.name === "reach");
+    const impressions = insights.find((i) => i.name === "impressions");
+    const v = reach?.values?.[0]?.value ?? impressions?.values?.[0]?.value;
+    if (typeof v === "number" && v > 0) videoViews = v;
+  }
   return {
     id: p.id,
     source: "ig",
@@ -62,6 +79,8 @@ function normalizeIG(p: IGMedia): NormalizedPost {
     date: p.timestamp,
     permalink: p.permalink,
     type: p.media_type,
+    video_views: videoViews,
+    media_product_type: p.media_product_type,
     raw: p,
   };
 }
@@ -106,13 +125,6 @@ export function TabOrganico() {
     };
     return [...normalized].sort(sortFn[sortKey]);
   }, [normalized, sortKey]);
-
-  // Top 3 by engagement (always, regardless of sort)
-  const top3 = React.useMemo(() => {
-    return [...normalized]
-      .sort((a, b) => b.likes + b.comments - (a.likes + a.comments))
-      .slice(0, 3);
-  }, [normalized]);
 
   // KPIs
   const kpis = React.useMemo(() => {
@@ -360,69 +372,54 @@ export function TabOrganico() {
         </TextureCard>
       )}
 
-      {/* TOP 3 */}
-      {top3.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy className="size-3.5 text-[hsl(var(--brand-ember))]" />
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-              Top 3 del período · por engagement
-            </h3>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-3">
-            {top3.map((p, i) => (
-              <motion.button
-                key={`top-${p.id}`}
-                onClick={() => setSelected(p)}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06, duration: 0.4 }}
-                className="text-left"
-              >
-                <SpotlightCard
-                  className="overflow-hidden h-full hover:border-[hsl(var(--brand-ember)/0.5)]"
-                  spotlightColor="var(--brand-ember)"
-                >
-                  <div className="flex">
-                    <div className="size-24 shrink-0 bg-secondary/60 relative">
-                      {p.thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={p.thumb}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="absolute inset-0 grid place-items-center text-muted-foreground/40">
-                          <ImageOff className="size-5" />
-                        </div>
-                      )}
-                      <div className="absolute -top-1.5 -left-1.5">
-                        <Badge variant="ember" className="!text-[9px] !px-1.5">
-                          #{i + 1}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="p-3 flex-1 min-w-0">
-                      <div className="text-[11px] text-foreground line-clamp-3 mb-2 leading-snug" title={p.text}>
-                        {p.text ?? "Sin texto"}
-                      </div>
-                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                        <span className="inline-flex items-center gap-1 font-mono">
-                          <Heart className="size-3" /> {fmt.short(p.likes)}
-                        </span>
-                        <span className="inline-flex items-center gap-1 font-mono">
-                          <MessageCircle className="size-3" /> {fmt.short(p.comments)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </SpotlightCard>
-              </motion.button>
-            ))}
-          </div>
-        </div>
+      {/* TOP 3 + BOTTOM 3 con análisis cualitativo */}
+      {normalized.length > 0 && (
+        <TopBottomAnalysis
+          posts={normalized as unknown as AnalyticsPost[]}
+          onPostClick={(ap) => {
+            const found = normalized.find((n) => n.id === ap.id);
+            if (found) setSelected(found);
+          }}
+        />
       )}
+
+      {/* Análisis temporal · día / hora / heatmap */}
+      {normalized.length > 0 && (
+        <TemporalHeatmap posts={normalized as unknown as AnalyticsPost[]} />
+      )}
+
+      {/* Performance por formato (image / video / carousel) */}
+      {normalized.length > 0 && (
+        <FormatPerformance
+          posts={normalized as unknown as AnalyticsPost[]}
+          onPostClick={(ap) => {
+            const found = normalized.find((n) => n.id === ap.id);
+            if (found) setSelected(found);
+          }}
+        />
+      )}
+
+      {/* Video analytics · solo si hay videos/reels */}
+      {normalized.length > 0 && (
+        <VideoAnalytics
+          posts={normalized as unknown as AnalyticsPost[]}
+          onPostClick={(ap) => {
+            const found = normalized.find((n) => n.id === ap.id);
+            if (found) setSelected(found);
+          }}
+        />
+      )}
+
+      {/* Recomendaciones con Mark/Lúa */}
+      {normalized.length > 0 && (
+        <RecommendationsAI
+          posts={normalized as unknown as AnalyticsPost[]}
+          platformLabel={tab === "ig" ? "Instagram" : "Facebook"}
+        />
+      )}
+
+      {/* Tendencias estáticas curadas para PyMEs */}
+      <TrendsPymes />
 
       {/* Sort bar */}
       {normalized.length > 0 && (

@@ -206,7 +206,7 @@ export const TABS = [
   { id: "parrilla",    label: "Parrilla",    icon: "CalendarDays",     group: "contenido" },
   { id: "seo",         label: "SEO",          icon: "Search",           group: "contenido" },
   { id: "performance", label: "Performance", icon: "Gauge",            group: "analítica" },
-  { id: "open-bui",    label: "Open BUI",    icon: "Palette",          group: "analítica" },
+  { id: "open-bui",    label: "Open Design",  icon: "Palette",          group: "analítica" },
   { id: "informe",     label: "Informe",     icon: "FileText",         group: "analítica" },
   { id: "config",      label: "Config",      icon: "Settings2",        group: "admin" },
 ] as const;

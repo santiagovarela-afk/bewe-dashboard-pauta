@@ -14,8 +14,6 @@ import {
   Bot,
   ChevronDown,
   Loader2,
-  Maximize2,
-  Minimize2,
   Send,
   Sparkles,
   Trash2,
@@ -92,7 +90,7 @@ export function AiDock() {
 
   const [open, setOpen] = React.useState(false);
   const [minimized, setMinimized] = React.useState(false);
-  const [expanded, setExpanded] = React.useState(false);
+  // expanded eliminado · el chat se mantiene siempre 420×640 (sin opción ampliar)
   const [messages, setMessages] = React.useState<Msg[]>(() => [
     makeGreeting("dashboard", "mark"),
   ]);
@@ -335,10 +333,6 @@ export function AiDock() {
   const isMark = aiPersona === "mark";
   const personaLabel = personaName(aiPersona);
 
-  // Tamaño según expanded
-  const widthClass = expanded ? "md:w-[520px]" : "md:w-[420px]";
-  const heightClass = expanded ? "md:h-[720px]" : "md:h-[640px]";
-
   // Easing y duración para la animación blossom (FAB ↔ panel)
   const BLOSSOM_TRANSITION = {
     duration: 0.35,
@@ -403,9 +397,7 @@ export function AiDock() {
               "md:left-auto md:top-auto md:right-6 md:bottom-6",
               minimized
                 ? "h-12 md:w-[300px] md:h-12"
-                : expanded
-                  ? "md:w-[520px] md:h-[720px]"
-                  : "md:w-[420px] md:h-[640px]",
+                : "md:w-[420px] md:h-[640px]",
               "rounded-2xl border border-border bg-card/95 backdrop-blur-xl",
               "shadow-[0_24px_60px_-20px_hsl(var(--brand-violet)/0.45),0_8px_24px_-12px_hsl(var(--background)/0.8)]",
             )}
@@ -471,16 +463,7 @@ export function AiDock() {
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
-                {!minimized && (
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((v) => !v)}
-                    className="hidden md:grid place-items-center size-7 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-foreground transition"
-                    title={expanded ? "Reducir" : "Ampliar"}
-                  >
-                    {expanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-                  </button>
-                )}
+                {/* Botón ampliar eliminado · el chat se mantiene siempre 420×640 */}
                 <button
                   type="button"
                   onClick={() => setMinimized((v) => !v)}

@@ -1,13 +1,13 @@
 "use client";
 import * as React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Moon, Sun, AlertTriangle, X } from "lucide-react";
+import { Moon, Sun, AlertTriangle, X, Eye } from "lucide-react";
 import { useDashboard } from "@/lib/store";
-import { cn } from "@/lib/utils";
 
 const WARN_STORAGE_KEY = "bw_theme_warn";
 
-/** Lee la preferencia "avisar antes del cambio". Default: ON la primera vez (para que no se asusten). */
+type WarningPhase = "alert" | "countdown" | null;
+
 function readWarnPref(): boolean {
   if (typeof window === "undefined") return true;
   const v = localStorage.getItem(WARN_STORAGE_KEY);
@@ -18,6 +18,7 @@ export function ThemeToggle() {
   const { theme, toggleTheme } = useDashboard();
   const isDark = theme === "dark";
   const [transitioning, setTransitioning] = React.useState(false);
+  const [phase, setPhase] = React.useState<WarningPhase>(null);
   const [countdown, setCountdown] = React.useState<number | null>(null);
   const [warnPref, setWarnPref] = React.useState(true);
 
@@ -26,24 +27,15 @@ export function ThemeToggle() {
   }, []);
 
   /**
-   * Soft cross-fade · no más blanco quemado de golpe.
-   *
-   *  fase 1 (0 → 500ms): un overlay full-screen del color del tema ACTUAL
-   *                       sube su opacidad de 0 → 1 (pantalla se "apaga")
-   *  fase 2 (500 → 520ms): el tema cambia DEBAJO del overlay (no se ve)
-   *  fase 3 (520 → 1400ms): el overlay baja su opacidad 1 → 0 revelando el tema nuevo
-   *
-   *  Total ~1.4s, sin destello porque el cambio de fondo ocurre con el overlay arriba.
+   * Soft cross-fade · sin destello.
+   * Fase 1 (0→500ms): overlay del color del tema actual sube opacidad 0→1
+   * Fase 2 (500ms): cambia el tema bajo el overlay
+   * Fase 3 (500→1400ms): overlay baja opacidad revelando el tema nuevo
    */
   function runSoftSwitch() {
     setTransitioning(true);
-    // fase 1 — fade in del overlay (ver useEffect abajo)
-    setTimeout(() => {
-      toggleTheme(); // fase 2 · cambio silencioso
-    }, 500);
-    setTimeout(() => {
-      setTransitioning(false); // fase 3 termina · desmontar overlay
-    }, 1400);
+    setTimeout(() => toggleTheme(), 500);
+    setTimeout(() => setTransitioning(false), 1400);
   }
 
   function handleClick() {
@@ -55,18 +47,27 @@ export function ThemeToggle() {
       return;
     }
     if (warnPref) {
-      // Mostrar countdown · luego runSoftSwitch
-      setCountdown(3);
+      setPhase("alert");
     } else {
       runSoftSwitch();
     }
   }
 
-  // Countdown cuando warnPref está activo
+  function confirmAndStartCountdown() {
+    setPhase("countdown");
+    setCountdown(3);
+  }
+
+  function cancelAll() {
+    setPhase(null);
+    setCountdown(null);
+  }
+
   React.useEffect(() => {
     if (countdown === null) return;
     if (countdown <= 0) {
       setCountdown(null);
+      setPhase(null);
       runSoftSwitch();
       return;
     }
@@ -74,10 +75,6 @@ export function ThemeToggle() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countdown]);
-
-  function cancelCountdown() {
-    setCountdown(null);
-  }
 
   function toggleWarnPref() {
     const next = !warnPref;
@@ -89,9 +86,6 @@ export function ThemeToggle() {
     }
   }
 
-  // El color del overlay depende del tema CURRENT (el que se está dejando)
-  // En dark mode el overlay es negro suavizado (fade hacia negro · agradable)
-  // En light mode el overlay es blanco-grisaceo (fade hacia neutro)
   const overlayColor = isDark ? "hsl(240 10% 4%)" : "hsl(240 5% 96%)";
 
   return (
@@ -100,7 +94,7 @@ export function ThemeToggle() {
         onClick={handleClick}
         title={isDark ? "Cambiar a claro" : "Cambiar a oscuro"}
         aria-label="Toggle theme"
-        disabled={transitioning || countdown !== null}
+        disabled={transitioning || phase !== null}
         className="relative inline-flex h-8 items-center justify-center rounded-full border border-border bg-card/40 px-2 transition-colors hover:border-foreground/30 disabled:opacity-60"
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -130,81 +124,146 @@ export function ThemeToggle() {
         </AnimatePresence>
       </button>
 
-      {/* ── Countdown overlay ───────────────────────────────────────────────── */}
+      {/* ── Fase 1 · ALERTA explicativa antes del countdown ─────────────── */}
       <AnimatePresence>
-        {countdown !== null && (
+        {phase === "alert" && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[500] grid place-items-center bg-background/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[500] grid place-items-center bg-background/85 backdrop-blur-sm p-4"
           >
             <motion.div
-              initial={{ scale: 0.92, y: 8 }}
+              initial={{ scale: 0.92, y: 12 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.92, y: 8 }}
-              className="relative rounded-2xl border border-border bg-card p-7 max-w-md w-[92%] shadow-2xl"
+              exit={{ scale: 0.92, y: 12 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="relative rounded-2xl border border-border bg-card p-7 max-w-md w-full shadow-2xl"
             >
               <button
-                onClick={cancelCountdown}
+                onClick={cancelAll}
                 className="absolute top-3 right-3 size-7 grid place-items-center rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
-                aria-label="Cancelar"
+                aria-label="Cerrar"
               >
                 <X className="size-3.5" />
               </button>
 
-              <div className="flex items-center gap-3 mb-3">
-                <div className="size-10 rounded-xl border border-[hsl(var(--brand-ember)/0.45)] bg-[hsl(var(--brand-ember)/0.12)] text-[hsl(var(--brand-ember))] grid place-items-center">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="size-11 rounded-xl border border-[hsl(var(--brand-ember)/0.45)] bg-[hsl(var(--brand-ember)/0.12)] text-[hsl(var(--brand-ember))] grid place-items-center">
                   <AlertTriangle className="size-5" />
                 </div>
                 <div>
-                  <h3 className="font-display font-semibold text-base">
-                    Cambiando tema · cierra los ojos un segundo
+                  <h3 className="font-display font-bold text-base">
+                    Vas a cambiar el tema
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
-                    {isDark ? "Vas a entrar a modo claro" : "Vas a entrar a modo oscuro"} ·
-                    la transición suave dura ~1.4s
+                    {isDark ? "Oscuro → Claro" : "Claro → Oscuro"}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-end justify-center gap-3 py-4">
+              <div className="space-y-3 text-[12.5px] leading-relaxed text-foreground/85 mb-5">
+                {isDark ? (
+                  <>
+                    <p>
+                      <strong className="text-foreground">Dato curioso:</strong>{" "}
+                      el modo claro{" "}
+                      <strong className="text-[hsl(var(--brand-ember))]">
+                        cansa más la vista
+                      </strong>{" "}
+                      en sesiones largas que el oscuro. Recomendamos quedarte en oscuro
+                      si vas a trabajar más de 30 min seguidos.
+                    </p>
+                    <p className="text-muted-foreground">
+                      Si igual quieres cambiar, vas a ver un contador 3-2-1.{" "}
+                      <strong className="text-foreground">
+                        Cierra los ojos esos 3 segundos
+                      </strong>{" "}
+                      para que tu pupila se adapte y no recibas el flash del blanco directo.
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    El cambio de claro a oscuro es <strong className="text-[hsl(var(--success))]">más amable</strong>{" "}
+                    para los ojos · igual te haremos un contador 3-2-1 con una transición
+                    suave de ~1.4 segundos.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 mb-3">
+                <button
+                  onClick={cancelAll}
+                  className="flex-1 px-4 py-2 rounded-md border border-border bg-secondary/40 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition"
+                >
+                  Mantener {isDark ? "oscuro" : "claro"}
+                </button>
+                <button
+                  onClick={confirmAndStartCountdown}
+                  className="flex-1 px-4 py-2 rounded-md bg-[hsl(var(--brand-violet))] text-white text-sm font-medium hover:brightness-110 transition inline-flex items-center justify-center gap-1.5"
+                >
+                  <Eye className="size-3.5" />
+                  Sí, cambiar
+                </button>
+              </div>
+
+              <label className="inline-flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer pt-3 border-t border-border/60 w-full">
+                <input
+                  type="checkbox"
+                  checked={warnPref}
+                  onChange={toggleWarnPref}
+                  className="rounded accent-[hsl(var(--brand-violet))]"
+                />
+                <span>Avisarme con esta alerta antes del cambio (recomendado)</span>
+              </label>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Fase 2 · Countdown 3-2-1 ────────────────────────────────────── */}
+      <AnimatePresence>
+        {phase === "countdown" && countdown !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[500] grid place-items-center bg-background/85 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 8 }}
+              animate={{ scale: 1, y: 0 }}
+              className="relative rounded-2xl border border-border bg-card p-7 max-w-sm w-[92%] shadow-2xl text-center"
+            >
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
+                Cierra los ojos
+              </div>
+              <div className="flex items-end justify-center py-4">
                 <motion.div
                   key={countdown}
                   initial={{ scale: 0.7, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 1.2, opacity: 0 }}
                   transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                  className="font-display text-7xl font-bold leading-none text-aurora tabular"
+                  className="font-display text-8xl font-bold leading-none text-aurora tabular"
                 >
                   {countdown}
                 </motion.div>
               </div>
-
-              <div className="flex items-center justify-between text-[11px] gap-3 mt-2 pt-3 border-t border-border/60">
-                <label className="inline-flex items-center gap-2 text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={warnPref}
-                    onChange={toggleWarnPref}
-                    className="rounded accent-[hsl(var(--brand-violet))]"
-                  />
-                  <span>Avisarme antes del cambio</span>
-                </label>
-                <button
-                  onClick={cancelCountdown}
-                  className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-                >
-                  Cancelar
-                </button>
-              </div>
+              <button
+                onClick={cancelAll}
+                className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-4 hover:underline mt-3"
+              >
+                Cancelar
+              </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── Soft cross-fade overlay ─────────────────────────────────────────── */}
+      {/* ── Soft cross-fade overlay (mientras cambia el tema) ───────────── */}
       <AnimatePresence>
         {transitioning && (
           <motion.div
@@ -213,7 +272,7 @@ export function ThemeToggle() {
             exit={{ opacity: 0 }}
             transition={{
               duration: 1.4,
-              times: [0, 0.36, 0.5, 1], // 0-500ms fade in · 500-700ms hold · 700-1400ms fade out
+              times: [0, 0.36, 0.5, 1],
               ease: "easeInOut",
             }}
             style={{ background: overlayColor }}

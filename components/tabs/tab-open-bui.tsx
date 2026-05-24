@@ -1,210 +1,228 @@
 "use client";
 import * as React from "react";
-import { Plus, Pencil, FileImage, Maximize2, Save } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { Pencil, PenTool, Sparkles } from "lucide-react";
 import { SectionHeader } from "@/components/shared/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TldrawCanvas } from "@/components/open-bui/canvas";
+import { SkillPicker } from "@/components/open-bui/skill-picker";
+import { BriefInput } from "@/components/open-bui/brief-input";
+import { DesignPreview } from "@/components/open-bui/design-preview";
+import { ExportButtons } from "@/components/open-bui/export-buttons";
+import { SKILLS, getSkill } from "@/components/open-bui/skills";
+import { useDashboard } from "@/lib/store";
 
-const DOC_NAME_KEY = "bw_open_bui_name";
-const DEFAULT_NAME = "Pieza sin título · 22 may";
+const STORAGE_KEY_SKILL = "bw_open_design_skill";
+const STORAGE_KEY_BRIEF = "bw_open_design_brief";
 
 /**
- * Tipo mínimo del editor de tldraw que usamos.
- * Evitamos importar el tipo real para no forzar la dependencia en SSR.
+ * Open Design · Bewe OS
+ *
+ * Inspirado en Open Design (nexu-io). Reemplaza el canvas tldraw como
+ * default por un generador AI de piezas:
+ *   1. Usuario elige skill (IG post, FB ad, banner…)
+ *   2. Escribe brief en lenguaje natural
+ *   3. Mark/Lúa genera HTML+CSS via /api/design/generate
+ *   4. Preview en iframe sandboxed · export PNG / HTML
+ *
+ * El canvas tldraw queda como "modo manual" accesible por toggle.
  */
-type TldrawEditor = {
-  zoomToFit: (opts?: unknown) => void;
-  getCurrentPageShapeIds: () => Set<string>;
-  store: { listen: (cb: () => void) => () => void };
-};
-
 export function TabOpenBui() {
-  const [docName, setDocName] = React.useState(DEFAULT_NAME);
-  const [editing, setEditing] = React.useState(false);
-  const [reloadKey, setReloadKey] = React.useState(0);
-  const [savedAgo, setSavedAgo] = React.useState<string>("ahora");
+  const { aiPersona } = useDashboard();
+  const personaLabel = aiPersona === "lua" ? "Lúa OS" : "Mark OS";
 
-  const editorRef = React.useRef<TldrawEditor | null>(null);
-  const lastChangeRef = React.useRef<number>(Date.now());
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [mode, setMode] = React.useState<"design" | "canvas">("design");
+  const [skillId, setSkillId] = React.useState<string>(() => SKILLS[0].id);
+  const [brief, setBrief] = React.useState("");
+  const [html, setHtml] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [variant, setVariant] = React.useState(0);
 
-  // Hidratar nombre del doc
+  // Hidratar último skill y brief
   React.useEffect(() => {
     try {
-      const raw = localStorage.getItem(DOC_NAME_KEY);
-      if (raw) setDocName(raw);
+      const sk = localStorage.getItem(STORAGE_KEY_SKILL);
+      if (sk && SKILLS.some((s) => s.id === sk)) setSkillId(sk);
+      const br = localStorage.getItem(STORAGE_KEY_BRIEF);
+      if (br) setBrief(br);
     } catch {
       /* ignore */
     }
   }, []);
 
+  // Persistir cambios
   React.useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
-
-  // Refrescar el chip "Guardado · hace X" cada 5s
+    try {
+      localStorage.setItem(STORAGE_KEY_SKILL, skillId);
+    } catch {
+      /* ignore */
+    }
+  }, [skillId]);
   React.useEffect(() => {
-    const id = window.setInterval(() => {
-      const secs = Math.max(0, Math.round((Date.now() - lastChangeRef.current) / 1000));
-      if (secs < 5) setSavedAgo("ahora");
-      else if (secs < 60) setSavedAgo(`hace ${secs}s`);
-      else setSavedAgo(`hace ${Math.floor(secs / 60)} min`);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  function commitName() {
-    setEditing(false);
-    const next = docName.trim() || DEFAULT_NAME;
-    setDocName(next);
     try {
-      localStorage.setItem(DOC_NAME_KEY, next);
+      localStorage.setItem(STORAGE_KEY_BRIEF, brief);
     } catch {
       /* ignore */
     }
-  }
+  }, [brief]);
 
-  function handleMount(editor: unknown) {
-    const ed = editor as TldrawEditor;
-    editorRef.current = ed;
-    // Auto-save indicator: tldraw persiste solo (IndexedDB), nosotros solo
-    // marcamos el tiempo del último cambio para mostrar el chip.
+  const skill = getSkill(skillId);
+
+  async function generate(nextVariant: number) {
+    setLoading(true);
+    setError(null);
     try {
-      ed.store.listen(() => {
-        lastChangeRef.current = Date.now();
+      const r = await fetch("/api/design/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skillId, brief, variant: nextVariant }),
       });
-    } catch {
-      /* ignore */
-    }
-  }
-
-  function newDoc() {
-    if (!confirm("¿Crear documento nuevo? Se perderá el canvas actual.")) return;
-    try {
-      // tldraw v3 guarda en IndexedDB con prefijo TLDRAW_DOCUMENT_v2_<key>
-      indexedDB.databases?.().then((dbs) => {
-        for (const db of dbs ?? []) {
-          if (db.name?.includes("bw_open_bui_doc")) indexedDB.deleteDatabase(db.name);
-        }
-      });
-      // localStorage residual por si hubo
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith("TLDRAW_") || k.includes("bw_open_bui_doc"))
-        .forEach((k) => localStorage.removeItem(k));
-    } catch {
-      /* ignore */
-    }
-    setDocName(DEFAULT_NAME);
-    try {
-      localStorage.setItem(DOC_NAME_KEY, DEFAULT_NAME);
-    } catch {
-      /* ignore */
-    }
-    setReloadKey((n) => n + 1);
-    lastChangeRef.current = Date.now();
-  }
-
-  async function exportPng() {
-    const ed = editorRef.current;
-    if (!ed) return;
-    try {
-      const ids = Array.from(ed.getCurrentPageShapeIds());
-      if (ids.length === 0) {
-        alert("El canvas está vacío · dibuja algo antes de exportar.");
+      const data = await r.json();
+      if (!r.ok) {
+        setError(data?.error || `Error ${r.status}`);
+        setHtml(null);
         return;
       }
-      const { exportToBlob } = await import("tldraw");
-      const blob = await exportToBlob({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        editor: ed as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ids: ids as any,
-        format: "png",
-        opts: { background: true, scale: 2 },
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${docName.replace(/[^a-z0-9-_]+/gi, "_")}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      setHtml(data.html as string);
+      setVariant(nextVariant);
     } catch (e) {
-      console.error("[open-bui] export failed", e);
-      alert("No se pudo exportar el PNG.");
+      setError((e as Error).message || "Falló la generación");
+    } finally {
+      setLoading(false);
     }
   }
 
-  function zoomFit() {
-    editorRef.current?.zoomToFit();
+  function onGenerate() {
+    setVariant(0);
+    void generate(0);
+  }
+  function onVariant() {
+    void generate(variant + 1);
   }
 
   return (
-    <div className="space-y-4 max-w-[1500px]">
+    <div className="space-y-4 max-w-[1600px]">
       <SectionHeader
-        title="Open BUI"
-        sub="Canvas embebido · diseña piezas dentro del dashboard"
+        title="Open Design · Bewe OS"
+        sub={
+          mode === "design"
+            ? "Brief → AI genera HTML/CSS → preview → export"
+            : "Canvas manual · tldraw para dibujar a mano"
+        }
         right={
-          <Badge variant="violet" className="font-mono">
-            tldraw v3
-          </Badge>
+          <>
+            <Badge variant="violet" className="font-mono">
+              {mode === "design" ? `${personaLabel} · gen` : "tldraw v3"}
+            </Badge>
+            <Button
+              variant={mode === "design" ? "outline" : "default"}
+              size="sm"
+              onClick={() => setMode(mode === "design" ? "canvas" : "design")}
+              title={
+                mode === "design"
+                  ? "Abrir canvas manual tldraw"
+                  : "Volver al generador AI"
+              }
+            >
+              {mode === "design" ? (
+                <>
+                  <Pencil className="size-3.5" /> Canvas manual
+                </>
+              ) : (
+                <>
+                  <Sparkles className="size-3.5" /> Volver al generador
+                </>
+              )}
+            </Button>
+          </>
         }
       />
 
-      {/* TOOLBAR MINIMAL */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex-1 min-w-[200px]">
-          {editing ? (
-            <input
-              ref={inputRef}
-              value={docName}
-              onChange={(e) => setDocName(e.target.value)}
-              onBlur={commitName}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitName();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              className="w-full bg-transparent border-b border-[hsl(var(--brand-violet))] outline-none font-display font-bold tracking-[-0.015em] text-base leading-tight"
-            />
-          ) : (
-            <button
-              onClick={() => setEditing(true)}
-              className="group inline-flex items-center gap-2 text-left"
-            >
-              <span className="font-display font-bold tracking-[-0.015em] text-base leading-tight">
-                {docName}
-              </span>
-              <Pencil className="size-3 text-muted-foreground/60 group-hover:text-foreground transition-colors" />
-            </button>
-          )}
-        </div>
+      <AnimatePresence mode="wait">
+        {mode === "design" ? (
+          <motion.div
+            key="design"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.1fr)] gap-4"
+          >
+            {/* Sidebar: skills */}
+            <aside className="lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto lg:pr-1">
+              <SkillPicker activeId={skillId} onSelect={setSkillId} />
+            </aside>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono px-2 py-1 rounded-md bg-secondary/60 border border-border">
-            <Save className="size-2.5 text-[hsl(var(--success))]" />
-            Guardado · {savedAgo}
-          </span>
-          <Button variant="outline" size="sm" onClick={newDoc}>
-            <Plus className="size-3.5" /> Nuevo
-          </Button>
-          <Button variant="outline" size="sm" onClick={zoomFit}>
-            <Maximize2 className="size-3.5" /> Centrar
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportPng}>
-            <FileImage className="size-3.5" /> Exportar PNG
-          </Button>
-        </div>
-      </div>
+            {/* Centro: brief */}
+            <section>
+              <BriefInput
+                skill={skill}
+                value={brief}
+                onChange={setBrief}
+                onGenerate={onGenerate}
+                onVariant={onVariant}
+                loading={loading}
+                hasResult={html !== null}
+                personaLabel={personaLabel}
+              />
+              <div className="mt-6 pt-4 border-t border-border">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2 font-bold">
+                  Sobre Open Design
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Inspirado en{" "}
+                  <span className="text-foreground font-semibold">Open Design</span>{" "}
+                  (nexu-io). Replica local-first: 8 skills, brief en lenguaje
+                  natural, AI senior de Bewe te devuelve HTML+CSS listo para
+                  exportar.
+                </p>
+              </div>
+            </section>
 
-      {/* CANVAS FULL-HEIGHT */}
-      <div className="w-full h-[calc(100vh-220px)] min-h-[520px] rounded-xl border border-border bg-card overflow-hidden relative">
-        <TldrawCanvas
-          key={`canvas-${reloadKey}`}
-          persistenceKey="bw_open_bui_doc"
-          onMount={handleMount}
-        />
+            {/* Derecha: preview + export */}
+            <section>
+              <DesignPreview
+                skill={skill}
+                html={html}
+                loading={loading}
+                error={error}
+              />
+              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-[10px] text-muted-foreground/70 font-mono">
+                  {html
+                    ? `Variante ${variant} · ${Math.round(html.length / 1024)} KB`
+                    : "Sin pieza · pulsa Generar"}
+                </div>
+                <ExportButtons skill={skill} html={html} briefHint={brief} />
+              </div>
+            </section>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="canvas"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="w-full h-[calc(100vh-220px)] min-h-[520px] rounded-xl border border-border bg-card overflow-hidden relative"
+          >
+            <CanvasModeHint />
+            <TldrawCanvas persistenceKey="bw_open_bui_doc" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function CanvasModeHint() {
+  return (
+    <div className="absolute top-2 left-2 z-10 pointer-events-none">
+      <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground bg-card/80 backdrop-blur px-2 py-1 rounded-md border border-border">
+        <PenTool className="size-3" />
+        Modo manual · tldraw v3
       </div>
     </div>
   );

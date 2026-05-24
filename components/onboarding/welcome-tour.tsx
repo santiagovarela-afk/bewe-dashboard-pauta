@@ -2,11 +2,25 @@
 /**
  * Welcome Tour · onboarding full-screen para usuarios recién logueados.
  *
- * - Aparece SOLO si `localStorage.bw_welcome_seen` no existe.
- * - 5 slides con motion entries.
- * - Botón "Saltar" en cada slide. Botón "Mostrarme alrededor" en el slide 3
- *   dispara el RoleTour (mini spotlight sobre el sidebar).
- * - Re-disparable desde Config vía `triggerWelcomeAgain()`.
+ * 10 slides:
+ *   0. Welcome           — saludo personalizado
+ *   1. Las 4 áreas       — grid Pauta · Contenido · Analítica · Copiloto
+ *   2. Tu rol y tabs     — pills + botón "Mostrarme alrededor"
+ *   3. Pauta · Inversión — mini cards (Dashboard, Campañas, Estrategia, Paid)
+ *   4. Contenido         — mini cards (Anuncios, Orgánico, Parrilla, SEO)
+ *   5. Analítica         — mini cards (Performance, Open Design, Informe)
+ *   6. Copiloto IA       — Mark + Lúa lado a lado + memorias + Ctrl+K
+ *   7. Tour visual       — botón opcional para lanzar role-tour
+ *   8. Resumen           — wrap-up con bullets de "qué viste / qué falta"
+ *   9. Cierre            — "Buena suerte · que tu CPT esté siempre bajo €2.20"
+ *
+ * Flow welcome ↔ role-tour:
+ *   - El user puede lanzar el role-tour desde slide 2 o 7.
+ *   - El welcome se cierra y queda con flag `cameFromRoleTour=true`.
+ *   - Cuando el role-tour cierra, dispara `bw:role-tour-done` → re-abrimos
+ *     el welcome saltando directo al slide 8 (Resumen).
+ *
+ * Re-disparable desde Config con `triggerWelcomeAgain()`.
  */
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -14,8 +28,10 @@ import {
   ArrowRight,
   Bot,
   CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   Gauge,
+  KeyRound,
   LayoutDashboard,
   Megaphone,
   Palette,
@@ -31,8 +47,12 @@ import { ROLE_TABS, TABS } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { RoleTour } from "./role-tour";
+import { SlideSections } from "./slide-sections";
+import { SlideAgents } from "./slide-agents";
 
 const STORAGE_KEY = "bw_welcome_seen";
+const TOTAL_STEPS = 10;
+const SUMMARY_STEP = 8; // Slide al que volvemos tras el role-tour
 
 /** Permite a otros componentes (Config) re-disparar el welcome. */
 export function triggerWelcomeAgain() {
@@ -45,28 +65,28 @@ const AREAS = [
   {
     id: "pauta",
     title: "Pauta · Inversión",
-    desc: "Dashboard, campañas Meta, estrategia y paid media (Google · TikTok)",
+    desc: "Dashboard, campañas Meta, estrategia y paid media (Google · TikTok).",
     icon: TrendingUp,
     grad: "from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))]",
   },
   {
     id: "contenido",
     title: "Contenido · Creativo",
-    desc: "Anuncios, orgánico, parrilla editorial y SEO on-page",
+    desc: "Anuncios, orgánico, parrilla editorial y SEO on-page.",
     icon: Sparkles,
     grad: "from-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))]",
   },
   {
     id: "analitica",
     title: "Analítica",
-    desc: "Performance LTV/CAC, Open BUI (Brand) e informe ejecutivo",
+    desc: "Performance LTV/CAC, Open Design e informe ejecutivo.",
     icon: Gauge,
     grad: "from-[hsl(var(--brand-lime))] to-[hsl(var(--brand-violet))]",
   },
   {
     id: "ai",
     title: "Copiloto IA",
-    desc: "Gemini con memoria del plan Julián siempre a un Ctrl+K",
+    desc: "Mark o Lúa, con memoria del plan Julián, siempre a un Ctrl+K.",
     icon: Bot,
     grad: "from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-lime))]",
   },
@@ -96,33 +116,50 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
   const { user } = useDashboard();
   const [step, setStep] = React.useState(0);
   const [showRoleTour, setShowRoleTour] = React.useState(false);
-  const totalSteps = 5;
+  // Si el user lanzó el role-tour desde el welcome, esto evita el reset a slide 0
+  // cuando re-abrimos el welcome al terminar el role-tour. Se consume una vez.
+  const pendingReturnStepRef = React.useRef<number | null>(null);
 
-  // Reset to first step when opening
+  // Reset to first step when opening, salvo que vengamos del role-tour
+  // (en cuyo caso pendingReturnStepRef tiene el slide al que queremos saltar).
   React.useEffect(() => {
-    if (open) setStep(0);
+    if (!open) return;
+    if (pendingReturnStepRef.current != null) {
+      setStep(pendingReturnStepRef.current);
+      pendingReturnStepRef.current = null;
+    } else {
+      setStep(0);
+    }
   }, [open]);
 
   // Cerrar welcome y, una vez la animación de salida termina, abrir el role tour.
-  // Esto evita que el spotlight intente destacar el sidebar mientras el
-  // backdrop del welcome aún cubre todo (lo que rompía el flujo antes).
   function launchRoleTour() {
-    try {
-      localStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      /* ignore */
-    }
+    // Marcamos que al volver del role-tour saltamos al slide Resumen.
+    pendingReturnStepRef.current = SUMMARY_STEP;
     onClose();
-    // El AnimatePresence del modal tarda ~300ms · esperamos 420ms para safety
     window.setTimeout(() => setShowRoleTour(true), 420);
   }
 
-  // ESC = saltar
+  function closeRoleTour() {
+    setShowRoleTour(false);
+    // Si veníamos del welcome, re-abrirlo en el slide Resumen.
+    if (pendingReturnStepRef.current != null) {
+      // Emitir evento global para que el trigger nos vuelva a abrir.
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("bw:show-welcome"));
+      }, 220);
+    }
+    // Notificar a posibles listeners (por consistencia con el contrato del evento).
+    window.dispatchEvent(new CustomEvent("bw:role-tour-done"));
+  }
+
+  // ESC = saltar · ← / → = navegar
   React.useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") finish();
-      else if (e.key === "ArrowRight" && step < totalSteps - 1) setStep((s) => s + 1);
+      else if (e.key === "ArrowRight" && step < TOTAL_STEPS - 1)
+        setStep((s) => s + 1);
       else if (e.key === "ArrowLeft" && step > 0) setStep((s) => s - 1);
     }
     window.addEventListener("keydown", onKey);
@@ -136,11 +173,12 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
     } catch {
       /* ignore */
     }
+    pendingReturnStepRef.current = null;
     onClose();
   }
 
   function next() {
-    if (step >= totalSteps - 1) finish();
+    if (step >= TOTAL_STEPS - 1) finish();
     else setStep((s) => s + 1);
   }
 
@@ -152,6 +190,17 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
   const role = user?.role ?? "admin";
   const allowed = ROLE_TABS[role] ?? [];
   const allowedTabs = TABS.filter((t) => allowed.includes(t.id));
+
+  // Filtrar tabs por grupo (solo los que el rol puede ver)
+  const pautaTabs = allowedTabs
+    .filter((t) => t.group === "pauta")
+    .map((t) => t.id);
+  const contenidoTabs = allowedTabs
+    .filter((t) => t.group === "contenido")
+    .map((t) => t.id);
+  const analiticaTabs = allowedTabs
+    .filter((t) => t.group === "analítica")
+    .map((t) => t.id);
 
   return (
     <>
@@ -198,25 +247,26 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
               className={cn(
                 "relative w-full max-w-2xl rounded-2xl border border-border bg-card/95 backdrop-blur-2xl",
                 "shadow-[0_40px_80px_-30px_hsl(var(--brand-violet)/0.5)] p-7 md:p-10",
+                "max-h-[88vh] overflow-y-auto",
               )}
             >
               {/* Progress dots */}
               <div className="flex items-center gap-1.5 mb-6">
-                {Array.from({ length: totalSteps }).map((_, i) => (
+                {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
                   <span
                     key={i}
                     className={cn(
                       "h-1 rounded-full transition-all",
                       i === step
-                        ? "w-6 bg-[hsl(var(--brand-violet))]"
+                        ? "w-5 bg-[hsl(var(--brand-violet))]"
                         : i < step
-                          ? "w-3 bg-[hsl(var(--brand-violet)/0.5)]"
-                          : "w-3 bg-border",
+                          ? "w-2.5 bg-[hsl(var(--brand-violet)/0.5)]"
+                          : "w-2.5 bg-border",
                     )}
                   />
                 ))}
                 <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-                  {step + 1} / {totalSteps}
+                  {step + 1} / {TOTAL_STEPS}
                 </span>
               </div>
 
@@ -234,13 +284,64 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                     onShowAround={launchRoleTour}
                   />
                 )}
-                {step === 3 && <SlideAi key="s3" />}
+                {step === 3 && (
+                  <SlideSections
+                    key="s3"
+                    title="Pauta · Inversión"
+                    subtitle="Donde vive la inversión Meta y el plan diario."
+                    accent="var(--brand-violet)"
+                    tabIds={
+                      pautaTabs.length > 0
+                        ? pautaTabs
+                        : ["dashboard", "campanas", "estrategia", "paid"]
+                    }
+                    HeaderIcon={TrendingUp}
+                  />
+                )}
                 {step === 4 && (
-                  <SlideReady
+                  <SlideSections
                     key="s4"
-                    displayName={displayName}
+                    title="Contenido · Creativo"
+                    subtitle="Anuncios pagados, orgánico, parrilla y SEO en un solo flujo."
+                    accent="var(--brand-cyan)"
+                    tabIds={
+                      contenidoTabs.length > 0
+                        ? contenidoTabs
+                        : ["anuncios", "organico", "parrilla", "seo"]
+                    }
+                    HeaderIcon={Sparkles}
+                  />
+                )}
+                {step === 5 && (
+                  <SlideSections
+                    key="s5"
+                    title="Analítica"
+                    subtitle="Cómo se ve el resultado del plan Julián."
+                    accent="var(--brand-lime)"
+                    tabIds={
+                      analiticaTabs.length > 0
+                        ? analiticaTabs
+                        : ["performance", "open-bui", "informe"]
+                    }
+                    HeaderIcon={Gauge}
+                  />
+                )}
+                {step === 6 && <SlideAgents key="s6" />}
+                {step === 7 && (
+                  <SlideTourOptional
+                    key="s7"
                     onShowAround={launchRoleTour}
                   />
+                )}
+                {step === 8 && (
+                  <SlideSummary
+                    key="s8"
+                    sectionsCount={allowedTabs.length}
+                    role={role}
+                  />
+                )}
+                {step === 9 && (
+                  <SlideClosing key="s9" displayName={displayName} />
                 )}
               </AnimatePresence>
 
@@ -274,7 +375,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                   onClick={next}
                   className="gap-1.5"
                 >
-                  {step >= totalSteps - 1 ? "Empezar" : "Siguiente"}
+                  {step >= TOTAL_STEPS - 1 ? "Empezar" : "Siguiente"}
                   <ArrowRight className="size-3.5" />
                 </Button>
               </div>
@@ -283,7 +384,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
         )}
       </AnimatePresence>
 
-      <RoleTour open={showRoleTour} onClose={() => setShowRoleTour(false)} />
+      <RoleTour open={showRoleTour} onClose={closeRoleTour} />
     </>
   );
 }
@@ -293,7 +394,6 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
 function SlideWelcome({ displayName }: { displayName: string }) {
   return (
     <motion.div
-      key="s0"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
@@ -316,7 +416,7 @@ function SlideWelcome({ displayName }: { displayName: string }) {
         <strong className="text-foreground">contenido orgánico</strong>, el{" "}
         <strong className="text-foreground">SEO</strong> y la{" "}
         <strong className="text-foreground">analítica de performance</strong> del plan que
-        Julián montó para mayo 2026. Te tomará 30 segundos.
+        Julián montó para mayo 2026. Te tomará menos de un minuto.
       </p>
     </motion.div>
   );
@@ -325,14 +425,13 @@ function SlideWelcome({ displayName }: { displayName: string }) {
 function SlideAreas() {
   return (
     <motion.div
-      key="s1"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.35 }}
     >
       <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight mb-2">
-        Qué hay aquí
+        Las 4 áreas
       </h2>
       <p className="text-[13px] text-muted-foreground mb-5 leading-relaxed">
         Cuatro áreas. Una sola fuente de verdad.
@@ -383,7 +482,6 @@ function SlideRole({
 }) {
   return (
     <motion.div
-      key="s2"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
@@ -424,79 +522,179 @@ function SlideRole({
       >
         Mostrarme alrededor →
       </button>
+      <p className="text-[10.5px] text-muted-foreground/70 mt-2 leading-relaxed">
+        Lanza un pequeño tour visual sobre sidebar, topbar y copiloto. Al terminar
+        vuelves aquí con el resumen.
+      </p>
     </motion.div>
   );
 }
 
-function SlideAi() {
+function SlideTourOptional({ onShowAround }: { onShowAround: () => void }) {
   return (
     <motion.div
-      key="s3"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.35 }}
     >
       <div className="flex items-center gap-3 mb-4">
-        <div className="size-12 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] grid place-items-center shadow-[0_8px_24px_-8px_hsl(var(--brand-violet)/0.7)]">
-          <Bot className="size-6 text-white" />
+        <div className="size-11 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_8px_24px_-8px_hsl(var(--brand-cyan)/0.65)]">
+          <Target className="size-5 text-white" />
         </div>
         <div>
-          <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight">
-            Copiloto IA
+          <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight leading-tight">
+            Tour visual (opcional)
           </h2>
-          <p className="text-[11px] font-mono text-muted-foreground">
-            Gemini · con memoria del plan Julián
+          <p className="text-[11.5px] text-muted-foreground mt-0.5">
+            Un spotlight sobre los elementos clave del shell.
           </p>
         </div>
       </div>
-      <ul className="space-y-2.5 text-[13px] text-muted-foreground leading-relaxed">
-        <li className="flex gap-2.5 items-start">
-          <span className="mt-1 size-1.5 rounded-full bg-[hsl(var(--brand-violet))] shrink-0" />
-          <span>
-            Abre el chat con{" "}
-            <kbd className="px-1.5 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
-              Ctrl/Cmd+K
-            </kbd>{" "}
-            desde cualquier tab.
+      <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
+        Si quieres ver dónde está cada cosa antes de empezar, lanza el tour visual:
+        ilumina sidebar, topbar, theme toggle y copiloto, uno por uno. Cuando termine
+        volverás aquí con el resumen final.
+      </p>
+      <button
+        type="button"
+        onClick={onShowAround}
+        className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[hsl(var(--brand-violet))] hover:underline underline-offset-4"
+      >
+        Hacer tour visual ahora →
+      </button>
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed mt-3">
+        ¿Prefieres saltarlo? Continúa con <strong className="text-foreground/80">Siguiente</strong> para ver el resumen.
+      </p>
+    </motion.div>
+  );
+}
+
+function SlideSummary({
+  sectionsCount,
+  role,
+}: {
+  sectionsCount: number;
+  role: string;
+}) {
+  const items = [
+    {
+      icon: CheckCircle2,
+      tone: "ok" as const,
+      text: (
+        <>
+          Tienes acceso a{" "}
+          <strong className="text-foreground">{sectionsCount} secciones</strong> según
+          tu rol{" "}
+          <span className="font-mono text-[10.5px] text-[hsl(var(--brand-violet))]">
+            ({role})
           </span>
-        </li>
-        <li className="flex gap-2.5 items-start">
-          <span className="mt-1 size-1.5 rounded-full bg-[hsl(var(--brand-cyan))] shrink-0" />
-          <span>
-            Conoce reglas Julián (ABO, CPT thresholds, día 7, día 14, C7) y datos en vivo
-            de las campañas.
-          </span>
-        </li>
-        <li className="flex gap-2.5 items-start">
-          <span className="mt-1 size-1.5 rounded-full bg-[hsl(var(--brand-lime))] shrink-0" />
-          <span>
-            Cada respuesta tiene un botón{" "}
-            <strong className="text-foreground">Recordar</strong> para guardar hallazgos.
-            Esa memoria se vuelve contexto del agente para futuras conversaciones.
-          </span>
-        </li>
-        <li className="flex gap-2.5 items-start">
-          <span className="mt-1 size-1.5 rounded-full bg-[hsl(var(--destructive))] shrink-0" />
-          <span>
-            Si te preguntan algo fuera del plan, dice que no lo sabe — no inventa datos.
-          </span>
-        </li>
+          .
+        </>
+      ),
+    },
+    {
+      icon: CheckCircle2,
+      tone: "ok" as const,
+      text: (
+        <>
+          Tu copiloto{" "}
+          <strong className="text-foreground">Mark</strong> /{" "}
+          <strong className="text-foreground">Lúa</strong> entiende el plan, los datos en vivo
+          y la memoria creativa.
+        </>
+      ),
+    },
+    {
+      icon: CheckCircle2,
+      tone: "ok" as const,
+      text: (
+        <>
+          El conector vigila el token Meta · status visible como{" "}
+          <strong className="text-foreground">pill</strong> en el topbar.
+        </>
+      ),
+    },
+    {
+      icon: KeyRound,
+      tone: "warn" as const,
+      text: (
+        <>
+          Pendiente:{" "}
+          <strong className="text-foreground">conecta tu Meta System User Token</strong>{" "}
+          (ver{" "}
+          <code className="px-1 py-0.5 rounded bg-background/60 border border-border text-[10.5px] font-mono">
+            _docs/SETUP-TOKENS.md
+          </code>
+          ).
+        </>
+      ),
+    },
+    {
+      icon: Sparkles,
+      tone: "tip" as const,
+      text: (
+        <>
+          Tip: usa{" "}
+          <kbd className="px-1.5 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
+            Ctrl/Cmd+K
+          </kbd>{" "}
+          para abrir el copiloto desde donde estés.
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.35 }}
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="size-11 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_8px_24px_-8px_hsl(var(--brand-violet)/0.65)]">
+          <CheckCircle2 className="size-5 text-white" />
+        </div>
+        <div>
+          <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight leading-tight">
+            Resumen
+          </h2>
+          <p className="text-[11.5px] text-muted-foreground mt-0.5">
+            Qué acabas de ver y qué hacer primero.
+          </p>
+        </div>
+      </div>
+      <ul className="space-y-2.5">
+        {items.map((it, i) => {
+          const Icon = it.icon;
+          const toneClass =
+            it.tone === "ok"
+              ? "text-[hsl(var(--brand-lime))]"
+              : it.tone === "warn"
+                ? "text-[hsl(var(--brand-ember,38_92%_50%))]"
+                : "text-[hsl(var(--brand-cyan))]";
+          return (
+            <motion.li
+              key={i}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.06 * i, duration: 0.28 }}
+              className="flex gap-2.5 items-start text-[12.5px] text-muted-foreground leading-relaxed"
+            >
+              <Icon className={cn("size-4 shrink-0 mt-0.5", toneClass)} />
+              <span>{it.text}</span>
+            </motion.li>
+          );
+        })}
       </ul>
     </motion.div>
   );
 }
 
-function SlideReady({
-  displayName,
-  onShowAround,
-}: {
-  displayName: string;
-  onShowAround: () => void;
-}) {
+function SlideClosing({ displayName }: { displayName: string }) {
   return (
     <motion.div
-      key="s4"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
@@ -514,18 +712,15 @@ function SlideReady({
       <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-2">
         Listo, {displayName}.
       </h2>
-      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-4">
-        Si quieres un recorrido visual por sidebar, topbar y copiloto, lánzalo ahora.
+      <p className="text-[14px] text-foreground/85 leading-relaxed max-w-md mx-auto mb-1">
+        Buena suerte.
       </p>
-      <button
-        type="button"
-        onClick={onShowAround}
-        className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[hsl(var(--brand-violet))] hover:underline underline-offset-4"
-      >
-        Hacer tour visual ahora →
-      </button>
-      <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-md mx-auto mt-3">
-        También puedes re-disparar este tour desde{" "}
+      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-4 italic">
+        Que tu CPT esté siempre bajo{" "}
+        <strong className="text-[hsl(var(--brand-violet))] not-italic">€2.20</strong>.
+      </p>
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-md mx-auto">
+        Puedes re-disparar este tour desde{" "}
         <strong className="text-foreground/85">Config → Memoria del agente</strong>.
       </p>
     </motion.div>

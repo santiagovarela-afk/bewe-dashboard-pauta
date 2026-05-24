@@ -2,7 +2,6 @@
 import * as React from "react";
 import { motion } from "motion/react";
 import { ArrowRight, Lock } from "lucide-react";
-import { USERS } from "@/lib/config";
 import { useDashboard } from "@/lib/store";
 import { AuroraBg } from "@/components/fx/aurora-bg";
 import { NoiseBackdrop } from "@/components/fx/noise";
@@ -19,24 +18,39 @@ export function LoginScreen() {
   const [err, setErr] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
-  function handle(e?: React.FormEvent) {
+  async function handle(e?: React.FormEvent) {
     e?.preventDefault();
     setErr(null);
     setSubmitting(true);
-    const u = USERS[email.trim().toLowerCase()];
-    if (!u || u.pass !== pass) {
-      setErr("Correo o contraseña incorrectos.");
-      setSubmitting(false);
-      return;
-    }
-    setTimeout(() => {
-      setUser({
-        email: email.trim().toLowerCase(),
-        name: u.name,
-        role: u.role as "admin" | "lead" | "content",
+    try {
+      const r = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password: pass,
+        }),
       });
+      const data = await r.json();
+      if (!r.ok || !data.ok) {
+        setErr(data.error || "Correo o contraseña incorrectos.");
+        setSubmitting(false);
+        return;
+      }
+      setUser({
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role,
+      });
+    } catch (err) {
+      setErr(
+        "No pude validar (conexión perdida). Reintenta en unos segundos.",
+      );
+      // eslint-disable-next-line no-console
+      console.error("login error", err);
+    } finally {
       setSubmitting(false);
-    }, 350);
+    }
   }
 
   return (
@@ -80,7 +94,7 @@ export function LoginScreen() {
             Control de pauta.
           </GradientHeading>
           <p className="text-sm text-muted-foreground mb-7">
-            Mayo 2026 · 6 campañas · €3 000 · Acceso solo equipo Bewe
+            Acceso solo equipo Bewe
           </p>
 
           <form onSubmit={handle} className="space-y-4">

@@ -1,13 +1,16 @@
 # Deploy a Vercel · paso a paso
 
-> Tiempo total: ~15 minutos. La primera vez tarda más por el setup de env vars.
+> Tiempo total: ~20 minutos. La primera vez tarda más por el setup de
+> las **20+ env vars** (todo lo sensible está en env, NO en el código).
 
 ## Pre-requisitos
 
 - Cuenta GitHub con acceso al repo `santiagovarela-afk/bewe-dashboard-pauta`
-- Email para crear cuenta Vercel (puede ser el mismo de GitHub)
-- Tu **META_TOKEN** ya generado (lo tienes en `.env.local`)
-- Tu **GEMINI_API_KEY** ya generada
+- Email para crear cuenta Vercel
+- Tu **META_TOKEN** + **GEMINI_API_KEY**
+- Las 6 contraseñas de usuarios (guardadas en `_docs/_internal/credentials.md` · local)
+- IDs reales de Meta account / page / IG
+- IDs reales de las 6 campañas activas
 
 ---
 
@@ -15,144 +18,139 @@
 
 1. Ve a [vercel.com/signup](https://vercel.com/signup)
 2. Click **"Continue with GitHub"** · autorizar
-3. Te lleva a tu dashboard de Vercel · skip el paso "Import" por ahora
+3. Te lleva a tu dashboard de Vercel
 
 ---
 
 ## Paso 2 · Importar el proyecto
 
-1. En el dashboard Vercel → botón **"Add New..."** → **"Project"**
-2. Lista de repos de tu GitHub aparece. Busca `bewe-dashboard-pauta`
-3. Click **"Import"**
+1. **"Add New..."** → **"Project"**
+2. Buscá `bewe-dashboard-pauta` → **"Import"**
 
 ### Configure Project
 
 | Campo | Valor |
 |---|---|
-| **Framework Preset** | `Next.js` (auto-detectado) |
-| **Root Directory** | `./` (default) |
-| **Build Command** | `npm run build` (default) |
-| **Output Directory** | `.next` (default) |
-| **Install Command** | `npm install` (default) |
-| **Node.js Version** | `22.x` o `20.x` (auto) |
+| **Framework Preset** | `Next.js` (auto) |
+| **Root Directory** | `./` |
+| **Build Command** | `npm run build` |
+| **Output Directory** | `.next` |
+| **Install Command** | `npm install` |
+| **Node.js Version** | `22.x` o `20.x` |
 
-**NO hagas click Deploy todavía.** Primero las env vars.
-
----
-
-## Paso 3 · Configurar Environment Variables
-
-Click en **"Environment Variables"** (en la misma pantalla de Configure Project).
-
-Agrega estas 4 variables, una por una:
-
-| Name | Value | Environment |
-|---|---|---|
-| `META_TOKEN` | `EAA0pv...tu-token` (el largo, el de `.env.local`) | **Production + Preview + Development** |
-| `GEMINI_API_KEY` | `AIzaSy...` (la tuya · de `.env.local` · empieza con `AIza`) | **Production + Preview + Development** |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | **Production + Preview + Development** |
-| `GEMINI_MAX_TOKENS` | `2048` | **Production + Preview + Development** |
-
-**Importante**: marca las **3 environments** para cada variable (Production · Preview · Development). Si solo marcas Production, los previews fallan.
-
-### ⚠️ Sobre los secrets
-
-- **NUNCA** pegues tokens en commit messages o en código fuente
-- Las env vars en Vercel quedan **cifradas at-rest** · solo accesibles al build/runtime
-- Si en algún momento el token se filtra, **regéneralo en Meta Business** y actualízalo aquí
+**NO hagas click Deploy todavía.**
 
 ---
 
-## Paso 4 · Deploy inicial
+## Paso 3 · Configurar las Environment Variables
 
-1. Click **"Deploy"**
-2. Vercel arranca el build (tarda ~2-3 min la primera vez)
-3. Si todo va bien, recibes un URL tipo:
-   ```
-   https://bewe-dashboard-pauta-abc123.vercel.app
-   ```
-4. **Verificar** que cargue:
-   - Visita el URL
-   - Login con tu cuenta admin
-   - El connector pill arriba debe pasar a verde "Meta conectado"
+Tenés 2 opciones:
 
-### Si el build falla
+### Opción A · Pegar TODAS de golpe (más rápido · recomendado)
 
-Mira los logs de Build. Errores comunes:
-- **`META_TOKEN no configurado`** · no agregaste la env var o marcaste sólo Production
-- **`Module not found`** · falta una dep en `package.json` (raro · ya está completo)
-- **`Type error`** · si pasaste algo localmente que no compila
+1. En "Environment Variables", click el botón **"Import .env"** o el icono de hoja
+2. Pegá el contenido completo de tu `.env.local`
+3. Marcá las 3 environments (Production · Preview · Development) para TODAS
 
-Solución 99% de las veces: revisa env vars y haz click "Redeploy".
+### Opción B · Una por una
 
----
+Tenés que agregar **estas 20 variables** mínimo:
 
-## Paso 5 · Custom domain (opcional)
+#### 🔒 Secretos (server-only · no se exponen al cliente)
 
-Si quieres un dominio bonito (ej. `pauta.bewe.io`):
+| Variable | Qué es |
+|---|---|
+| `META_TOKEN` | System User Token de Meta · empieza con `EAA0pv...` |
+| `GEMINI_API_KEY` | API key Google AI Studio · empieza con `AIzaSy...` |
+| `GEMINI_MODEL` | `gemini-2.5-flash` |
+| `GEMINI_MAX_TOKENS` | `2048` |
+| `AUTH_USERS_JSON` | **Array JSON con los 6 users** (ver formato abajo) |
+| `AI_MEMORY_RULES_JSON` | (opcional) Array JSON con reglas operativas vigentes |
 
-1. En Vercel proyecto → **Settings** → **Domains**
-2. Agregar `pauta.bewe.io`
-3. Vercel te muestra un CNAME · agrégalo en el DNS de bewe.io
-4. Espera 5-30 min · auto SSL via Let's Encrypt
-
----
-
-## Paso 6 · Auto-deploy desde GitHub
-
-Vercel ya queda configurado para auto-deploy:
-- **Push a `main`** → deploy a producción (URL principal)
-- **Push a otra branch** o **PR abierto** → deploy preview (URL preview única)
-
-Para deploy manual desde CLI (opcional):
-```bash
-npm install -g vercel
-cd "C:\Users\Svare\OneDrive\Escritorio\Pauta new Bewe - OS\dashboard-meta"
-vercel link            # primera vez
-vercel --prod          # deploy a prod
-vercel                 # deploy a preview
+**Formato exacto de `AUTH_USERS_JSON`** (pegalo en UNA sola línea sin saltos):
+```
+[{"email":"santiago.varela@bewe.io","password":"XXX","role":"admin","name":"Santiago"},{"email":"julian.varela@bewe.io","password":"XXX","role":"admin","name":"Julián"},{"email":"wendy.pamplona@bewe.io","password":"XXX","role":"admin","name":"Wendy"},{"email":"maria.chaparro@bewe.io","password":"XXX","role":"lead","name":"María"},{"email":"paula.gonzalez@bewe.io","password":"XXX","role":"content","name":"Paula"},{"email":"hernan.guzman@bewe.io","password":"XXX","role":"content","name":"Hernán"}]
 ```
 
+#### 🌐 Públicos en el cliente (NEXT_PUBLIC_*)
+
+| Variable | Ejemplo |
+|---|---|
+| `NEXT_PUBLIC_META_ACCOUNT_ID` | `act_929824683759001` |
+| `NEXT_PUBLIC_META_ACCOUNT_ID_NUMERIC` | `929824683759001` |
+| `NEXT_PUBLIC_META_PAGE_ID` | `225426867908315` |
+| `NEXT_PUBLIC_META_IG_ID` | `17841404681419259` |
+| `NEXT_PUBLIC_META_API_VERSION` | `v22.0` |
+| `NEXT_PUBLIC_PLAN_MONTH_LABEL` | `Mayo 2026` |
+| `NEXT_PUBLIC_PLAN_LAUNCH_ISO` | `2026-05-12T00:00:00` |
+| `NEXT_PUBLIC_PLAN_END_ISO` | `2026-05-31T23:59:59` |
+| `NEXT_PUBLIC_PLAN_DAY7_ISO` | `2026-05-19T00:00:00` |
+| `NEXT_PUBLIC_PLAN_DAY14_ISO` | `2026-05-26T00:00:00` |
+| `NEXT_PUBLIC_PLAN_TOTAL_DAYS` | `20` |
+| `NEXT_PUBLIC_PLAN_BUDGET` | `3000` |
+| `NEXT_PUBLIC_PLAN_CONTINGENCY` | `1000` |
+| `NEXT_PUBLIC_PLAN_CPT_AGGRESSIVE` | `1.57` |
+| `NEXT_PUBLIC_PLAN_CPT_TARGET` | `2.20` |
+| `NEXT_PUBLIC_PLAN_CPT_WARN` | `3.00` |
+| `NEXT_PUBLIC_PLAN_CPT_CRITICAL` | `5.50` |
+| `NEXT_PUBLIC_CAMPAIGNS_JSON` | Array JSON con las 6 campañas |
+
+**Formato `NEXT_PUBLIC_CAMPAIGNS_JSON`** (UNA sola línea):
+```
+[{"code":"C1","cid":"52551556599886","name":"MX_BELLEZA_WEB_MAY26","event":"CompleteRegistration","geo":"MX","vertical":"Belleza","daily":40,"total":520},{"code":"C2","cid":"52551556733086","name":"MX_COMERCIO_WEB_MAY26","event":"CompleteRegistration","geo":"MX","vertical":"Comercio","daily":21,"total":420},{"code":"C3","cid":"52551556895286","name":"MX_SERVICIOS_WEB_MAY26","event":"InitiateCheckout","geo":"MX","vertical":"Servicios","daily":16,"total":320,"replacedBy":"C3.NEW"},{"code":"C4","cid":"52551557046086","name":"CR_PA_CL_CO_BELLEZA_WEB_MAY26","event":"CompleteRegistration","geo":"CR+PA+CL+CO","vertical":"Belleza","daily":25,"total":360},{"code":"C5","cid":"52551557199886","name":"CR_PA_CL_CO_COMERCIO_WEB_MAY26","event":"InitiateCheckout","geo":"CR+PA+CL+CO","vertical":"Comercio","daily":14,"total":280},{"code":"C6","cid":"52551557419286","name":"CR_PA_CL_CO_SERVICIOS_WEB_MAY26","event":"InitiateCheckout","geo":"CR+PA+CL+CO","vertical":"Servicios","daily":10,"total":200}]
+```
+
+**Importante:** marcá las 3 environments para CADA variable.
+
 ---
 
-## Paso 7 · Compartir con el equipo
+## Paso 4 · Deploy
 
-Cuando esté funcionando:
-1. Comparte el URL de Vercel con tu equipo (los 6 usuarios)
-2. Cada uno entra con su email + password (USERS hardcoded en `lib/config.ts`)
-3. **Todos usan el mismo META_TOKEN** del backend · no tienen que configurar nada
-4. Cada uno tiene su propio chat con Mark/Lúa (storage scopeado por email)
-
----
-
-## Paso 8 · Vercel Analytics (opcional · gratis)
-
-1. En proyecto → **Analytics** tab
-2. Click **"Enable Analytics"**
-3. Te muestra: visitas, top pages, source/medium, country
-4. Útil para ver si el equipo realmente usa la herramienta
+1. Click **"Deploy"**
+2. Build dura 2-3 min
+3. Te da un URL `https://bewe-dashboard-pauta-xxx.vercel.app`
+4. **Verificá**: login con tu user · pill verde "Meta conectado" · Mark/Lúa responde
 
 ---
 
-## Costos
+## Paso 5 · Activar Vercel Authentication (gratis en Hobby)
 
-Plan **Hobby (gratis)**:
-- ✅ Suficiente para uso interno equipo Bewe (hasta 100k requests/mes)
-- ✅ HTTPS automático
-- ✅ 100 GB bandwidth/mes
-- ⚠️ Limite de 10 segundos por serverless function (lo justo para Meta API)
+**CRÍTICO** · sin esto el URL es público y cualquiera lo crawlea.
 
-Si necesitas más: Plan **Pro $20/mes** (mejora límites + analytics + soporte).
+1. Vercel proyecto → **Settings** → **Deployment Protection**
+2. **Vercel Authentication** → toggle **ON** → **Standard Protection**
+3. Solo gente con sesión Vercel (tu cuenta) puede entrar al URL antes del login
+
+---
+
+## Paso 6 · Custom domain (opcional)
+
+1. Settings → **Domains** → Add `pauta.bewe.io`
+2. Agregá el CNAME en DNS de bewe.io
+3. SSL auto vía Let's Encrypt en 5-30 min
+
+---
+
+## Cuando cambien las campañas (mes nuevo)
+
+NO hay que tocar código. Solo:
+1. Vercel → Settings → Environment Variables
+2. Editá `NEXT_PUBLIC_CAMPAIGNS_JSON` con las nuevas campañas
+3. Editá `NEXT_PUBLIC_PLAN_*` con el nuevo budget/dates
+4. Click **Redeploy** (no Use existing Build Cache)
+5. Live en 3 min
 
 ---
 
 ## Variables sensibles · checklist
 
-✅ `META_TOKEN` está en Vercel (no en código)
-✅ `GEMINI_API_KEY` está en Vercel (no en código)
-✅ `.env.local` está en `.gitignore` (no se sube)
-✅ `vercel.json` tiene headers de seguridad (X-Frame-Options, etc)
-✅ La cuenta de Vercel tiene 2FA activado (Settings → Security)
+- ✅ `.env.local` está en `.gitignore`
+- ✅ `META_TOKEN`, `GEMINI_API_KEY`, `AUTH_USERS_JSON` solo en Vercel · NO en repo
+- ✅ IDs Meta solo en env vars · NO hardcoded en código
+- ✅ Campañas solo en env vars · NO hardcoded
+- ✅ Vercel Authentication activado
+- ✅ 2FA activado en GitHub + Vercel + Meta Business
+- ✅ Plan budget y CPT thresholds solo en env vars
 
 ---
 
@@ -160,32 +158,31 @@ Si necesitas más: Plan **Pro $20/mes** (mejora límites + analytics + soporte).
 
 | Síntoma | Posible causa | Fix |
 |---|---|---|
-| 404 en `/` | Routing mal · variable `NEXT_PUBLIC_*` faltante | Revisar build logs |
-| Meta pill rojo "Sin token" | env `META_TOKEN` no llegó a runtime | Revisar env vars en Vercel · re-deploy |
-| Mark/Lúa no responde | Quota Gemini agotada o key incorrecta | Logs en Vercel → Functions → `/api/gemini` |
-| 500 errors | Algo cambió en `lib/seed-data.ts` | Revisar logs de Functions |
+| Login dice "Auth no configurado" | Falta `AUTH_USERS_JSON` o tiene mal formato | Verificá JSON válido en Vercel env vars |
+| 404 en `/` | Routing roto | Build logs |
+| Pill rojo "Sin token" | Falta `META_TOKEN` | Vercel env vars → Redeploy |
+| Mark no responde | Quota Gemini o key incorrecta | Logs `/api/gemini` |
+| Dashboard vacío sin datos | Campañas JSON mal o vacío | Revisá `NEXT_PUBLIC_CAMPAIGNS_JSON` |
 
-Ver logs:
-1. Vercel proyecto → **Logs** tab
-2. Filtra por `Functions` para ver errores de API
-3. Filtra por `Build` para ver errores de compile
+Logs: Vercel proyecto → **Logs** tab → filtrá por `Functions` o `Build`.
 
 ---
 
 ## Rollback rápido
 
-Si un deploy nuevo rompe algo:
 1. Vercel → **Deployments**
-2. Encuentra el último deploy que funcionaba
-3. Click `···` → **"Promote to Production"**
-4. Vuelve a producción en 30 seg
+2. Último deploy que funcionaba → `···` → **"Promote to Production"**
+3. Vuelve a prod en 30 seg
 
 ---
 
-## Próximos pasos post-deploy
+## Costos
 
-1. Compartir URL con Julián primero para review
-2. Asegurar que el welcome tour funcione bien para nuevos usuarios
-3. Validar que las 4 env vars están en producción
-4. Activar Vercel Analytics para ver uso real
-5. Considerar habilitar **Password Protection** (Settings → Deployment Protection) si NO quieres que el URL sea público
+Plan **Hobby (gratis)** alcanza para uso interno equipo Bewe:
+- 100k requests/mes
+- HTTPS auto
+- 100 GB bandwidth/mes
+- Vercel Authentication incluido
+- 10s timeout por serverless function
+
+Si crece: **Pro $20/mes**.

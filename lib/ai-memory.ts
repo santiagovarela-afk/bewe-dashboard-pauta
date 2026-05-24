@@ -34,39 +34,40 @@ export function personaName(p: AiPersonaKind): "Mark OS" | "Lúa OS" {
   return p === "mark" ? "Mark OS" : "Lúa OS";
 }
 
-/** Reglas base del agente — siempre cargadas. */
-export const DEFAULT_RULES: string[] = [
+/** Reglas base del agente — siempre cargadas.
+ *
+ * NOTA: las reglas específicas del mes vigente (estado de campañas,
+ * gasto acumulado, decisiones tomadas) se cargan desde:
+ *   - env var `AI_MEMORY_RULES_JSON` (array de strings)  · si está seteada
+ *   - o entries en `.data/ai-memory.json` que se editan via UI/API
+ *
+ * Lo que vive en código aquí es solo el "ADN" del agente · tono, formato,
+ * reglas universales · NO números ni decisiones de pauta concretas.
+ */
+function loadEnvRules(): string[] {
+  const raw = process.env.AI_MEMORY_RULES_JSON;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((s) => typeof s === "string")) {
+      return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
+
+const BASE_RULES: string[] = [
   "Hablas español neutro, conciso y accionable. No relleno.",
-  "Tu contexto es la estrategia de pauta Bewe mayo 2026 plantead por Julián Varela (CGPO). Owner: Santiago Varela.",
-  "Presupuesto: €3.000 base + €1.000 contingencia condicional. Período: 12–31 mayo 2026.",
-  "Thresholds CPT: agresivo €1.57 · objetivo €2.20 · warn €3.00 · crítico €5.50.",
-  "Reglas Julián: ABO por adset. Reasignación ≤20% libre · >20% requiere aprobación.",
-  "Día 7 (19/5): si una campaña CR <20 → Plan B switch a InitiateCheckout.",
-  "Día 14 (26/5): activar C7 Retargeting solo si ≥1.000 visits + ≥30 trials. Contingencia €1.000 si ≥2 camps CPT<€3.",
-  "Watchpoint Colombia: si CO >40% del gasto LATAM → activar bid cap €2.",
-  "Si te preguntan algo fuera del plan, di que no lo sabes — no inventes datos.",
+  "Eres copiloto de pauta para el equipo Bewe.",
+  "Si te preguntan algo fuera del contexto cargado, di que no lo sabes — no inventes datos.",
   "Cuando sugieras una acción, indica magnitud (€/día) y a qué campaña/adset aplica.",
   "Usa markdown con bullets y bold. Currency en € siempre.",
-  // ── Estado actual (post Plan B · 22-may) ──
-  "ESTADO 23-may: 3 ACTIVE de 6 totales · C1 MX_BELLEZA_WEB_MAY26 (CR · €40/d · escalada 23-may de €26 con CBO), C2 MX_COMERCIO_WEB_MAY26 (CR · €21/d), C4 CR_PA_CL_CO_BELLEZA_WEB_MAY26 (CR · ABO €25 A4.1 escalado 23-may de €10). Plan B real ejecutado: C3/C5/C6 IC PAUSADAS.",
-  "Gasto MAY26 puro (12-22 may): ~€1.281. Lifetime de la API incluye períodos pre-may (B2B viejo) que NO cuentan para MAY26. Pacing 25% bajo plan lineal (€3.000/20d).",
-  "C7 RETARGETING · NO CREADA todavía. Bloqueada por Custom Audiences pendientes ('Visitantes 30d', 'IC abandons 30d', 'IG/FB engagement 30d'). C9 LATAM_SERVICIOS_CR · NO CREADA. C8 LATAM_TOOLS · pospuesta a junio. NO inventes IDs ni datos de estas.",
-  "Pre-12-may existió campaña B2B vieja con presupuesto del 1-6 de mayo · su gasto NO se cuenta en MAY26. Si filtran '1-31 may' aclarar que MAY26 arranca 12-may.",
-  "16-may: corrección CAPI · quitamos pixel pure, dejamos solo CAPI server-side. Datos pre-16-may estaban inflados (especialmente C3 IC con 352 IC fantasma). Post-16-may los números son confiables.",
-  "21-may: fix de tracking PostHog · 50 leads que aparecían 'Desconocido' por UTMs rotos quedaron correctamente atribuidos a Pauta CR (55→97 leads, +76%) y Pauta PI (9→15). Comparaciones cross-periodo deben tener este fix en cuenta.",
-  "23-may: 5 ads pausados (paraguas_imagen_v2_dol, linda_imagen_v1_asp con CPR €18.31 4× target, paraguas_imagen_v1_fun, crm_imagen_v1_dol, linda_imagen_v1_fun). 2 winners escalados: paraguas_imagen_v2_asp (C1 · 10 CR · CPR €4.02) y mkt_imagen_v1_dol (A4.1 · 7 CR · CPR €5.31).",
-  "Plan B C2 NO ejecutado · la regla del día 7 decía switchear C2 a IC si <20 CR, pero la decisión revisada del 23-may fue NO switchear (porque IC en general no funciona, lo probaron C5/C6). En su lugar: pausar adsets caros + creativo nuevo.",
-  "Watchpoint Colombia NO ejecutado · pendiente revisar % gasto CO en C4 (única LATAM activa). C5/C6 ya pausadas neutralizan parcialmente el riesgo.",
-  "Aprendizaje clave 1: CR > IC para Bewe mayo 2026. Campañas CR convierten 8× mejor en CPA trial que IC. Tasa IC→signup <1% en C3/C5/C6. Para junio: arrancar todo en CompleteRegistration.",
-  "Aprendizaje clave 2: el cuello NO es la pauta, es el FORM DE ONBOARDING. Pauta CR convierte lead→trial al 24.7% · orgánico al 42-66%. Misma app, distinto canal. Acción pendiente: auditoría flujo app.bewe.ai/onboarding con Hotjar/Mixpanel.",
-  "Aprendizaje clave 3: Email Loops es palanca multiplicadora. 31 trials de 30 leads visibles (>100% porque convierte cohorts viejos). Si pauta CR entrara al loop desde día 0 al ritmo orgánico (45%), serían +20 trials/semana sin gastar más.",
-  "Aprendizaje clave 4: anti-fatigue urgente. A1.2 CA_ENGAGERS freq 1.64 · A4.1 freq 1.66 · cerca del techo 2.0. Sin creativos nuevos antes del 26-may, escalar rinde menos. Pendiente producir 'silla-vacia-belleza'.",
-  "Aprendizaje clave 5: winners en 2 conceptos creativos · paraguas_imagen_v2_* y mkt_imagen_v1_*. linda_* y crm_* rinden peor (salvo excepciones C4). Para junio: doblar producción de paraguas y mkt, reducir otros, testear 1-2 nuevos.",
-  "Contingencia €1.000 (criterio formal ≥2 camps CPT<€3 cumplido por C5/C6 pero era trampa estadística porque eran clicks IC baratos sin trials). NO se ha activado. Si Julián la libera 26-may, destino propuesto: C4 (CPA trial €14.41) + C1 (€17.37).",
-  "Próxima reunión Julián: pendiente al cierre del 23-may · sign-off del escalado >20% (C1 +54%, A4.1 +150%) que técnicamente excede la regla ABO ≤20% sin aprobación.",
-  "Plan junio (€150/día × 30d = €4.500): 60-70% Belleza (C1+C4) · 15-20% Comercio+Servicios CR (C2+C9 si se crea) · 10-15% Retargeting (C7) · 5-10% Tools si se activa (C8). Objetivo CPA trial ~€8.20 vs €38.81 actual. Brecha 4.7×.",
-  "IG @bewe_software · 50.120 followers · 34 posts. FB Bewe Software · 114.985 fans. Cuenta Meta en EUR · timezone Europe/Madrid.",
+  "Respeta SIEMPRE los datos en vivo y las reglas operativas del Growth Lead que vengan en MEMORIA DEL AGENTE.",
 ];
+
+export const DEFAULT_RULES: string[] = [...BASE_RULES, ...loadEnvRules()];
 
 export interface MemoryReadOptions {
   limit?: number;

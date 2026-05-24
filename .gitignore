@@ -41,3 +41,18 @@ _check.js
 
 # datos locales del diario (snapshots persistidos por /api/diary)
 .data/
+
+# datos privados de empresa · NUNCA commitear
+_logs/
+_private/
+_docs/_internal/
+*.private.json
+*.private.md
+
+# docs internos sensibles · sólo locales
+_docs/SETUP-TOKENS.md
+_docs/SIGUIENTE-LUNES.md
+_docs/AEO-EXPLICACION.md
+_docs/SEO-CHECKLIST-MARIAPAULA.md
+_docs/daily-*.md
+_docs/handoff-*.md

@@ -1,185 +1,118 @@
 /**
- * Bewe Pauta · Configuración del plan mayo 2026
- * (datos de plan + IDs de cuenta + targets — NO secretos)
+ * Bewe Pauta · Configuración PÚBLICA del dashboard
+ *
+ * Este archivo se commitea al repo. NO debe contener:
+ *  - IDs reales de cuenta Meta / página / IG
+ *  - IDs de campañas / presupuestos específicos
+ *  - Passwords ni emails con role/access mapping
+ *  - Cifras concretas del plan (budget, CPT thresholds reales)
+ *
+ * Los valores reales se cargan desde `NEXT_PUBLIC_*` env vars en runtime
+ * (cliente) y desde `lib/private-config.server.ts` en el server.
+ *
+ * Si las env vars faltan, los placeholders (cadenas vacías / ceros) hacen
+ * que la UI muestre "—" donde corresponda.
  */
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+
+function envStr(k: string, fallback = ""): string {
+  const v = process.env[k];
+  return typeof v === "string" && v.length > 0 ? v : fallback;
+}
+
+function envNum(k: string, fallback = 0): number {
+  const v = process.env[k];
+  if (!v) return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function envJSON<T>(k: string, fallback: T): T {
+  const v = process.env[k];
+  if (!v) return fallback;
+  try {
+    return JSON.parse(v) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+// ─── PLAN · cargado desde env vars NEXT_PUBLIC_* ────────────────────────
+
 export const PLAN = {
-  monthLabel: "Mayo 2026",
-  launchISO: "2026-05-12T00:00:00",
-  endISO: "2026-05-31T23:59:59",
-  day7ISO: "2026-05-19T00:00:00",
-  day14ISO: "2026-05-26T00:00:00",
-  totalDays: 20,
-  budget: 3000,
-  contingency: 1000,
+  monthLabel: envStr("NEXT_PUBLIC_PLAN_MONTH_LABEL", "—"),
+  launchISO: envStr("NEXT_PUBLIC_PLAN_LAUNCH_ISO", "2026-01-01T00:00:00"),
+  endISO: envStr("NEXT_PUBLIC_PLAN_END_ISO", "2026-01-31T23:59:59"),
+  day7ISO: envStr("NEXT_PUBLIC_PLAN_DAY7_ISO", "2026-01-08T00:00:00"),
+  day14ISO: envStr("NEXT_PUBLIC_PLAN_DAY14_ISO", "2026-01-15T00:00:00"),
+  totalDays: envNum("NEXT_PUBLIC_PLAN_TOTAL_DAYS", 30),
+  budget: envNum("NEXT_PUBLIC_PLAN_BUDGET", 0),
+  contingency: envNum("NEXT_PUBLIC_PLAN_CONTINGENCY", 0),
   cpt: {
-    aggressive: 1.57,
-    target: 2.2,
-    warn: 3.0,
-    critical: 5.5,
+    aggressive: envNum("NEXT_PUBLIC_PLAN_CPT_AGGRESSIVE", 1.5),
+    target: envNum("NEXT_PUBLIC_PLAN_CPT_TARGET", 2.2),
+    warn: envNum("NEXT_PUBLIC_PLAN_CPT_WARN", 3.0),
+    critical: envNum("NEXT_PUBLIC_PLAN_CPT_CRITICAL", 5.5),
   },
   meta: {
-    accountId: "act_929824683759001",
-    accountIdNumeric: "929824683759001",
-    pageId: "225426867908315",
-    igAccountId: "17841404681419259",
-    apiVersion: "v22.0",
+    accountId: envStr("NEXT_PUBLIC_META_ACCOUNT_ID", ""),
+    accountIdNumeric: envStr("NEXT_PUBLIC_META_ACCOUNT_ID_NUMERIC", ""),
+    pageId: envStr("NEXT_PUBLIC_META_PAGE_ID", ""),
+    igAccountId: envStr("NEXT_PUBLIC_META_IG_ID", ""),
+    apiVersion: envStr("NEXT_PUBLIC_META_API_VERSION", "v22.0"),
   },
 };
 
-/** Mapeo lógico C1..C6 → campaign id Meta + evento de objetivo + geo + presupuesto.
- *
- *  ESTADO al 23-may (verificado por handoff Santi + Graph API):
- *   - Solo 6 campañas reales en Meta (C1-C6). IDs confirmados via API.
- *   - C1 escalada de €26 a €40 el 23-may (CBO a nivel campaña)
- *   - C4 ABO: solo A4.1 activo escalado €10 → €25
- *   - C3, C5, C6 PAUSADAS el 22-may por bajo rendimiento (IC traía clicks sin signups)
- *   - C7 RETARGETING · planeada · NO creada todavía (bloqueada por Custom Audiences)
- *   - C9 LATAM_SERVICIOS_CR · planeada · NO creada
- *   - C8 LATAM_TOOLS · pospuesta a junio
- */
-export const CAMPAIGN_MAP: Record<
-  string,
-  {
-    code: string;
-    cid: string;
-    name: string;
-    event: "CompleteRegistration" | "InitiateCheckout";
-    geo: string;
-    vertical: "Belleza" | "Comercio" | "Servicios";
-    daily: number;
-    total: number;
-    replacedBy?: string;
-  }
-> = {
-  "52551556599886": {
-    code: "C1",
-    cid: "52551556599886",
-    name: "MX_BELLEZA_WEB_MAY26",
-    event: "CompleteRegistration",
-    geo: "MX",
-    vertical: "Belleza",
-    daily: 40, // escalado 23-may de €26 a €40
-    total: 520,
-  },
-  "52551556733086": {
-    code: "C2",
-    cid: "52551556733086",
-    name: "MX_COMERCIO_WEB_MAY26",
-    event: "CompleteRegistration",
-    geo: "MX",
-    vertical: "Comercio",
-    daily: 21,
-    total: 420,
-  },
-  "52551556895286": {
-    code: "C3",
-    cid: "52551556895286",
-    name: "MX_SERVICIOS_WEB_MAY26",
-    event: "InitiateCheckout",
-    geo: "MX",
-    vertical: "Servicios",
-    daily: 16,
-    total: 320,
-    replacedBy: "C3.NEW",
-  },
-  "52551557046086": {
-    code: "C4",
-    cid: "52551557046086",
-    name: "CR_PA_CL_CO_BELLEZA_WEB_MAY26",
-    event: "CompleteRegistration",
-    geo: "CR+PA+CL+CO",
-    vertical: "Belleza",
-    daily: 25, // ABO · solo A4.1 activo escalado 23-may de €10 a €25
-    total: 360,
-  },
-  "52551557199886": {
-    code: "C5",
-    cid: "52551557199886",
-    name: "CR_PA_CL_CO_COMERCIO_WEB_MAY26",
-    event: "InitiateCheckout",
-    geo: "CR+PA+CL+CO",
-    vertical: "Comercio",
-    daily: 14,
-    total: 280,
-  },
-  "52551557419286": {
-    code: "C6",
-    cid: "52551557419286",
-    name: "CR_PA_CL_CO_SERVICIOS_WEB_MAY26",
-    event: "InitiateCheckout",
-    geo: "CR+PA+CL+CO",
-    vertical: "Servicios",
-    daily: 10,
-    total: 200,
-  },
-};
+// ─── CAMPAÑAS · cargadas desde NEXT_PUBLIC_CAMPAIGNS_JSON ──────────────
 
-export const CAMPAIGN_CODES = ["C1", "C2", "C3", "C4", "C5", "C6"] as const;
-export type CampaignCode = (typeof CAMPAIGN_CODES)[number];
-
-export function getByCode(code: CampaignCode) {
-  return Object.values(CAMPAIGN_MAP).find((c) => c.code === code);
+interface CampaignMapEntry {
+  code: string;
+  cid: string;
+  name: string;
+  event: "CompleteRegistration" | "InitiateCheckout";
+  geo: string;
+  vertical: "Belleza" | "Comercio" | "Servicios";
+  daily: number;
+  total: number;
+  replacedBy?: string;
 }
+
+const CAMPAIGNS_ARRAY = envJSON<CampaignMapEntry[]>(
+  "NEXT_PUBLIC_CAMPAIGNS_JSON",
+  [],
+);
+
+/** Map de campañas indexado por cid (Meta campaign ID). */
+export const CAMPAIGN_MAP: Record<string, CampaignMapEntry> = Object.fromEntries(
+  CAMPAIGNS_ARRAY.map((c) => [c.cid, c]),
+);
+
+export const CAMPAIGN_CODES = CAMPAIGNS_ARRAY.map((c) => c.code);
+export type CampaignCode = string;
+
+export function getByCode(code: string): CampaignMapEntry | undefined {
+  return CAMPAIGNS_ARRAY.find((c) => c.code === code);
+}
+
+// ─── ROLES & TABS · públicos, no sensibles ──────────────────────────────
 
 export const ROLE_TABS: Record<string, string[]> = {
   admin: [
-    "dashboard",
-    "campanas",
-    "estrategia",
-    "paid",
-    "anuncios",
-    "organico",
-    "parrilla",
-    "seo",
-    "aeo",
-    "performance",
-    "open-bui",
-    "informe",
-    "config",
+    "dashboard", "campanas", "estrategia", "paid", "anuncios", "organico",
+    "parrilla", "seo", "aeo", "performance", "open-bui", "informe", "config",
   ],
   lead: [
-    "dashboard",
-    "campanas",
-    "estrategia",
-    "paid",
-    "anuncios",
-    "organico",
-    "parrilla",
-    "seo",
-    "aeo",
-    "performance",
-    "open-bui",
-    "informe",
+    "dashboard", "campanas", "estrategia", "paid", "anuncios", "organico",
+    "parrilla", "seo", "aeo", "performance", "open-bui", "informe",
   ],
-  content: [
-    "dashboard",
-    "anuncios",
-    "organico",
-    "parrilla",
-    "open-bui",
-  ],
+  content: ["dashboard", "anuncios", "organico", "parrilla", "open-bui"],
 };
 
-export const USERS: Record<
-  string,
-  { pass: string; role: keyof typeof ROLE_TABS; name: string }
-> = {
-  "santiago.varela@bewe.io": {
-    pass: "BeweDash!26",
-    role: "admin",
-    name: "Santiago",
-  },
-  "julian.varela@bewe.io": { pass: "BeweDash!26", role: "admin", name: "Julián" },
-  "wendy.pamplona@bewe.io": { pass: "BeweDash!26", role: "admin", name: "Wendy" },
-  "maria.chaparro@bewe.io": { pass: "BeweLead!26", role: "lead", name: "María" },
-  "paula.gonzalez@bewe.io": { pass: "BeweRedes26", role: "content", name: "Paula" },
-  "hernan.guzman@bewe.io": { pass: "BeweRedes26", role: "content", name: "Hernán" },
-};
+// USERS se movió a env var `AUTH_USERS_JSON` (server-only)
+// Validación de login pasa por /api/auth/login.
+// Ver: lib/private-config.server.ts
 
-/**
- * Estructura del nav (sidebar). Los items con `group` se agrupan visualmente.
- * Groups: pauta · contenido · analítica · admin
- */
 export const TABS = [
   { id: "dashboard",   label: "Dashboard",   icon: "LayoutDashboard", group: "pauta" },
   { id: "campanas",    label: "Campañas",    icon: "Megaphone",        group: "pauta" },

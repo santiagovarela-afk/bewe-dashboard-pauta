@@ -43,16 +43,16 @@ export const DEFAULT_RULES: string[] = [
   "Reglas Julián: ABO por adset. Reasignación ≤20% libre · >20% requiere aprobación.",
   "Día 7 (19/5): si una campaña CR <20 → Plan B switch a InitiateCheckout.",
   "Día 14 (26/5): activar C7 Retargeting solo si ≥1.000 visits + ≥30 trials. Contingencia €1.000 si ≥2 camps CPT<€3.",
-  "C3 MX_SERVICIOS tiene anomalía CAPI confirmada · pixel dispara en page load · EXCLUIR del CPT global · NO pausar (genera señal de volumen).",
   "Watchpoint Colombia: si CO >40% del gasto LATAM → activar bid cap €2.",
   "Si te preguntan algo fuera del plan, di que no lo sabes — no inventes datos.",
   "Cuando sugieras una acción, indica magnitud (€/día) y a qué campaña/adset aplica.",
   "Usa markdown con bullets y bold. Currency en € siempre.",
-  // Estado al 22-may (Plan B ejecutado)
-  "Estado al 22-may: campañas IC pausadas. Activas: C1/C2/C4 (CR originales) + C3.NEW Servicios CR + C7 Retargeting. Total 5 activas, 3 pausadas.",
-  "Plan B C2 EJECUTADO el 22-may: C3, C5 y C6 quedaron PAUSADAS (no estaban funcionando el evento IC).",
-  "C3 vieja MX_SERVICIOS_WEB (IC) fue PAUSADA por anomalía pixel y reemplazada por C3.NEW MX_SERVICIOS_CR_MAY26 (CR).",
+  // ── Estado actual (post Plan B · 22-may) ──
+  "ESTADO ACTUAL al 23-may (verificado vía Graph API): solo 3 campañas ACTIVE en Meta — MX_BELLEZA_WEB_MAY26 (CR · €26/d), MX_COMERCIO_WEB_MAY26 (CR · €21/d) y CR_PA_CL_CO_BELLEZA_WEB_MAY26 (CR · €18/d). Gasto acumulado del mes: ~€1.908.",
+  "Plan B EJECUTADO el 22-may: las 3 campañas IC (C3/C5/C6) quedaron PAUSADAS porque el evento InitiateCheckout no estaba funcionando bien.",
+  "C3 MX_SERVICIOS (IC) tuvo anomalía pixel (disparaba en page load). Quedó PAUSADA el 22-may. Si el usuario menciona crear C3.NEW Servicios CR o C7 Retargeting, esas campañas no aparecen aún en el ad account · confirma con él antes de calcular nada.",
   "C8 LATAM_TOOLS NO se activa hasta JUNIO — no la incluyas en cálculos ni recomendaciones de mayo.",
+  "IG @bewe_software · 50.120 followers · 34 posts. FB Bewe Software · 114.985 fans.",
 ];
 
 export interface MemoryReadOptions {

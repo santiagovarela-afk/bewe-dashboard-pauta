@@ -67,11 +67,17 @@ interface DashboardState {
 
 const Ctx = React.createContext<DashboardState | null>(null);
 
+/** Action keys que matchean con la columna "Resultados" de Meta Ads Manager.
+ *
+ * Pre-16-may los eventos venían del pixel + CAPI duplicado · ahora solo CAPI.
+ * Para matchear exactamente con Meta Ads Manager usamos las keys
+ * canónicas (sin prefijo `offsite_conversion.fb_pixel_*` que era pixel viejo).
+ */
 const ACTION_KEYS = {
   link_click: "link_click",
-  contact: "offsite_conversion.fb_pixel_contact",
-  initCheckout: "offsite_conversion.fb_pixel_initiate_checkout",
-  completeReg: "offsite_conversion.fb_pixel_complete_registration",
+  contact: "lead",
+  initCheckout: "initiate_checkout",
+  completeReg: "complete_registration",
 } as const;
 
 function getAction(actions: Array<{ action_type: string; value: string }> | undefined, type: string) {
@@ -108,6 +114,12 @@ function aggregateCampaigns(
   const byCid = new Map<string, DailyRow[]>();
   for (const row of daily) {
     if (!inRange(row.date, range)) continue;
+    // CRÍTICO: solo contar rows campaign-level (sin adsetId).
+    // El array `daily` mezcla rows de cDaily (campaign-level · sin adsetId)
+    // y aDaily (adset-level · con adsetId). Sin este filtro las métricas
+    // se duplicaban exactamente 2× porque sumábamos el campaign aggregate
+    // + la suma de todos sus adsets (que da el mismo total).
+    if (row.adsetId) continue;
     const arr = byCid.get(row.campaignId) ?? [];
     arr.push(row);
     byCid.set(row.campaignId, arr);

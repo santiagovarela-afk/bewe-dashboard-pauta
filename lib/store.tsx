@@ -488,6 +488,20 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }
   }, [rawCampaigns]);
 
+  // ── Auto-fetch en mount · cuando el usuario está logueado ────────────
+  // Sin esto el dashboard arranca con métricas en 0 hasta que el usuario
+  // clickea "Actualizar". Con el meta_token + IDs cargados en env vars,
+  // disparamos un solo refresh al montar (o al loguear).
+  const didInitialFetchRef = React.useRef(false);
+  React.useEffect(() => {
+    if (didInitialFetchRef.current) return;
+    if (!user) return;
+    if (!PLAN.meta.accountId) return;
+    didInitialFetchRef.current = true;
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   // ── Computed: filtrado por dateRange ─────────────────────────────────
   const campaigns = React.useMemo(
     () => aggregateCampaigns(rawCampaigns, daily, dateRange),

@@ -343,7 +343,7 @@ interface WelcomeTourProps {
 }
 
 export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
-  const { user } = useDashboard();
+  const { user, setTab } = useDashboard();
   const [step, setStep] = React.useState(0);
   const [showRoleTour, setShowRoleTour] = React.useState(false);
   // Si el user lanzó el role-tour desde el welcome, esto evita el reset a slide 0
@@ -498,12 +498,12 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className={cn(
                 "relative w-full max-w-2xl rounded-2xl border border-border bg-card/95 backdrop-blur-2xl",
-                "shadow-[0_40px_80px_-30px_hsl(var(--brand-violet)/0.5)] p-5 md:p-8",
-                "max-h-[92vh] overflow-y-auto",
+                "shadow-[0_40px_80px_-30px_hsl(var(--brand-violet)/0.5)]",
+                "max-h-[92vh] flex flex-col",
               )}
             >
-              {/* Progress dots */}
-              <div className="flex items-center gap-1.5 mb-6">
+              {/* Progress dots · fijo arriba */}
+              <div className="flex items-center gap-1.5 px-5 md:px-8 pt-5 md:pt-8 pb-3 shrink-0">
                 {slides.map((_, i) => (
                   <span
                     key={i}
@@ -522,7 +522,8 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                 </span>
               </div>
 
-              {/* Slide content */}
+              {/* Slide content · area scrolleable */}
+              <div className="flex-1 overflow-y-auto px-5 md:px-8 pb-4 min-h-0">
               <AnimatePresence mode="wait">
                 {current.kind === "welcome" && (
                   <SlideWelcome
@@ -554,9 +555,10 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                   />
                 )}
               </AnimatePresence>
+              </div>
 
-              {/* Footer nav */}
-              <div className="mt-8 flex items-center justify-between gap-3">
+              {/* Footer nav · SIEMPRE visible (sticky bottom del modal) */}
+              <div className="shrink-0 border-t border-border/60 bg-card/95 backdrop-blur-xl px-5 md:px-8 py-4 flex items-center justify-between gap-3 rounded-b-2xl">
                 <button
                   type="button"
                   onClick={prev}
@@ -571,23 +573,40 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                   <ChevronLeft className="size-3.5" />
                   Atrás
                 </button>
-                <button
-                  type="button"
-                  onClick={finish}
-                  className="text-[11px] text-muted-foreground/70 hover:text-muted-foreground underline-offset-4 hover:underline"
-                >
-                  Saltar tour
-                </button>
-                <Button
-                  type="button"
-                  variant="glow"
-                  size="sm"
-                  onClick={next}
-                  className="gap-1.5"
-                >
-                  {step >= totalSteps - 1 ? "Empezar" : "Siguiente"}
-                  <ArrowRight className="size-3.5" />
-                </Button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={finish}
+                    className="text-[11px] text-muted-foreground/70 hover:text-muted-foreground underline-offset-4 hover:underline"
+                  >
+                    Saltar tour
+                  </button>
+                  {current.kind === "tab" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Navega al tab actual y cierra el tour para que el user
+                        // explore en vivo. Re-abrirable desde el botón "?"
+                        if (current.tabId) setTab(current.tabId);
+                        finish();
+                      }}
+                      className="text-[11px] text-[hsl(var(--brand-violet))] hover:text-[hsl(var(--brand-violet))]/80 underline-offset-4 hover:underline font-semibold"
+                      title="Cierra el tour y lleva al tab para explorar"
+                    >
+                      Probar esta tab →
+                    </button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="glow"
+                    size="sm"
+                    onClick={next}
+                    className="gap-1.5"
+                  >
+                    {step >= totalSteps - 1 ? "Empezar" : "Siguiente"}
+                    <ArrowRight className="size-3.5" />
+                  </Button>
+                </div>
               </div>
             </motion.div>
           </motion.div>

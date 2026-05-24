@@ -49,7 +49,7 @@ Agrega estas 4 variables, una por una:
 | Name | Value | Environment |
 |---|---|---|
 | `META_TOKEN` | `EAA0pv...tu-token` (el largo, el de `.env.local`) | **Production + Preview + Development** |
-| `GEMINI_API_KEY` | `AIzaSyC0-zRm8vt1bMNin4qog0yZhbIi1fXX1rc` | **Production + Preview + Development** |
+| `GEMINI_API_KEY` | `AIzaSy...` (la tuya · de `.env.local` · empieza con `AIza`) | **Production + Preview + Development** |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | **Production + Preview + Development** |
 | `GEMINI_MAX_TOKENS` | `2048` | **Production + Preview + Development** |
 

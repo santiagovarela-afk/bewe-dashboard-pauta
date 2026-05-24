@@ -300,10 +300,10 @@ function JulianModal({
         exit={{ opacity: 0, y: 16, scale: 0.97 }}
         transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[560px]"
+        className="w-full max-w-[560px] max-h-[90vh] flex flex-col"
       >
-        <TextureCard className="p-0">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-background/40">
+        <TextureCard className="p-0 flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-background/40 shrink-0">
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 text-[hsl(var(--brand-violet))]" />
               <h3 className="text-[13px] font-bold">Mensaje para Julián</h3>
@@ -317,19 +317,19 @@ function JulianModal({
               <X className="size-3.5" />
             </button>
           </div>
-          <div className="p-5">
-            <pre className="font-mono text-[12px] whitespace-pre-wrap leading-relaxed text-foreground/90 bg-background/60 rounded-lg border border-border/60 p-4 max-h-[340px] overflow-y-auto">
+          <div className="p-5 flex-1 min-h-0 overflow-y-auto">
+            <pre className="font-mono text-[12px] whitespace-pre-wrap leading-relaxed text-foreground/90 bg-background/60 rounded-lg border border-border/60 p-4">
               {text}
             </pre>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={onClose}>
-                Cerrar
-              </Button>
-              <Button variant="glow" size="sm" onClick={onCopy}>
-                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                {copied ? "Copiado" : "Copiar mensaje"}
-              </Button>
-            </div>
+          </div>
+          <div className="px-5 py-3 border-t border-border bg-background/40 flex items-center justify-end gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Cerrar
+            </Button>
+            <Button variant="glow" size="sm" onClick={onCopy}>
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              {copied ? "Copiado" : "Copiar mensaje"}
+            </Button>
           </div>
         </TextureCard>
       </motion.div>

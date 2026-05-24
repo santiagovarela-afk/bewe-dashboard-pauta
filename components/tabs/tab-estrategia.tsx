@@ -20,6 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { ExplainedMetric } from "@/components/shared/explained-metric";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import { AnimatedNumber } from "@/components/fx/animated-number";
+import { CampaignDeepAnalysis } from "@/components/estrategia/campaign-deep-analysis";
+import { ProjectionCard } from "@/components/estrategia/projection-card";
 
 export function TabEstrategia() {
   const { campaigns, daysElapsed } = useDashboard();
@@ -312,6 +314,32 @@ export function TabEstrategia() {
             );
           })}
         </StaggerGroup>
+      </section>
+
+      {/* Análisis profundo por campaña (sección A · handoff 22-may) */}
+      <section>
+        <SectionHeader
+          title="Análisis profundo por campaña"
+          sub="Hipótesis original · estado actual · aprendizajes operativos del handoff 23-may"
+        />
+        <StaggerGroup className="grid lg:grid-cols-2 gap-4">
+          {campaigns.map((c) => (
+            <StaggerItem key={c.cid}>
+              <CampaignDeepAnalysis campaign={c} />
+            </StaggerItem>
+          ))}
+        </StaggerGroup>
+      </section>
+
+      {/* Proyección al 31-may + Realidad vs Objetivo (sección B · handoff 22-may) */}
+      <section>
+        <SectionHeader
+          title="Proyección al cierre"
+          sub="Realidad vs objetivo Julián · brecha + palancas para cerrarla"
+        />
+        <Reveal>
+          <ProjectionCard />
+        </Reveal>
       </section>
     </div>
   );

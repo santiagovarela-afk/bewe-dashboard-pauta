@@ -10,11 +10,15 @@ import { SkillPicker } from "@/components/open-bui/skill-picker";
 import { BriefInput } from "@/components/open-bui/brief-input";
 import { DesignPreview } from "@/components/open-bui/design-preview";
 import { ExportButtons } from "@/components/open-bui/export-buttons";
+import { BrandKitPanel } from "@/components/open-bui/brand-kit-panel";
 import { SKILLS, getSkill } from "@/components/open-bui/skills";
 import { useDashboard } from "@/lib/store";
 
 const STORAGE_KEY_SKILL = "bw_open_design_skill";
 const STORAGE_KEY_BRIEF = "bw_open_design_brief";
+const STORAGE_KEY_QUOTA_UNTIL = "bw_open_design_quota_until";
+/** Cooldown tras un 429 Gemini (ms) — 5 min como pidió Santi. */
+const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
 
 /**
  * Open Design · Bewe OS
@@ -23,10 +27,14 @@ const STORAGE_KEY_BRIEF = "bw_open_design_brief";
  * default por un generador AI de piezas:
  *   1. Usuario elige skill (IG post, FB ad, banner…)
  *   2. Escribe brief en lenguaje natural
- *   3. Mark/Lúa genera HTML+CSS via /api/design/generate
+ *   3. Mark/Lúa genera HTML+CSS via /api/design/generate (Gemini)
  *   4. Preview en iframe sandboxed · export PNG / HTML
  *
  * El canvas tldraw queda como "modo manual" accesible por toggle.
+ *
+ * Manejo de errores:
+ *   - 429 (quota Gemini) → mensaje claro + botón Generar deshabilitado 5min.
+ *   - El estado de cooldown persiste en localStorage entre recargas.
  */
 export function TabOpenBui() {
   const { aiPersona } = useDashboard();
@@ -39,14 +47,18 @@ export function TabOpenBui() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [variant, setVariant] = React.useState(0);
+  const [quotaUntil, setQuotaUntil] = React.useState<number>(0);
+  const [now, setNow] = React.useState<number>(() => Date.now());
 
-  // Hidratar último skill y brief
+  // Hidratar último skill, brief, cooldown
   React.useEffect(() => {
     try {
       const sk = localStorage.getItem(STORAGE_KEY_SKILL);
       if (sk && SKILLS.some((s) => s.id === sk)) setSkillId(sk);
       const br = localStorage.getItem(STORAGE_KEY_BRIEF);
       if (br) setBrief(br);
+      const qu = Number(localStorage.getItem(STORAGE_KEY_QUOTA_UNTIL) || "0");
+      if (qu > Date.now()) setQuotaUntil(qu);
     } catch {
       /* ignore */
     }
@@ -68,20 +80,45 @@ export function TabOpenBui() {
     }
   }, [brief]);
 
+  // Tick cada segundo mientras hay cooldown activo (para countdown UI)
+  React.useEffect(() => {
+    if (quotaUntil <= Date.now()) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [quotaUntil]);
+
+  const cooldownRemainingMs = Math.max(0, quotaUntil - now);
+  const inCooldown = cooldownRemainingMs > 0;
   const skill = getSkill(skillId);
 
   async function generate(nextVariant: number) {
+    if (inCooldown) return;
     setLoading(true);
     setError(null);
     try {
       const r = await fetch("/api/design/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skillId, brief, variant: nextVariant }),
+        body: JSON.stringify({ skillId, brief, variant: nextVariant, persona: aiPersona }),
       });
       const data = await r.json();
       if (!r.ok) {
-        setError(data?.error || `Error ${r.status}`);
+        // Quota agotada → activar cooldown y mensaje claro
+        if (r.status === 429 || data?.quotaExhausted) {
+          const until = Date.now() + QUOTA_COOLDOWN_MS;
+          setQuotaUntil(until);
+          try {
+            localStorage.setItem(STORAGE_KEY_QUOTA_UNTIL, String(until));
+          } catch {
+            /* ignore */
+          }
+          setError(
+            data?.hint ||
+              "Gemini agotó cuota del día. El generador estará disponible cuando renueve (~24h) o si activas billing en Google AI Studio. Mientras tanto, usa el Canvas manual.",
+          );
+        } else {
+          setError(data?.error || `Error ${r.status}`);
+        }
         setHtml(null);
         return;
       }
@@ -148,11 +185,12 @@ export function TabOpenBui() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
-            className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.1fr)] gap-4"
+            className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.1fr)] gap-4"
           >
-            {/* Sidebar: skills */}
+            {/* Sidebar: skills + brand kit */}
             <aside className="lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto lg:pr-1">
               <SkillPicker activeId={skillId} onSelect={setSkillId} />
+              <BrandKitPanel />
             </aside>
 
             {/* Centro: brief */}
@@ -166,6 +204,7 @@ export function TabOpenBui() {
                 loading={loading}
                 hasResult={html !== null}
                 personaLabel={personaLabel}
+                cooldownRemainingMs={cooldownRemainingMs}
               />
               <div className="mt-6 pt-4 border-t border-border">
                 <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2 font-bold">
@@ -174,9 +213,10 @@ export function TabOpenBui() {
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Inspirado en{" "}
                   <span className="text-foreground font-semibold">Open Design</span>{" "}
-                  (nexu-io). Replica local-first: 8 skills, brief en lenguaje
+                  (nexu-io). Replica local-first: 12 skills, brief en lenguaje
                   natural, AI senior de Bewe te devuelve HTML+CSS listo para
-                  exportar.
+                  exportar. Si Gemini está caído, puedes dibujar en el Canvas
+                  manual.
                 </p>
               </div>
             </section>
@@ -206,7 +246,7 @@ export function TabOpenBui() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
-            className="w-full h-[calc(100vh-220px)] min-h-[520px] rounded-xl border border-border bg-card overflow-hidden relative"
+            className="w-full h-[calc(100vh-220px)] min-h-[560px] rounded-xl border border-border bg-card overflow-hidden relative"
           >
             <CanvasModeHint />
             <TldrawCanvas persistenceKey="bw_open_bui_doc" />

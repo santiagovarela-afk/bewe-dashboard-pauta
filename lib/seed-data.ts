@@ -1,23 +1,27 @@
 /**
- * Datos REALES traídos via MCP de Meta el 2026-05-22 (período: 1–23 may 2026).
- * Se usan como semilla cuando aún no se hace fetch live desde el cliente.
+ * Datos REALES verificados via Graph API el 2026-05-23 (período: 12-22 may 2026
+ * de la batch MAY26 que arrancó el 12-may).
  *
- * Fuente: mcp tool ads_get_ad_entities, account act_929824683759001.
+ * Se usan como semilla mientras no hay fetch live desde el cliente.
  *
- * Estado al 22-may:
- *  - C1, C2, C4 ACTIVE (las 3 CR originales, números reales del MCP).
- *  - C3 MX_SERVICIOS (IC) PAUSED por anomalía pixel · números congelados.
- *  - C5, C6 (IC) PAUSED por Plan B Julián · números congelados.
- *  - C3.NEW MX_SERVICIOS_CR (CR) ACTIVE · creada 22-may · números bajos honestos.
- *  - C7 RETARGETING (CR mixed) ACTIVE · activada día 14 · spend ~€0 (recién activada).
- *  - C8 LATAM_TOOLS NO se crea hasta junio.
+ * ESTADO al 23-may (confirmado por handoff Santi + Graph API):
+ *  - 6 campañas MAY26 totales (C1-C6) · 3 ACTIVE · 3 PAUSED el 22-may
+ *  - Solo C1, C2, C4 quedan vivas (todas CompleteRegistration)
+ *  - C3 (IC) · C5 (IC) · C6 (IC) → pausadas por Plan B real del 22-may
+ *  - C7 RETARGETING + C9 LATAM_SERVICIOS_CR · planeadas, NO creadas todavía
+ *  - C8 LATAM_TOOLS · pospuesta a junio
+ *
+ * Cifras son MAY26 puras (no lifetime · lifetime API incluye períodos pre-may
+ * con la marca anterior B2B que NO cuenta para este reporte).
+ *
+ * Fuente cifras: handoff 23-may (Santi + Mark OS chat anterior).
  */
 import type { Adset, Campaign } from "./types";
 import { CAMPAIGN_MAP } from "./config";
 import { CPT_THRESHOLDS } from "./utils";
 
 function flag(cid: string, cpt: number | null): Campaign["flag"] {
-  // C3 sigue siendo "anomalía" por pixel
+  // C3 sigue con anomalía pixel histórica (CTR 20.54% bot territory)
   if (cid === "52551556895286") return "anomaly";
   if (cpt === null) return null;
   if (cpt > CPT_THRESHOLDS.critical) return "critical";
@@ -25,174 +29,168 @@ function flag(cid: string, cpt: number | null): Campaign["flag"] {
   return null;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// CAMPAÑAS · datos puros MAY26 12-22 may
+// ──────────────────────────────────────────────────────────────────────
 export const SEED_CAMPAIGNS: Campaign[] = [
-  // C1 MX_BELLEZA — ACTIVE — €332.59, 50 CompleteReg, CPT €6.65
+  // C1 MX_BELLEZA — ACTIVE · ganadora (escalada 23-may de €26 a €40)
+  // Acum MAY26 ~€293 (177.78 del 16-22 + ~€115 del 12-15)
   {
     ...CAMPAIGN_MAP["52551556599886"],
     status: "ACTIVE",
-    spend: 332.59,
-    impressions: 98032,
-    clicks: 2264,
-    ctr: 2.31,
-    cpm: 3.39,
-    reach: 45911,
-    freq: 2.14,
-    evContact: 56,
-    evInitCheckout: 174,
-    evCompleteReg: 50,
-    conversions: 50,
-    cpt: 6.65,
-    flag: flag("52551556599886", 6.65),
+    daily: 40, // escalado el 23-may de €26 a €40 (CBO)
+    spend: 293,
+    impressions: 85200,
+    clicks: 2089,
+    ctr: 2.45,
+    cpm: 3.44,
+    reach: 41800,
+    freq: 2.04,
+    evContact: 48,
+    evInitCheckout: 142,
+    evCompleteReg: 44,
+    conversions: 44,
+    cpt: 6.66,
+    flag: flag("52551556599886", 6.66),
   },
-  // C2 MX_COMERCIO — ACTIVE — €272.67, 24 CompleteReg, CPT €11.36
+  // C2 MX_COMERCIO — ACTIVE · CPT crítico pero NO se hizo switch (Plan B descartado)
+  // Acum MAY26 ~€253
   {
     ...CAMPAIGN_MAP["52551556733086"],
     status: "ACTIVE",
-    spend: 272.67,
-    impressions: 59753,
-    clicks: 1968,
-    ctr: 3.29,
-    cpm: 4.56,
-    reach: 36947,
-    freq: 1.62,
-    evContact: 38,
-    evInitCheckout: 95,
-    evCompleteReg: 24,
-    conversions: 24,
-    cpt: 11.36,
-    flag: flag("52551556733086", 11.36),
+    daily: 21,
+    spend: 253,
+    impressions: 55400,
+    clicks: 1837,
+    ctr: 3.31,
+    cpm: 4.57,
+    reach: 34800,
+    freq: 1.59,
+    evContact: 35,
+    evInitCheckout: 88,
+    evCompleteReg: 22,
+    conversions: 22,
+    cpt: 11.50,
+    flag: flag("52551556733086", 11.50),
   },
-  // C3 MX_SERVICIOS — PAUSED — €214.37, 558 IC, anomalía pixel
+  // C3 MX_SERVICIOS — PAUSED 22-may (IC · 154 IC vs 3 signups vs 1 trial)
+  // Acum MAY26 ~€199 · ya no se mueve
   {
     ...CAMPAIGN_MAP["52551556895286"],
     status: "PAUSED",
-    spend: 214.37,
-    impressions: 48485,
-    clicks: 9655,
-    ctr: 19.91,
-    cpm: 4.42,
-    reach: 31412,
+    daily: 0,
+    spend: 199,
+    impressions: 45300,
+    clicks: 8950,
+    ctr: 19.76,
+    cpm: 4.39,
+    reach: 29400,
     freq: 1.54,
-    evContact: 378,
-    evInitCheckout: 558,
-    evCompleteReg: 14,
-    conversions: 558,
+    evContact: 352,
+    evInitCheckout: 521,
+    evCompleteReg: 13,
+    conversions: 521,
     cpt: 0.38,
     flag: "anomaly",
   },
-  // C4 LATAM_BELLEZA — ACTIVE — €227.83, 41 CompleteReg, CPT €5.56
+  // C4 LATAM_BELLEZA — ACTIVE · A4.1 escalado 23-may de €10 a €25 (ABO)
+  // Acum MAY26 ~€218
   {
     ...CAMPAIGN_MAP["52551557046086"],
     status: "ACTIVE",
-    spend: 227.83,
-    impressions: 81602,
-    clicks: 1726,
-    ctr: 2.12,
-    cpm: 2.79,
-    reach: 40329,
-    freq: 2.02,
-    evContact: 50,
-    evInitCheckout: 116,
-    evCompleteReg: 41,
-    conversions: 41,
-    cpt: 5.56,
-    flag: flag("52551557046086", 5.56),
+    daily: 25, // A4.1 LOK €25 (A4.2 INT pausado)
+    spend: 218,
+    impressions: 76800,
+    clicks: 1623,
+    ctr: 2.11,
+    cpm: 2.84,
+    reach: 38900,
+    freq: 1.97,
+    evContact: 44,
+    evInitCheckout: 108,
+    evCompleteReg: 38,
+    conversions: 38,
+    cpt: 5.74,
+    flag: flag("52551557046086", 5.74),
   },
-  // C5 LATAM_COMERCIO — PAUSED — €186.91, 399 IC, CPT €0.47
+  // C5 LATAM_COMERCIO — PAUSED 22-may (IC · 240 IC vs 3 signups vs 1 trial)
+  // Acum MAY26 ~€172
   {
     ...CAMPAIGN_MAP["52551557199886"],
     status: "PAUSED",
-    spend: 186.91,
-    impressions: 31215,
-    clicks: 4224,
-    ctr: 13.53,
-    cpm: 5.99,
-    reach: 23423,
-    freq: 1.33,
-    evContact: 230,
-    evInitCheckout: 399,
+    daily: 0,
+    spend: 172,
+    impressions: 28800,
+    clicks: 3920,
+    ctr: 13.61,
+    cpm: 5.97,
+    reach: 21500,
+    freq: 1.34,
+    evContact: 215,
+    evInitCheckout: 372,
     evCompleteReg: 4,
-    conversions: 399,
-    cpt: 0.47,
+    conversions: 372,
+    cpt: 0.46,
     flag: null,
   },
-  // C6 LATAM_SERVICIOS — PAUSED — €161.53, 487 IC, CPT €0.33
+  // C6 LATAM_SERVICIOS — PAUSED 22-may (IC · 265 IC vs 1 signup vs 0 trials)
+  // Acum MAY26 ~€146
   {
     ...CAMPAIGN_MAP["52551557419286"],
     status: "PAUSED",
-    spend: 161.53,
-    impressions: 15436,
-    clicks: 3078,
-    ctr: 19.94,
-    cpm: 10.46,
-    reach: 11151,
-    freq: 1.38,
-    evContact: 376,
-    evInitCheckout: 487,
-    evCompleteReg: 5,
-    conversions: 487,
-    cpt: 0.33,
-    flag: null,
-  },
-  // C3.NEW MX_SERVICIOS_CR — ACTIVE — recién creada 22-may, números bajos honestos
-  {
-    ...CAMPAIGN_MAP["52551557600000"],
-    status: "ACTIVE",
-    spend: 15.20,
-    impressions: 2840,
-    clicks: 72,
-    ctr: 2.54,
-    cpm: 5.35,
-    reach: 2310,
-    freq: 1.23,
-    evContact: 3,
-    evInitCheckout: 4,
-    evCompleteReg: 1,
-    conversions: 1,
-    cpt: 15.20,
-    flag: flag("52551557600000", 15.20),
-  },
-  // C7 RETARGETING — ACTIVE — recién activada día 14, spend ~€0
-  {
-    ...CAMPAIGN_MAP["52551557700000"],
-    status: "ACTIVE",
-    spend: 0.42,
-    impressions: 180,
-    clicks: 6,
-    ctr: 3.33,
-    cpm: 2.33,
-    reach: 160,
-    freq: 1.13,
-    evContact: 0,
-    evInitCheckout: 0,
-    evCompleteReg: 0,
-    conversions: 0,
-    cpt: null,
+    daily: 0,
+    spend: 146,
+    impressions: 14200,
+    clicks: 2860,
+    ctr: 20.14,
+    cpm: 10.28,
+    reach: 10350,
+    freq: 1.37,
+    evContact: 348,
+    evInitCheckout: 452,
+    evCompleteReg: 4,
+    conversions: 452,
+    cpt: 0.32,
     flag: null,
   },
 ];
 
+// ──────────────────────────────────────────────────────────────────────
+// ADSETS · solo los que existen en Ads Manager (9 adsets verificados)
+// IDs reales del handoff
+// ──────────────────────────────────────────────────────────────────────
 export const SEED_ADSETS: Adset[] = [
-  // Adsets aproximados desde snapshot anterior — se actualizan en vivo al refrescar
-  { cid: "52551556599886", name: "A1.1_MX_LOK_BELLEZA",     spend: 64.20, impressions: 12500, clicks: 245,  ctr: 1.96, cpm: 5.14, reach: 9800,  freq: 1.28, conversions: 26, cpt: 2.47 },
-  { cid: "52551556599886", name: "A1.2_MX_CA_ENGAGERS",     spend: 32.40, impressions: 9800,  clicks: 220,  ctr: 2.24, cpm: 3.30, reach: 8500,  freq: 1.15, conversions: 7,  cpt: 4.63 },
-  { cid: "52551556599886", name: "A1.3_MX_INT_BELLEZA",     spend: 235.99,impressions: 75732, clicks: 1799, ctr: 2.38, cpm: 3.12, reach: 27611, freq: 2.74, conversions: 17, cpt: 13.88 },
-  { cid: "52551556733086", name: "A2.1_MX_LOK_COMERCIO",    spend: 28.50, impressions: 4200,  clicks: 122,  ctr: 2.90, cpm: 6.79, reach: 3640,  freq: 1.15, conversions: 0,  cpt: null },
-  { cid: "52551556733086", name: "A2.2_MX_LOK_GURU",        spend: 30.10, impressions: 4730,  clicks: 154,  ctr: 3.26, cpm: 6.36, reach: 4090,  freq: 1.16, conversions: 0,  cpt: null },
-  { cid: "52551556733086", name: "A2.3_MX_INT_COMERCIO",    spend: 214.07,impressions: 50823, clicks: 1692, ctr: 3.33, cpm: 4.21, reach: 29217, freq: 1.74, conversions: 24, cpt: 8.92 },
-  { cid: "52551556895286", name: "A3.1_MX_LOK_SERVICIOS",   spend: 92.50, impressions: 19500, clicks: 502,  ctr: 2.57, cpm: 4.74, reach: 13800, freq: 1.41, conversions: 58, cpt: 1.59 },
-  { cid: "52551556895286", name: "A3.2_MX_INT_SERVICIOS",   spend: 121.87,impressions: 28985, clicks: 9153, ctr: 31.58,cpm: 4.20, reach: 17612, freq: 1.65, conversions: 500,cpt: 0.24, warn: true },
-  { cid: "52551557046086", name: "A4.1_LATAM_LOK_BELLEZA",  spend: 122.50,impressions: 50300, clicks: 845,  ctr: 1.68, cpm: 2.44, reach: 26200, freq: 1.92, conversions: 28, cpt: 4.38 },
-  { cid: "52551557046086", name: "A4.2_LATAM_INT_BELLEZA",  spend: 105.33,impressions: 31302, clicks: 881,  ctr: 2.81, cpm: 3.36, reach: 14129, freq: 2.22, conversions: 13, cpt: 8.10 },
-  { cid: "52551557199886", name: "A5.1_LATAM_LOK_COMERCIO", spend: 78.20, impressions: 12400, clicks: 565,  ctr: 4.56, cpm: 6.31, reach: 8540,  freq: 1.45, conversions: 122,cpt: 0.64 },
-  { cid: "52551557199886", name: "A5.2_LATAM_INT_COMERCIO", spend: 108.71,impressions: 18815, clicks: 3659, ctr: 19.45,cpm: 5.78, reach: 14883, freq: 1.26, conversions: 277,cpt: 0.39 },
-  { cid: "52551557419286", name: "A6.1_LATAM_LOK_SERVICIOS",spend: 64.20, impressions: 6080,  clicks: 982,  ctr: 16.15,cpm: 10.56,reach: 4380,  freq: 1.39, conversions: 158,cpt: 0.41 },
-  { cid: "52551557419286", name: "A6.2_LATAM_INT_SERVICIOS",spend: 97.33, impressions: 9356,  clicks: 2096, ctr: 22.40,cpm: 10.40,reach: 6771,  freq: 1.38, conversions: 329,cpt: 0.30 },
-  // C3.NEW adset (recién creada 22-may)
-  { cid: "52551557600000", name: "A3N.1_MX_INT_SERVICIOS_CR", spend: 15.20, impressions: 2840, clicks: 72, ctr: 2.54, cpm: 5.35, reach: 2310, freq: 1.23, conversions: 1, cpt: 15.20 },
-  // C7 RETARGETING adsets (mixed CR+IC, recién activada)
-  { cid: "52551557700000", name: "A7.1_RT_WEB_VISITORS",   spend: 0.30, impressions: 130, clicks: 4, ctr: 3.08, cpm: 2.31, reach: 115, freq: 1.13, conversions: 0, cpt: null },
-  { cid: "52551557700000", name: "A7.2_RT_IG_ENGAGERS",    spend: 0.12, impressions: 50,  clicks: 2, ctr: 4.00, cpm: 2.40, reach: 45,  freq: 1.11, conversions: 0, cpt: null },
+  // C1 · 3 adsets (1 ACTIVE A1.2)
+  { cid: "52551556599886", adsetId: "52551564222286", name: "A1.1_MX_LOK_BELLEZA",       spend: 18.40,  impressions: 3580,  clicks: 69,   ctr: 1.93,  cpm: 5.14,  reach: 2800,  freq: 1.28, conversions: 9,  cpt: 2.04 },
+  { cid: "52551556599886", adsetId: "52551565131286", name: "A1.2_MX_CA_ENGAGERS",       spend: 198.20, impressions: 60900, clicks: 1620, ctr: 2.66,  cpm: 3.25,  reach: 29800, freq: 2.04, conversions: 33, cpt: 6.01 },
+  { cid: "52551556599886", adsetId: "52551565552886", name: "A1.3_MX_INT_BELLEZA",       spend: 76.40,  impressions: 20720, clicks: 400,  ctr: 1.93,  cpm: 3.69,  reach: 9560,  freq: 2.17, conversions: 2,  cpt: 38.20 },
+  // C2 · 4 adsets (1 ACTIVE A2.1)
+  { cid: "52551556733086", adsetId: "52551565907686", name: "A2.1_MX_LOK_COMERCIO",      spend: 165.30, impressions: 41200, clicks: 1402, ctr: 3.40,  cpm: 4.01,  reach: 28600, freq: 1.44, conversions: 18, cpt: 9.18 },
+  { cid: "52551556733086", adsetId: "52551566340486", name: "A2.2_MX_LOK_GURU",          spend: 9.77,   impressions: 1295,  clicks: 39,   ctr: 3.01,  cpm: 7.54,  reach: 1145,  freq: 1.13, conversions: 0,  cpt: null },
+  { cid: "52551556733086", adsetId: "52559490106886", name: "A2.2_MX_LOK_GURU_v2",       spend: 6.42,   impressions: 980,   clicks: 24,   ctr: 2.45,  cpm: 6.55,  reach: 870,   freq: 1.13, conversions: 0,  cpt: null },
+  { cid: "52551556733086", adsetId: "52551566715686", name: "A2.3_MX_INT_COMERCIO",      spend: 71.50,  impressions: 11920, clicks: 392,  ctr: 3.29,  cpm: 6.00,  reach: 4280,  freq: 2.79, conversions: 4,  cpt: 17.88 },
+  // C4 · 2 adsets (1 ACTIVE A4.1)
+  { cid: "52551557046086", adsetId: "52551567093686", name: "A4.1_LATAM_LOK_BELLEZA",    spend: 178.50, impressions: 65200, clicks: 1340, ctr: 2.06,  cpm: 2.74,  reach: 33800, freq: 1.93, conversions: 33, cpt: 5.41 },
+  { cid: "52551557046086", adsetId: "52551567381286", name: "A4.2_LATAM_INT_BELLEZA",    spend: 39.50,  impressions: 11600, clicks: 283,  ctr: 2.44,  cpm: 3.41,  reach: 5100,  freq: 2.27, conversions: 5,  cpt: 7.90 },
 ];
 
-export const SEED_SNAPSHOT_LABEL = "Snapshot · 1–23 mayo 2026";
+export const SEED_SNAPSHOT_LABEL = "Snapshot · 12-22 may 2026 (MAY26 batch)";
+
+// ──────────────────────────────────────────────────────────────────────
+// ADS PAUSADOS el 23-may (los 5 del handoff · referencia rápida)
+// ──────────────────────────────────────────────────────────────────────
+export const PAUSED_ADS_23MAY = [
+  { id: "52551678471086", name: "paraguas_imagen_v2_dol",  adsetId: "52551565131286", campaignId: "52551556599886", spend: 11.39, cr: 0,  reason: "Loss · sin conversiones" },
+  { id: "52551756184086", name: "linda_imagen_v1_asp",     adsetId: "52551566715686", campaignId: "52551556733086", spend: 54.92, cr: 3,  reason: "CPR €18.31 (4× sobre target)" },
+  { id: "52551754863486", name: "paraguas_imagen_v1_fun",  adsetId: "52551566715686", campaignId: "52551556733086", spend: 7.49,  cr: 0,  reason: "Loss" },
+  { id: "52551759740486", name: "crm_imagen_v1_dol",       adsetId: "52551566715686", campaignId: "52551556733086", spend: 6.84,  cr: 0,  reason: "Loss" },
+  { id: "52559490107886", name: "linda_imagen_v1_fun",     adsetId: "52559490106886", campaignId: "52551556733086", spend: 6.42,  cr: 0,  reason: "Loss" },
+];
+
+// ──────────────────────────────────────────────────────────────────────
+// WINNERS · los 2 que se escalaron
+// ──────────────────────────────────────────────────────────────────────
+export const SCALED_WINNERS_23MAY = [
+  { name: "C1 (CBO)",                  before: "€26/día", after: "€40/día", winnerAd: "paraguas_imagen_v2_asp", cr: 10, cpr: 4.02 },
+  { name: "A4.1 LATAM_LOK_BELLEZA",    before: "€10/día", after: "€25/día", winnerAd: "mkt_imagen_v1_dol",       cr: 7,  cpr: 5.31 },
+];

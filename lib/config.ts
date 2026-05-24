@@ -26,10 +26,16 @@ export const PLAN = {
   },
 };
 
-/** Mapeo lógico C1..C7 → campaign id Meta + evento de objetivo + geo + presupuesto.
- *  Estado al 22-may: las campañas IC (C3, C5, C6) quedaron pausadas; C3 reemplazada por C3.NEW (CR),
- *  y C7 Retargeting activada según plan. C8 LATAM_TOOLS no se crea hasta junio.
- *  Los IDs de C3.NEW y C7 son placeholders — se reemplazan con IDs reales cuando el token Meta esté conectado.
+/** Mapeo lógico C1..C6 → campaign id Meta + evento de objetivo + geo + presupuesto.
+ *
+ *  ESTADO al 23-may (verificado por handoff Santi + Graph API):
+ *   - Solo 6 campañas reales en Meta (C1-C6). IDs confirmados via API.
+ *   - C1 escalada de €26 a €40 el 23-may (CBO a nivel campaña)
+ *   - C4 ABO: solo A4.1 activo escalado €10 → €25
+ *   - C3, C5, C6 PAUSADAS el 22-may por bajo rendimiento (IC traía clicks sin signups)
+ *   - C7 RETARGETING · planeada · NO creada todavía (bloqueada por Custom Audiences)
+ *   - C9 LATAM_SERVICIOS_CR · planeada · NO creada
+ *   - C8 LATAM_TOOLS · pospuesta a junio
  */
 export const CAMPAIGN_MAP: Record<
   string,
@@ -52,7 +58,7 @@ export const CAMPAIGN_MAP: Record<
     event: "CompleteRegistration",
     geo: "MX",
     vertical: "Belleza",
-    daily: 26,
+    daily: 40, // escalado 23-may de €26 a €40
     total: 520,
   },
   "52551556733086": {
@@ -83,7 +89,7 @@ export const CAMPAIGN_MAP: Record<
     event: "CompleteRegistration",
     geo: "CR+PA+CL+CO",
     vertical: "Belleza",
-    daily: 18,
+    daily: 25, // ABO · solo A4.1 activo escalado 23-may de €10 a €25
     total: 360,
   },
   "52551557199886": {
@@ -106,33 +112,9 @@ export const CAMPAIGN_MAP: Record<
     daily: 10,
     total: 200,
   },
-  // C3.NEW · creada 22-may para reemplazar C3 (la IC con anomalía pixel) — ahora optimiza CompleteRegistration.
-  // ID placeholder hasta que el token Meta esté conectado.
-  "52551557600000": {
-    code: "C3.NEW",
-    cid: "52551557600000",
-    name: "MX_SERVICIOS_CR_MAY26",
-    event: "CompleteRegistration",
-    geo: "MX",
-    vertical: "Servicios",
-    daily: 16,
-    total: 144,
-  },
-  // C7 RETARGETING · activada por día 14 (según plan Julián). Mixed CR+IC. €90/día × 6 días.
-  // ID placeholder hasta que el token Meta esté conectado.
-  "52551557700000": {
-    code: "C7",
-    cid: "52551557700000",
-    name: "RETARGETING_MAY26",
-    event: "CompleteRegistration",
-    geo: "CR+PA+CL+CO+MX",
-    vertical: "Belleza",
-    daily: 90,
-    total: 540,
-  },
 };
 
-export const CAMPAIGN_CODES = ["C1", "C2", "C3", "C3.NEW", "C4", "C5", "C6", "C7"] as const;
+export const CAMPAIGN_CODES = ["C1", "C2", "C3", "C4", "C5", "C6"] as const;
 export type CampaignCode = (typeof CAMPAIGN_CODES)[number];
 
 export function getByCode(code: CampaignCode) {
@@ -201,12 +183,12 @@ export const TABS = [
   { id: "campanas",    label: "Campañas",    icon: "Megaphone",        group: "pauta" },
   { id: "estrategia",  label: "Estrategia",  icon: "Target", badge: true, group: "pauta" },
   { id: "paid",        label: "Paid Media",  icon: "TrendingUp",       group: "pauta" },
-  { id: "anuncios",    label: "Anuncios",    icon: "Image",            group: "contenido" },
+  { id: "anuncios",    label: "Anuncios",    icon: "Image",            group: "pauta" },
   { id: "organico",    label: "Orgánico",    icon: "Sparkles",         group: "contenido" },
   { id: "parrilla",    label: "Parrilla",    icon: "CalendarDays",     group: "contenido" },
-  { id: "seo",         label: "SEO",          icon: "Search",           group: "contenido" },
+  { id: "open-bui",    label: "Open Design",  icon: "Palette",          group: "contenido" },
   { id: "performance", label: "Performance", icon: "Gauge",            group: "analítica" },
-  { id: "open-bui",    label: "Open Design",  icon: "Palette",          group: "analítica" },
+  { id: "seo",         label: "SEO+AEO",      icon: "Search",           group: "analítica" },
   { id: "informe",     label: "Informe",     icon: "FileText",         group: "analítica" },
   { id: "config",      label: "Config",      icon: "Settings2",        group: "admin" },
 ] as const;

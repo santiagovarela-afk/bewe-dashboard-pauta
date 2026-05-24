@@ -12,10 +12,36 @@ export interface GlossaryTerm {
 export const GLOSSARY: Record<string, GlossaryTerm> = {
   cpt: {
     term: "CPT",
-    short: "Costo Por Trial (registro o inicio de pago)",
+    short: "Costo Por Trial (genérico · evita usarlo solo · prefiere CPL o CPTrial)",
     long:
-      "Cuánto cuesta cada conversión. Se calcula como spend ÷ conversiones. En Bewe el objetivo es ≤ €2.20, crítico si > €5.50.",
-    example: "C1 gastó €332 y tuvo 50 CR → CPT €6.65 → 🚨 crítico",
+      "Término ambiguo · puede significar Costo Por Registro o Costo Por Trial real. En Bewe Pauta OS preferimos CPL (registro) y CPTrial (activación real en app).",
+  },
+  cpl: {
+    term: "CPL",
+    short: "Cost Per Lead · costo por registro completo (CompleteRegistration)",
+    long:
+      "El KPI principal de pauta paga Bewe. Spend ÷ CompleteRegistration. Lo que medimos día a día. Target ≤ €2.20, crítico > €5.50.",
+    example: "C1 gastó €293 y tuvo 44 CR → CPL €6.66 → 🚨 crítico",
+  },
+  cpic: {
+    term: "CPIC",
+    short: "Cost Per Initiate Checkout · costo del click en 'Probar gratis'",
+    long:
+      "Spend ÷ InitiateCheckout. Históricamente bajo (clicks baratos · €0.30-€0.50) pero NO representa intención real. Demostrado mayo 2026: campañas optimizadas a IC convierten <1% a signup.",
+    example: "C5 gastó €172 y tuvo 372 IC → CPIC €0.46 (engañoso · solo 4 signups reales)",
+  },
+  cptrial: {
+    term: "CPTrial",
+    short: "Cost Per Trial · costo de cada usuario que ACTIVA un trial real en la app",
+    long:
+      "El KPI definitivo de calidad. Spend ÷ trials activados. Más fiable que CPL porque mide el evento de valor real (no solo registro). Requiere integración con PostHog/Mixpanel. Target Bewe: ≤ €8.20 para junio.",
+    example: "C4 gastó €218 y tuvo 38 trials → CPTrial €14.41",
+  },
+  cpr: {
+    term: "CPR",
+    short: "Cost Per Result · costo por evento objetivo del adset",
+    long:
+      "Genérico · depende de qué optimiza el adset. Si optimiza CR → CPR = CPL. Si optimiza IC → CPR = CPIC.",
   },
   cr: {
     term: "CR",

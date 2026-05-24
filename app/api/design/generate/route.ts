@@ -8,14 +8,24 @@ interface Body {
   skillId?: string;
   brief?: string;
   variant?: number;
+  persona?: "mark" | "lua";
 }
 
 /**
  * POST /api/design/generate
  * Body: { skillId, brief, variant? }
- * Devuelve: { html: string }
+ * Devuelve: { html, skillId, variant, finishReason, usage, truncated }
+ * Errores:
+ *   - 400 · skillId/brief inválidos
+ *   - 429 · { quotaExhausted: true, hint } cuando Gemini agotó cuota
+ *   - 500/502 · resto
  *
- * Proxy a Gemini con prompt-engineering específico para piezas Bewe.
+ * Sincronizado con /api/gemini (commit 41eba5c):
+ *   - Modelo fijo gemini-2.5-flash (NO el alias "latest" que rota)
+ *   - thinkingConfig.thinkingBudget = 0 (evita que se coma el budget)
+ *   - maxOutputTokens 4096 (HTML+CSS suele necesitar más)
+ *   - Mensajes claros con flag quotaExhausted para que el cliente
+ *     muestre instrucciones al usuario y deshabilite el botón.
  */
 export async function POST(req: NextRequest) {
   const key = process.env.GEMINI_API_KEY;
@@ -48,11 +58,14 @@ export async function POST(req: NextRequest) {
     );
   }
   const variant = Math.max(0, Math.floor(body.variant ?? 0));
+  const persona: "mark" | "lua" = body.persona === "lua" ? "lua" : "mark";
 
-  const system = buildSystemPrompt(skill, variant);
-  const userMsg = `Brief: "${brief}"\nVariante: ${variant}\n\nGenera el HTML.`;
+  const system = buildSystemPrompt(skill, variant, persona);
+  const userMsg = `Brief del usuario: "${brief}"\nVariante: ${variant}\n\nDevuelve SOLO el documento HTML completo, sin markdown, sin triple backticks, sin texto antes ni después.`;
 
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  // Modelo fijo · NO usar "gemini-flash-latest" (alias que rota a 2.5+/3.x).
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const maxOutputTokens = Number(process.env.GEMINI_MAX_TOKENS ?? "4096");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
   let geminiResp: Response;
@@ -64,9 +77,13 @@ export async function POST(req: NextRequest) {
         system_instruction: { parts: [{ text: system }] },
         contents: [{ parts: [{ text: userMsg }] }],
         generationConfig: {
-          maxOutputTokens: 4096,
+          maxOutputTokens,
           temperature: variant > 0 ? 0.95 : 0.7,
           topP: 0.95,
+          // Desactiva tokens de "thinking" internos · si el modelo los
+          // soporta, evita que el presupuesto se consuma antes del HTML.
+          // Modelos antiguos ignoran esta key (no rompe).
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     });
@@ -79,12 +96,34 @@ export async function POST(req: NextRequest) {
 
   const data = await geminiResp.json();
   if (data.error) {
-    return NextResponse.json({ error: data.error.message }, { status: 500 });
-  }
-  const raw: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!raw) {
+    const msg = String(data.error.message ?? "");
+    const isQuota = /quota|rate.?limit|exceeded/i.test(msg);
     return NextResponse.json(
-      { error: "Sin respuesta del modelo (¿safety block o cuota agotada?)" },
+      {
+        error: msg,
+        quotaExhausted: isQuota,
+        hint: isQuota
+          ? "El tier gratuito de Gemini se agotó. Activa billing en Google AI Studio o espera el reset (~24h). Mientras tanto puedes usar el Canvas manual."
+          : undefined,
+      },
+      { status: isQuota ? 429 : 500 },
+    );
+  }
+
+  const candidate = data?.candidates?.[0];
+  const raw: string | undefined = candidate?.content?.parts?.[0]?.text;
+  const finishReason = candidate?.finishReason ?? "UNKNOWN";
+
+  if (!raw) {
+    const blocked = finishReason === "SAFETY" || finishReason === "PROHIBITED_CONTENT";
+    return NextResponse.json(
+      {
+        error: blocked
+          ? `Respuesta bloqueada por safety filter (finishReason=${finishReason})`
+          : `Sin respuesta del modelo (finishReason=${finishReason}). Reintenta o sube maxOutputTokens.`,
+        finishReason,
+        usage: data?.usageMetadata,
+      },
       { status: 500 },
     );
   }
@@ -92,65 +131,91 @@ export async function POST(req: NextRequest) {
   const html = extractHtml(raw, skill);
   if (!html) {
     return NextResponse.json(
-      { error: "El modelo no devolvió HTML válido. Intenta de nuevo." },
+      {
+        error: "El modelo no devolvió HTML válido. Intenta de nuevo o reformula el brief.",
+        finishReason,
+        usage: data?.usageMetadata,
+      },
       { status: 500 },
     );
   }
 
-  return NextResponse.json({ html, skillId: skill.id, variant });
+  return NextResponse.json({
+    html,
+    skillId: skill.id,
+    variant,
+    finishReason,
+    usage: data?.usageMetadata,
+    truncated: finishReason === "MAX_TOKENS",
+  });
 }
 
 function buildSystemPrompt(
   skill: (typeof SKILLS)[number],
   variant: number,
+  persona: "mark" | "lua" = "mark",
 ): string {
   const variantHint =
     variant > 0
-      ? `IMPORTANTE: esta es la variante #${variant}. Hazla SIGNIFICATIVAMENTE distinta a un primer intento — usa otra estructura, otros gradientes, otra jerarquía visual.`
+      ? `IMPORTANTE: variante #${variant}. Hazla MUY distinta a un primer intento — otra estructura, otra paleta dentro del brand kit, otra jerarquía, otra disposición.`
       : "";
 
-  return `Eres un diseñador senior de ${BRAND.name}. Tu trabajo: generar HTML+CSS PURO (sin React, sin Tailwind) que renderice una pieza de tipo "${skill.label}" en formato ${skill.aspect}.
+  const personaHint =
+    persona === "lua"
+      ? "Eres Lúa OS · sensibilidad cálida · prefieres composiciones más orgánicas, gradientes suaves cyan→lime y tipografía con más respiración."
+      : "Eres Mark OS · sensibilidad afilada · prefieres composiciones angulares, contrastes fuertes violet/ember y tipografía bold densa.";
 
-Brand kit ${BRAND.name}:
-- Colores: primary ${BRAND.colors.primary} (violeta), secondary ${BRAND.colors.secondary} (cyan), accent ${BRAND.colors.accent} (lime), ember ${BRAND.colors.ember}
-- Fondo dark sugerido: ${BRAND.colors.dark} · fondo light: ${BRAND.colors.light}
-- Fuente principal: ${BRAND.fonts.display} (system fonts, ya disponible)
-- Tono: ${BRAND.voice}
+  return `${personaHint}
+
+Eres diseñador senior de ${BRAND.name} (software de gestión para negocios de servicios profesionales).
+
+BRAND KIT BEWE — OBLIGATORIO usarlo:
+- Color primary:   ${BRAND.colors.primary} (violeta) · protagonista
+- Color secondary: ${BRAND.colors.secondary} (cyan)
+- Color accent:    ${BRAND.colors.accent} (lime)
+- Color ember:     ${BRAND.colors.ember} (naranja cálido)
+- Fondo dark:      ${BRAND.colors.dark}
+- Fondo light:     ${BRAND.colors.light}
+- Fuente: ${BRAND.fonts.display} (carga Inter de Google Fonts vía <link>)
 - Tagline: "${BRAND.tagline}"
+- Tono visual: gradient · tipografía bold · whitespace generoso · asimetría · alto contraste
+- Estilo: moderno, profesional cálido, NO corporativo aburrido
 
-REGLAS DURAS:
-1. Devuelve SOLO un documento HTML válido auto-contenido (<!DOCTYPE html>...</html>) con un único <style> dentro de <head>. NADA de texto explicativo antes o después.
-2. NO uses recursos externos: ni Google Fonts, ni imágenes URL, ni librerías JS, ni Tailwind.
-3. NO incluyas <script>. NO incluyas event handlers inline.
-4. Imágenes/iconos: SVG inline o placeholders con gradientes/figuras geométricas. Permitido <img> solo con data: URI si es estrictamente necesario.
-5. El lienzo debe medir exactamente ${skill.width}px × ${skill.height}px. Aplica width/height fijos en html y body. overflow:hidden.
-6. Diseño: moderno · gradient suave · tipografía bold · jerarquía clara · whitespace generoso · alto contraste. Evita aspecto "Paint" o flat aburrido.
-7. Usa los colores del brand kit como protagonistas. Acepta acentos neutros (blanco/gris) para balance.
-8. Si el brief sugiere CTA, inclúyelo como botón visualmente destacado (pill o rectangle, con sombra).
-9. Logo: si el espacio lo permite, incluye un wordmark "${BRAND.name}" pequeño (texto, no imagen) en una esquina.
+PIEZA:
+- Skill: "${skill.label}"
+- Tamaño exacto del lienzo: ${skill.size} (${skill.aspect})
+- Width × Height: ${skill.width}px × ${skill.height}px
+
+REGLAS DURAS (no negociables):
+1. Devuelve SOLO un documento HTML válido autocontenido empezando con <!DOCTYPE html>. NADA de markdown, NADA de triple backticks (\`\`\`), NADA de texto antes ni después del HTML.
+2. CSS inline dentro de un único <style> en <head>. Permitido cargar Inter de Google Fonts con <link rel="preconnect"> + <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet"> en <head>.
+3. Imágenes: SOLO SVG inline o gradientes CSS. PROHIBIDO <img src="http..."> o cualquier recurso de red salvo Google Fonts.
+4. NO incluyas <script>. NO event handlers inline (onClick, onload…).
+5. El <body> debe medir exactamente ${skill.width}px × ${skill.height}px (width/height fijos en html y body, overflow:hidden).
+6. Usa los 4 colores del brand kit como protagonistas (primary violeta + 1 o 2 acentos). Acepta blanco/gris neutro para balance.
+7. Si el brief sugiere CTA, inclúyelo como botón visualmente destacado (pill o rectángulo con sombra de color).
+8. Si entra el wordmark "${BRAND.name}", úsalo en una esquina como texto (no logo de imagen).
+9. Composición: jerarquía clara (1 titular grande + soporte + CTA). NO aspecto Paint, NO flat aburrido.
 
 ${variantHint}
 
-Devuelve únicamente el HTML.`;
+Recuerda: SOLO HTML. Sin markdown.`;
 }
 
 /**
  * Extrae el HTML útil de la respuesta del modelo.
- * - Si viene en bloque ```html ... ```, lo desempaqueta.
- * - Si viene crudo, busca <!DOCTYPE o <html.
- * - Como último recurso, lo envuelve en un esqueleto.
+ * - Quita fences ```html ... ``` si vinieron.
+ * - Si arranca con <!DOCTYPE o <html, lo deja tal cual.
+ * - Si trae <html> embebido en medio, recorta.
+ * - Como último recurso, envuelve fragmento en esqueleto mínimo.
  */
 function extractHtml(raw: string, skill: (typeof SKILLS)[number]): string | null {
   let s = raw.trim();
-  // Quita fences
   const fence = s.match(/```(?:html)?\s*\n?([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
-  // Si arranca con <!DOCTYPE o <html, lo dejamos tal cual
   if (/^<!DOCTYPE/i.test(s) || /^<html[\s>]/i.test(s)) return s;
-  // Si trae <html> embebido en medio, recorta
   const m = s.match(/<!DOCTYPE[\s\S]*?<\/html>/i) || s.match(/<html[\s\S]*?<\/html>/i);
   if (m) return m[0];
-  // Plan B: envuelve fragmento
   if (s.length > 32 && /<\w+/.test(s)) {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:${skill.width}px;height:${skill.height}px;font-family:Inter,system-ui,sans-serif;overflow:hidden}</style></head><body>${s}</body></html>`;
   }

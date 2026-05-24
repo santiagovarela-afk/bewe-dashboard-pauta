@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { Loader2, ImageIcon, AlertCircle } from "lucide-react";
+import { Loader2, ImageIcon, AlertCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Skill } from "./skills";
 
@@ -114,12 +114,26 @@ function PreviewEmpty() {
 }
 
 function PreviewError({ msg }: { msg: string }) {
+  // Detectar quota Gemini para mostrar mensaje distinto + sugerencia canvas
+  const isQuota = /quota|agot[oó]|cuota|rate.?limit|exceed/i.test(msg);
   return (
     <div className="absolute inset-0 grid place-items-center bg-card/80">
-      <div className="flex flex-col items-center gap-2 text-center px-6 max-w-[300px]">
-        <AlertCircle className="size-6 text-[hsl(var(--destructive))]" />
-        <div className="text-sm font-semibold">No se pudo generar</div>
+      <div className="flex flex-col items-center gap-2 text-center px-6 max-w-[340px]">
+        {isQuota ? (
+          <Clock className="size-6 text-[hsl(var(--brand-ember))]" />
+        ) : (
+          <AlertCircle className="size-6 text-[hsl(var(--destructive))]" />
+        )}
+        <div className="text-sm font-semibold">
+          {isQuota ? "Gemini agotó cuota del día" : "No se pudo generar"}
+        </div>
         <p className="text-[11px] text-muted-foreground/80 leading-snug">{msg}</p>
+        {isQuota && (
+          <p className="text-[10px] text-muted-foreground/60 leading-snug mt-1">
+            Mientras tanto puedes dibujar en el <strong>Canvas manual</strong>{" "}
+            (botón arriba a la derecha).
+          </p>
+        )}
       </div>
     </div>
   );

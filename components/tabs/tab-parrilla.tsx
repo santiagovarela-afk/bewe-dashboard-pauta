@@ -1,9 +1,8 @@
 "use client";
 import * as React from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   Pencil,
-  X,
   Facebook,
   Instagram,
   Sparkles,
@@ -13,6 +12,16 @@ import {
   Image as ImageIcon,
   Calendar,
   AlertCircle,
+  Hash,
+  Lightbulb,
+  Eye,
+  Clock4,
+  Film,
+  Smartphone,
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
+  Flame,
 } from "lucide-react";
 import { SectionHeader } from "@/components/shared/section-header";
 import { TextureCard } from "@/components/fx/texture-card";
@@ -25,53 +34,20 @@ import { toast } from "sonner";
 import { OnboardingTip } from "@/components/shared/onboarding-tip";
 import { Drawer } from "@/components/shared/drawer";
 import { PARRILLA_TEMPLATES, type ParrillaTemplate } from "@/components/parrilla/templates";
+import {
+  loadPosts,
+  savePosts,
+  cryptoRandomId,
+  type ScheduledPost,
+  type ParrillaPlatform,
+} from "@/lib/parrilla-data";
+import { HashtagFinder } from "@/components/parrilla/hashtag-finder";
+import { IdeaGenerator, type PostIdea } from "@/components/parrilla/idea-generator";
+import { PostPreview, type PreviewPlatform } from "@/components/parrilla/post-preview";
+import { Insights24h } from "@/components/parrilla/insights-24h";
+import { bestTimeForPlatform, RULES_2026 } from "@/components/parrilla/best-time";
 
 const DAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const STORAGE_KEY = "bw_parrilla_posts";
-
-interface ScheduledPost {
-  id: string;
-  date: string; // ISO YYYY-MM-DD
-  platforms: ("ig" | "fb")[];
-  caption: string;
-  imageUrl?: string;
-  createdAt: string;
-}
-
-function loadPosts(): ScheduledPost[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // Backwards compat: añadir id/createdAt si faltan
-    return parsed.map((p: Partial<ScheduledPost> & { date: string; platforms: ("ig" | "fb")[]; caption: string }) => ({
-      id: p.id ?? cryptoRandomId(),
-      date: p.date,
-      platforms: p.platforms,
-      caption: p.caption,
-      imageUrl: p.imageUrl,
-      createdAt: p.createdAt ?? new Date().toISOString(),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function savePosts(posts: ScheduledPost[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-  } catch {
-    /* ignore */
-  }
-}
-
-function cryptoRandomId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 export function TabParrilla() {
   const [posts, setPosts] = React.useState<ScheduledPost[]>([]);
@@ -80,48 +56,49 @@ export function TabParrilla() {
   const [composerDate, setComposerDate] = React.useState<string | null>(null);
   const [hydrated, setHydrated] = React.useState(false);
 
+  // Mes que se está viendo (puede no ser el actual)
+  const today = React.useMemo(() => new Date(), []);
+  const [viewYear, setViewYear] = React.useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = React.useState(today.getMonth());
+
   // Hydrate on mount
   React.useEffect(() => {
     setPosts(loadPosts());
     setHydrated(true);
   }, []);
 
-  // Persist on change (después de hidratar para no pisar con [])
+  // Persist
   React.useEffect(() => {
     if (!hydrated) return;
     savePosts(posts);
   }, [posts, hydrated]);
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const startOffset = (firstDay.getDay() + 6) % 7;
 
   const cells: Array<{ day: number | null; iso: string | null }> = [];
   for (let i = 0; i < startOffset; i++) cells.push({ day: null, iso: null });
   for (let d = 1; d <= daysInMonth; d++) {
-    const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     cells.push({ day: d, iso });
   }
 
-  const todayIso = now.toISOString().slice(0, 10);
-  const monthPosts = posts.filter((p) => p.date.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`));
+  const todayIso = today.toISOString().slice(0, 10);
+  const monthPrefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
+  const monthPosts = posts.filter((p) => p.date.startsWith(monthPrefix));
 
-  // Next scheduled post relative to today
   const nextPost = React.useMemo(() => {
     const upcoming = posts
       .filter((p) => p.date >= todayIso)
       .sort((a, b) => a.date.localeCompare(b.date))[0];
     if (!upcoming) return null;
     const d = new Date(upcoming.date).getTime();
-    const today = new Date(todayIso).getTime();
-    const daysUntil = Math.round((d - today) / 864e5);
+    const todayTs = new Date(todayIso).getTime();
+    const daysUntil = Math.round((d - todayTs) / 864e5);
     return { post: upcoming, daysUntil };
   }, [posts, todayIso]);
 
-  // Density max for color scale
   const dayCounts = React.useMemo(() => {
     const map = new Map<string, number>();
     for (const p of posts) {
@@ -170,32 +147,66 @@ export function TabParrilla() {
     setSelectedDate(iso);
   }
 
+  function prevMonth() {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  }
+  function nextMonth() {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  }
+  function goToday() {
+    setViewYear(today.getFullYear());
+    setViewMonth(today.getMonth());
+  }
+
+  const monthLabel = firstDay.toLocaleDateString("es-ES", {
+    month: "long",
+    year: "numeric",
+  });
+
   return (
     <div className="space-y-6 max-w-[1500px]">
       <OnboardingTip
         storageKey="parrilla"
         steps={[
           {
-            title: "¿Qué es la Parrilla?",
-            body: "Es tu calendario editorial del mes. Aquí planeas qué publicar y cuándo en Instagram y Facebook. Los posts se guardan localmente en tu navegador (no se publican aún en Meta).",
+            title: "Parrilla inteligente · piloto automático",
+            body: "Planifica, organiza y optimiza tus redes desde un solo lugar. Calendario + ideas IA + hashtags clasificados + preview real + analítica primeras 24h.",
           },
           {
-            title: "Programar un post",
-            body: "Pulsa 'Nuevo post' o haz clic en cualquier día del calendario. Se abre el composer con plantillas listas (Promo semana, Tutorial Linda, Caso de éxito, Tip rápido).",
+            title: "Composer Metricool-style",
+            body: "Pulsa 'Nuevo post' o clic en un día. El composer tiene 5 pestañas: Compose (caption + imagen), Ideas (Mark/Lúa genera 5 ideas), Hashtags (HIGH/MID/NICHE), Preview (mockup real IG/FB/Reel/Story) y Best time (mejor hora para postear).",
           },
           {
-            title: "Ver el día completo",
-            body: "Haz clic en un día para abrir el panel con todos los posts programados de esa fecha. Puedes eliminarlos individualmente o duplicar uno como base.",
+            title: "Ideas instantáneas con tu tono Bewe",
+            body: "Mark/Lúa conocen el perfil Bewe y generan posts con hook + copy + CTA según objetivo (engagement, leads, awareness, brand).",
+          },
+          {
+            title: "Hashtags que funcionan",
+            body: "Clasificación automática en HIGH (>1M), MID (100k-1M) y NICHE (<100k alta intención). Mix recomendado 2026: 3 high + 4 mid + 3 niche.",
+          },
+          {
+            title: "Analytics primeras 24h",
+            body: "Detectamos posts que en sus primeras horas ya superan el promedio de tu cuenta · esos son las 'estrellas 24h' que merecen amplificación.",
           },
           {
             title: "Persistencia local",
-            body: "Todo se guarda en localStorage de tu navegador. Si limpias caché o usas otro equipo, los posts no estarán. La publicación directa a Meta requerirá permisos pages_manage_posts (próxima fase).",
+            body: "Posts guardados en localStorage. La publicación directa requerirá pages_manage_posts + instagram_content_publish (próxima fase).",
           },
         ]}
       />
 
       <SectionHeader
-        title="Parrilla de contenido · mayo 2026"
+        title={`Parrilla · ${monthLabel}`}
         sub={
           <span className="flex flex-wrap items-center gap-2">
             <span>
@@ -258,6 +269,39 @@ export function TabParrilla() {
 
       {/* Calendar full width */}
       <TextureCard className="p-5">
+        {/* Month nav */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1">
+            <Button
+              onClick={prevMonth}
+              size="sm"
+              variant="outline"
+              className="!h-7 !w-7 !px-0"
+              aria-label="Mes anterior"
+            >
+              <ChevronLeft className="size-3.5" />
+            </Button>
+            <Button
+              onClick={nextMonth}
+              size="sm"
+              variant="outline"
+              className="!h-7 !w-7 !px-0"
+              aria-label="Mes siguiente"
+            >
+              <ChevronRight className="size-3.5" />
+            </Button>
+            <Button
+              onClick={goToday}
+              size="sm"
+              variant="ghost"
+              className="!h-7 !text-[10px] ml-1"
+            >
+              Hoy
+            </Button>
+          </div>
+          <div className="text-[11px] font-semibold capitalize">{monthLabel}</div>
+        </div>
+
         <div className="grid grid-cols-7 gap-1.5 mb-2">
           {DAY_LABELS.map((d) => (
             <div
@@ -296,7 +340,7 @@ export function TabParrilla() {
                 style={
                   c.iso && !isToday && dayPosts.length > 0
                     ? {
-                        background: `hsl(var(--brand-violet) / ${0.04 + density * 0.14})`,
+                        background: `hsl(var(--brand-violet) / ${0.04 + density * 0.18})`,
                       }
                     : undefined
                 }
@@ -320,7 +364,14 @@ export function TabParrilla() {
                         )}
                       </div>
                       {dayPosts.length > 0 && (
-                        <span className="text-[9px] font-mono font-bold text-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.15)] rounded-full px-1.5 py-0.5">
+                        <span
+                          className={cn(
+                            "text-[9px] font-mono font-bold rounded-full px-1.5 py-0.5",
+                            dayPosts.length >= 3
+                              ? "bg-[hsl(var(--brand-violet))] text-white"
+                              : "text-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.15)]",
+                          )}
+                        >
                           {dayPosts.length}
                         </span>
                       )}
@@ -331,10 +382,10 @@ export function TabParrilla() {
                           key={p.id}
                           className="text-[9px] truncate px-1 py-0.5 rounded leading-snug"
                           style={{
-                            background: p.platforms.includes("ig")
+                            background: p.platforms.includes("ig") || p.platforms.includes("reel") || p.platforms.includes("story")
                               ? "hsl(var(--brand-violet) / 0.18)"
                               : "hsl(var(--info) / 0.18)",
-                            color: p.platforms.includes("ig")
+                            color: p.platforms.includes("ig") || p.platforms.includes("reel") || p.platforms.includes("story")
                               ? "hsl(var(--brand-violet))"
                               : "hsl(var(--info))",
                           }}
@@ -359,7 +410,7 @@ export function TabParrilla() {
         <div className="mt-4 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2.5 rounded-sm bg-[hsl(var(--brand-violet)/0.18)] border border-[hsl(var(--brand-violet)/0.3)]" />
-            Instagram
+            Instagram / Reel / Story
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2.5 rounded-sm bg-[hsl(var(--info)/0.18)] border border-[hsl(var(--info)/0.3)]" />
@@ -370,12 +421,49 @@ export function TabParrilla() {
             Hoy
           </span>
           <span className="ml-auto text-[9px] font-mono">
-            Click en día → ver detalle · Botón nuevo post → composer
+            Click día → ver detalle · 3+ posts = badge sólido
           </span>
         </div>
       </TextureCard>
 
-      {/* Empty state cuando no hay posts */}
+      {/* Analítica + Reglas 2026 lado a lado */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <TextureCard className="p-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Flame className="size-3 text-[hsl(var(--brand-ember))]" />
+            Insights primeras 24h
+          </div>
+          <Insights24h />
+        </TextureCard>
+
+        <TextureCard className="p-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-3 flex items-center gap-1.5">
+            <BookOpen className="size-3 text-[hsl(var(--brand-lime))]" />
+            Reglas 2026 · engagement orgánico
+          </div>
+          <div className="grid grid-cols-1 gap-1.5">
+            {RULES_2026.map((r, i) => (
+              <motion.div
+                key={r.title}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.04 }}
+                className="flex items-start gap-2 p-1.5 rounded hover:bg-secondary/40"
+              >
+                <span className="text-base leading-none mt-0.5">{r.icon}</span>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold">{r.title}</div>
+                  <div className="text-[10px] text-muted-foreground leading-snug">
+                    {r.detail}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </TextureCard>
+      </div>
+
+      {/* Empty state */}
       {hydrated && posts.length === 0 && (
         <TextureCard className="p-8 text-center border-dashed">
           <div className="size-12 rounded-2xl bg-[hsl(var(--brand-cyan)/0.12)] mx-auto mb-3 grid place-items-center border border-[hsl(var(--brand-cyan)/0.3)]">
@@ -383,7 +471,7 @@ export function TabParrilla() {
           </div>
           <div className="text-[13px] font-semibold mb-1">Sin posts programados todavía</div>
           <div className="text-[11px] text-muted-foreground max-w-md mx-auto mb-3">
-            Empieza a planear tu mes editorial. Usa una plantilla para arrancar más rápido.
+            Empieza a planear tu mes editorial. Usa una plantilla, genera ideas con Mark/Lúa o pega tu propio caption.
           </div>
           <Button
             onClick={() => openComposerForDate(todayIso)}
@@ -404,7 +492,7 @@ export function TabParrilla() {
         onAdd={(iso) => openComposerForDate(iso)}
       />
 
-      {/* Composer drawer */}
+      {/* Composer drawer · Metricool-style con tabs */}
       <Drawer
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
@@ -414,7 +502,7 @@ export function TabParrilla() {
           </span>
         }
         subtitle={composerDate ? `Programar para ${composerDate}` : undefined}
-        width={460}
+        width={520}
       >
         <Composer
           date={composerDate ?? todayIso}
@@ -520,15 +608,11 @@ function DayDrawer({
               {p.platforms.map((pl) => (
                 <Badge
                   key={pl}
-                  variant={pl === "ig" ? "violet" : "info"}
+                  variant={pl === "fb" ? "info" : "violet"}
                   className="!text-[9px]"
                 >
-                  {pl === "ig" ? (
-                    <Instagram className="size-2.5 mr-0.5" />
-                  ) : (
-                    <Facebook className="size-2.5 mr-0.5" />
-                  )}
-                  {pl === "ig" ? "IG" : "FB"}
+                  {platformIcon(pl)}
+                  {pl.toUpperCase()}
                 </Badge>
               ))}
               <button
@@ -551,7 +635,7 @@ function DayDrawer({
               {p.caption}
             </div>
             <div className="mt-2 text-[9px] font-mono text-muted-foreground/70">
-              Creado {new Date(p.createdAt).toLocaleDateString("es-ES")}
+              {p.time && `⏰ ${p.time} · `}Creado {new Date(p.createdAt).toLocaleDateString("es-ES")}
             </div>
           </motion.div>
         ))}
@@ -559,6 +643,23 @@ function DayDrawer({
     </Drawer>
   );
 }
+
+function platformIcon(p: ParrillaPlatform) {
+  switch (p) {
+    case "ig":
+      return <Instagram className="size-2.5 mr-0.5" />;
+    case "fb":
+      return <Facebook className="size-2.5 mr-0.5" />;
+    case "reel":
+      return <Film className="size-2.5 mr-0.5" />;
+    case "story":
+      return <Smartphone className="size-2.5 mr-0.5" />;
+  }
+}
+
+// ===== COMPOSER METRICOOL-STYLE =====
+
+type ComposerTab = "compose" | "ideas" | "hashtags" | "preview" | "besttime";
 
 function Composer({
   date,
@@ -569,14 +670,17 @@ function Composer({
   onClose: () => void;
   onAdd: (p: Omit<ScheduledPost, "id" | "createdAt">) => void;
 }) {
+  const [tab, setTab] = React.useState<ComposerTab>("compose");
   const [imgUrl, setImgUrl] = React.useState("");
   const [caption, setCaption] = React.useState("");
-  const [platforms, setPlatforms] = React.useState<("ig" | "fb")[]>(["ig"]);
+  const [platforms, setPlatforms] = React.useState<ParrillaPlatform[]>(["ig"]);
   const [publishing, setPublishing] = React.useState(false);
   const [selectedTemplate, setSelectedTemplate] = React.useState<string | null>(null);
   const [dateValue, setDateValue] = React.useState(date);
+  const [timeValue, setTimeValue] = React.useState("19:00");
+  const [goal, setGoal] = React.useState<ScheduledPost["goal"]>("engagement");
 
-  function toggle(p: "ig" | "fb") {
+  function toggle(p: ParrillaPlatform) {
     setPlatforms((curr) =>
       curr.includes(p) ? curr.filter((x) => x !== p) : [...curr, p],
     );
@@ -589,6 +693,17 @@ function Composer({
     toast.info(`Plantilla "${t.label}" aplicada`);
   }
 
+  function useIdea(idea: PostIdea) {
+    const text = `${idea.hook}\n\n${idea.copy}\n\n${idea.cta}`;
+    setCaption(text);
+    setTab("compose");
+  }
+
+  function insertHashtags(text: string) {
+    setCaption((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
+    setTab("compose");
+  }
+
   const captionLen = caption.trim().length;
   const captionTooShort = captionLen > 0 && captionLen < 10;
   const captionEmpty = captionLen === 0;
@@ -598,15 +713,11 @@ function Composer({
 
   async function publishNow() {
     if (captionEmpty) {
-      toast.error("Caption vacío", {
-        description: "Escribe al menos 10 caracteres.",
-      });
+      toast.error("Caption vacío", { description: "Escribe al menos 10 caracteres." });
       return;
     }
     if (captionTooShort) {
-      toast.error("Caption demasiado corto", {
-        description: "Mínimo 10 caracteres.",
-      });
+      toast.error("Caption demasiado corto");
       return;
     }
     if (noPlatform) {
@@ -620,12 +731,181 @@ function Composer({
         platforms,
         caption: caption.trim(),
         imageUrl: imgUrl.trim() || undefined,
+        time: timeValue,
+        goal,
       });
     } finally {
       setPublishing(false);
     }
   }
 
+  // Plataforma de preview = primera seleccionada (o IG por defecto)
+  const previewPlatform: PreviewPlatform =
+    (platforms[0] as PreviewPlatform) ?? "ig";
+
+  // Tema para idea/hashtag generator (caption truncado o palabra inicial)
+  const baseTopic = caption.trim().split(/[.\n]/)[0]?.slice(0, 80) ?? "";
+
+  const TABS: Array<{ id: ComposerTab; label: string; icon: React.ReactNode }> = [
+    { id: "compose", label: "Compose", icon: <Pencil className="size-3" /> },
+    { id: "ideas", label: "Ideas", icon: <Lightbulb className="size-3" /> },
+    { id: "hashtags", label: "Hashtags", icon: <Hash className="size-3" /> },
+    { id: "preview", label: "Preview", icon: <Eye className="size-3" /> },
+    { id: "besttime", label: "Best time", icon: <Clock4 className="size-3" /> },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 rounded-lg border border-border/60 bg-card/40">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-1.5 py-1.5 rounded-md transition-all",
+              tab === t.id
+                ? "bg-[hsl(var(--brand-violet)/0.18)] text-[hsl(var(--brand-violet))] shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/40",
+            )}
+          >
+            {t.icon}
+            <span className="hidden sm:inline">{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2 }}
+        >
+          {tab === "compose" && (
+            <ComposePanel
+              caption={caption}
+              setCaption={setCaption}
+              imgUrl={imgUrl}
+              setImgUrl={setImgUrl}
+              platforms={platforms}
+              toggle={toggle}
+              dateValue={dateValue}
+              setDateValue={setDateValue}
+              timeValue={timeValue}
+              setTimeValue={setTimeValue}
+              goal={goal}
+              setGoal={setGoal}
+              selectedTemplate={selectedTemplate}
+              applyTemplate={applyTemplate}
+              captionTooShort={captionTooShort}
+              overLimit={overLimit}
+              captionLen={caption.length}
+              igLimit={igLimit}
+            />
+          )}
+          {tab === "ideas" && (
+            <IdeaGenerator
+              platform={(platforms[0] as PreviewPlatform) ?? "ig"}
+              onUse={useIdea}
+            />
+          )}
+          {tab === "hashtags" && (
+            <HashtagFinder initialTopic={baseTopic} onInsert={insertHashtags} />
+          )}
+          {tab === "preview" && (
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-bold">
+                Vista previa · {previewPlatform.toUpperCase()}
+              </div>
+              {!caption.trim() && !imgUrl.trim() ? (
+                <div className="rounded-lg border border-dashed border-border bg-card/40 p-5 text-center">
+                  <Eye className="size-7 mx-auto mb-2 text-muted-foreground/50" />
+                  <div className="text-[11px] text-muted-foreground">
+                    Añade caption o imagen en <strong>Compose</strong> para ver el mockup.
+                  </div>
+                </div>
+              ) : (
+                <PostPreview
+                  platform={previewPlatform}
+                  caption={caption}
+                  imageUrl={imgUrl}
+                />
+              )}
+              <div className="text-[9px] text-muted-foreground/70 leading-snug">
+                Mockup visual · no publica en Meta. Confirma el formato y vuelve a Compose para programar.
+              </div>
+            </div>
+          )}
+          {tab === "besttime" && <BestTimePanel platforms={platforms} />}
+        </motion.div>
+      </AnimatePresence>
+
+      <div className="flex gap-2 pt-2 border-t border-border/40">
+        <Button onClick={onClose} variant="outline" size="sm" className="flex-1">
+          Cancelar
+        </Button>
+        <Button
+          onClick={publishNow}
+          disabled={publishing || captionEmpty || noPlatform || overLimit}
+          variant="glow"
+          size="sm"
+          className="flex-[2]"
+        >
+          <Send className="size-3.5" />
+          {publishing ? "Programando…" : "Programar post"}
+        </Button>
+      </div>
+
+      <div className="text-[10px] text-muted-foreground/70 leading-relaxed">
+        Se guarda localmente. La publicación directa via Graph API requiere{" "}
+        <code className="font-mono">pages_manage_posts</code> e{" "}
+        <code className="font-mono">instagram_content_publish</code>.
+      </div>
+    </div>
+  );
+}
+
+function ComposePanel({
+  caption,
+  setCaption,
+  imgUrl,
+  setImgUrl,
+  platforms,
+  toggle,
+  dateValue,
+  setDateValue,
+  timeValue,
+  setTimeValue,
+  goal,
+  setGoal,
+  selectedTemplate,
+  applyTemplate,
+  captionTooShort,
+  overLimit,
+  captionLen,
+  igLimit,
+}: {
+  caption: string;
+  setCaption: (s: string) => void;
+  imgUrl: string;
+  setImgUrl: (s: string) => void;
+  platforms: ParrillaPlatform[];
+  toggle: (p: ParrillaPlatform) => void;
+  dateValue: string;
+  setDateValue: (s: string) => void;
+  timeValue: string;
+  setTimeValue: (s: string) => void;
+  goal: ScheduledPost["goal"];
+  setGoal: (g: ScheduledPost["goal"]) => void;
+  selectedTemplate: string | null;
+  applyTemplate: (t: ParrillaTemplate) => void;
+  captionTooShort: boolean;
+  overLimit: boolean;
+  captionLen: number;
+  igLimit: number;
+}) {
   return (
     <div className="space-y-4">
       {/* Plantillas */}
@@ -644,11 +924,12 @@ function Composer({
                   ? "border-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.08)]"
                   : "border-border/60 bg-card/60 hover:border-foreground/30",
               )}
+              title={t.tip}
             >
               <div className="text-[12px] font-semibold flex items-center gap-1.5 mb-1">
                 <span>{t.emoji}</span> {t.label}
               </div>
-              <div className="text-[9px] text-muted-foreground leading-snug">
+              <div className="text-[9px] text-muted-foreground leading-snug line-clamp-2">
                 {t.description}
               </div>
             </button>
@@ -661,35 +942,71 @@ function Composer({
         <Label className="mb-2 block text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-bold">
           Plataformas
         </Label>
-        <div className="flex gap-2">
-          {(["ig", "fb"] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => toggle(p)}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold px-3 py-2 rounded-full border transition-colors",
-                platforms.includes(p)
-                  ? p === "ig"
-                    ? "bg-[hsl(var(--brand-violet)/0.18)] text-[hsl(var(--brand-violet))] border-[hsl(var(--brand-violet)/0.4)]"
-                    : "bg-[hsl(var(--info)/0.18)] text-[hsl(var(--info))] border-[hsl(var(--info)/0.4)]"
-                  : "border-border text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p === "ig" ? <Instagram className="size-3" /> : <Facebook className="size-3" />}
-              {p === "ig" ? "Instagram" : "Facebook"}
-            </button>
-          ))}
+        <div className="grid grid-cols-4 gap-1.5">
+          {(
+            [
+              { id: "ig" as const, label: "IG", icon: <Instagram className="size-3" /> },
+              { id: "fb" as const, label: "FB", icon: <Facebook className="size-3" /> },
+              { id: "reel" as const, label: "Reel", icon: <Film className="size-3" /> },
+              { id: "story" as const, label: "Story", icon: <Smartphone className="size-3" /> },
+            ]
+          ).map((p) => {
+            const active = platforms.includes(p.id);
+            return (
+              <button
+                key={p.id}
+                onClick={() => toggle(p.id)}
+                className={cn(
+                  "flex items-center justify-center gap-1 text-[10px] font-semibold px-2 py-2 rounded-md border transition-colors",
+                  active
+                    ? p.id === "fb"
+                      ? "bg-[hsl(var(--info)/0.18)] text-[hsl(var(--info))] border-[hsl(var(--info)/0.4)]"
+                      : "bg-[hsl(var(--brand-violet)/0.18)] text-[hsl(var(--brand-violet))] border-[hsl(var(--brand-violet)/0.4)]"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {p.icon} {p.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Fecha */}
+      {/* Fecha / Hora */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label className="mb-1.5 block">Fecha</Label>
+          <Input
+            type="date"
+            value={dateValue}
+            onChange={(e) => setDateValue(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label className="mb-1.5 block">Hora</Label>
+          <Input
+            type="time"
+            value={timeValue}
+            onChange={(e) => setTimeValue(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Objetivo */}
       <div>
-        <Label className="mb-1.5 block">Fecha de publicación</Label>
-        <Input
-          type="date"
-          value={dateValue}
-          onChange={(e) => setDateValue(e.target.value)}
-        />
+        <Label className="mb-1.5 block text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-bold">
+          Objetivo
+        </Label>
+        <select
+          value={goal ?? "engagement"}
+          onChange={(e) => setGoal(e.target.value as ScheduledPost["goal"])}
+          className="w-full h-9 rounded-md border border-input bg-background/40 px-3 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="engagement">Engagement (likes/comments/saves)</option>
+          <option value="leads">Leads (DMs/clicks)</option>
+          <option value="awareness">Awareness (alcance)</option>
+          <option value="brand">Brand (posicionamiento)</option>
+        </select>
       </div>
 
       {/* Image URL */}
@@ -717,13 +1034,13 @@ function Composer({
                   : "text-muted-foreground/50",
             )}
           >
-            {caption.length}/{igLimit}
+            {captionLen}/{igLimit}
           </span>
         </div>
         <textarea
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
-          placeholder="Escribe el copy del post o usa una plantilla arriba…"
+          placeholder="Escribe el copy o pulsa la tab Ideas para que Mark/Lúa generen 5…"
           className={cn(
             "w-full min-h-[140px] resize-y rounded-md border bg-background/40 px-3 py-2 text-sm font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             captionTooShort || overLimit
@@ -738,19 +1055,23 @@ function Composer({
         )}
       </div>
 
-      {/* Preview */}
+      {/* Mini-preview inline */}
       {(caption.trim() || imgUrl.trim()) && (
         <div>
           <Label className="mb-1.5 block text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-bold">
-            Vista previa
+            Vista previa rápida
           </Label>
           <div className="rounded-lg border border-border/60 bg-card/40 overflow-hidden">
             <div className="px-3 py-2 border-b border-border/40 flex items-center gap-2">
               <div className="size-6 rounded-full bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))]" />
-              <div className="text-[11px] font-semibold">@bewe</div>
+              <div className="text-[11px] font-semibold">@bewe_software</div>
               <div className="ml-auto flex gap-1">
                 {platforms.map((p) => (
-                  <Badge key={p} variant={p === "ig" ? "violet" : "info"} className="!text-[8px]">
+                  <Badge
+                    key={p}
+                    variant={p === "fb" ? "info" : "violet"}
+                    className="!text-[8px]"
+                  >
                     {p.toUpperCase()}
                   </Badge>
                 ))}
@@ -775,31 +1096,80 @@ function Composer({
               {caption || "Tu caption aparecerá aquí…"}
             </div>
           </div>
+          <div className="mt-1.5 text-[9px] text-muted-foreground/70">
+            Para ver mockup completo con UI real → tab <strong>Preview</strong>.
+          </div>
         </div>
       )}
-
-      <div className="flex gap-2 pt-2">
-        <Button onClick={onClose} variant="outline" size="sm" className="flex-1">
-          Cancelar
-        </Button>
-        <Button
-          onClick={publishNow}
-          disabled={publishing || captionEmpty || noPlatform || overLimit}
-          variant="glow"
-          size="sm"
-          className="flex-[2]"
-        >
-          <Send className="size-3.5" />
-          {publishing ? "Programando…" : "Programar post"}
-        </Button>
-      </div>
-
-      <div className="text-[10px] text-muted-foreground/70 leading-relaxed">
-        Se guarda localmente. La publicación directa via Graph API requiere{" "}
-        <code className="font-mono">pages_manage_posts</code> e{" "}
-        <code className="font-mono">instagram_content_publish</code>.
-      </div>
     </div>
   );
 }
 
+function BestTimePanel({ platforms }: { platforms: ParrillaPlatform[] }) {
+  // Normalizar reel/story a "ig" para el helper
+  const normalized: Array<"ig" | "fb"> = [];
+  for (const p of platforms) {
+    if (p === "ig" || p === "reel" || p === "story") {
+      if (!normalized.includes("ig")) normalized.push("ig");
+    } else if (p === "fb") {
+      if (!normalized.includes("fb")) normalized.push("fb");
+    }
+  }
+  if (normalized.length === 0) normalized.push("ig");
+
+  return (
+    <div className="space-y-3">
+      <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-bold mb-1">
+        Mejor hora para publicar
+      </div>
+      {normalized.map((pl) => {
+        const rec = bestTimeForPlatform(pl);
+        const platformLabel = pl === "ig" ? "Instagram (feed/reel/story)" : "Facebook";
+        return (
+          <div
+            key={pl}
+            className="rounded-lg border border-border/60 bg-card/60 p-3"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[12px] font-semibold inline-flex items-center gap-1.5">
+                {pl === "ig" ? (
+                  <Instagram className="size-3.5 text-[hsl(var(--brand-violet))]" />
+                ) : (
+                  <Facebook className="size-3.5 text-[hsl(var(--info))]" />
+                )}
+                {platformLabel}
+              </div>
+              <Badge variant="outline" className="!text-[8px]">
+                {rec.confidence}% confianza
+              </Badge>
+            </div>
+            <div className="text-[11px] font-mono font-semibold text-[hsl(var(--brand-cyan))]">
+              {rec.weekday}
+            </div>
+            <div className="text-[11px] font-mono">{rec.hour}</div>
+            <div className="text-[10px] text-muted-foreground mt-1.5 leading-snug">
+              {rec.rationale}
+            </div>
+            <div className="mt-2 pt-2 border-t border-border/40">
+              <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-bold mb-1">
+                Alternativas
+              </div>
+              <div className="space-y-1">
+                {rec.alternatives.map((a) => (
+                  <div key={a.label} className="text-[10px] leading-snug">
+                    <span className="font-mono font-semibold">{a.label}</span>{" "}
+                    <span className="text-muted-foreground">· {a.reason}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <div className="text-[9px] text-muted-foreground/70 leading-snug">
+        Recomendaciones basadas en best-practices 2026 + audiencia LATAM/MX.
+        Cuando Meta API entregue actividad horaria de tus seguidores, el cálculo será personalizado.
+      </div>
+    </div>
+  );
+}

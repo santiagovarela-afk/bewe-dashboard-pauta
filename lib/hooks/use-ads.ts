@@ -28,10 +28,34 @@ export interface AdCreative {
   id?: string;
   thumbnail_url?: string;
   image_url?: string;
+  image_hash?: string;
   title?: string;
   body?: string;
+  call_to_action_type?: string;
   object_type?: string;
   effective_object_story_id?: string;
+  video_id?: string;
+  asset_feed_spec?: {
+    images?: Array<{ url?: string; hash?: string }>;
+    videos?: Array<{ video_id?: string; thumbnail_url?: string }>;
+  };
+  object_story_spec?: {
+    link_data?: {
+      image_hash?: string;
+      picture?: string;
+      message?: string;
+      name?: string;
+      description?: string;
+      call_to_action?: { type?: string };
+    };
+    video_data?: {
+      video_id?: string;
+      image_url?: string;
+      message?: string;
+      title?: string;
+      call_to_action?: { type?: string };
+    };
+  };
 }
 
 export interface MetaAd {
@@ -70,7 +94,7 @@ const FIELDS = [
   "campaign_id",
   "adset_id",
   "created_time",
-  "creative{id,thumbnail_url,image_url,title,body,object_type,effective_object_story_id}",
+  "creative{id,thumbnail_url,image_url,image_hash,title,body,call_to_action_type,object_type,effective_object_story_id,video_id,asset_feed_spec,object_story_spec}",
   "insights.date_preset(this_month){spend,impressions,clicks,ctr,cpm,frequency,reach,actions,date_start,date_stop}",
 ].join(",");
 

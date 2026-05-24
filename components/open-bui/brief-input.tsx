@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { Sparkles, Dice5, Loader2 } from "lucide-react";
+import { Sparkles, Dice5, Loader2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,8 @@ interface BriefInputProps {
   loading: boolean;
   hasResult: boolean;
   personaLabel: string;
+  /** Si > 0 · cooldown activo tras 429 de Gemini (ms restantes). */
+  cooldownRemainingMs?: number;
 }
 
 const PLACEHOLDER =
@@ -37,7 +39,10 @@ export function BriefInput({
   loading,
   hasResult,
   personaLabel,
+  cooldownRemainingMs = 0,
 }: BriefInputProps) {
+  const inCooldown = cooldownRemainingMs > 0;
+  const cooldownMmSs = formatMmSs(cooldownRemainingMs);
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -93,25 +98,49 @@ export function BriefInput({
           variant="glow"
           size="sm"
           onClick={onGenerate}
-          disabled={loading || value.trim().length < 4}
+          disabled={loading || value.trim().length < 4 || inCooldown}
           className="font-display"
+          title={
+            inCooldown
+              ? `Cooldown · vuelve en ${cooldownMmSs}`
+              : "Generar pieza con AI"
+          }
         >
           {loading ? (
             <Loader2 className="size-3.5 animate-spin" />
+          ) : inCooldown ? (
+            <Clock className="size-3.5" />
           ) : (
             <Sparkles className="size-3.5" />
           )}
-          Generar con {personaLabel}
+          {inCooldown
+            ? `Espera ${cooldownMmSs}`
+            : `Generar con ${personaLabel}`}
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={onVariant}
-          disabled={loading || !hasResult}
+          disabled={loading || !hasResult || inCooldown}
         >
           <Dice5 className="size-3.5" /> Variante
         </Button>
       </div>
+      {inCooldown && (
+        <div className="text-[10px] text-muted-foreground/80 leading-snug rounded-md border border-[hsl(var(--brand-ember)/0.35)] bg-[hsl(var(--brand-ember)/0.08)] px-2 py-1.5">
+          Gemini agotó cuota del día. El generador estará disponible en{" "}
+          <span className="font-mono text-foreground">{cooldownMmSs}</span> o cuando
+          la quota renueve (~24h). Mientras tanto, puedes usar el{" "}
+          <span className="font-semibold text-foreground">Canvas manual</span>.
+        </div>
+      )}
     </div>
   );
+}
+
+function formatMmSs(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }

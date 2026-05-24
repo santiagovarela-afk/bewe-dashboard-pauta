@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Info,
   Sparkles,
-  TrendingUp,
   Wallet,
   Target,
   Activity,
@@ -15,6 +14,10 @@ import {
   Search,
   Zap,
   BarChart3,
+  MousePointerClick,
+  Eye,
+  PauseCircle,
+  FlaskConical,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { PLAN } from "@/lib/config";
@@ -26,7 +29,16 @@ import {
   cpmTone,
   daysUntil,
 } from "@/lib/utils";
-import { computeMetrics, fakeTrend } from "@/lib/selectors";
+import {
+  computeMetrics,
+  fakeTrend,
+  funnelCR,
+  funnelIC,
+  describeRange,
+  dynamicAlerts,
+  type AlertKind,
+} from "@/lib/selectors";
+import { GLOSSARY } from "@/lib/glossary";
 import { SectionHeader } from "@/components/shared/section-header";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { SpotlightCard } from "@/components/fx/spotlight-card";
@@ -35,54 +47,60 @@ import { AnimatedNumber } from "@/components/fx/animated-number";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import { Badge } from "@/components/ui/badge";
 import { DailySummary } from "@/components/shared/daily-summary";
+import { ExplainedMetric } from "@/components/shared/explained-metric";
 
-const ALERT_VARIANTS = {
-  critical: { Icon: AlertOctagon, color: "var(--destructive)", badge: "danger" as const },
-  warn:     { Icon: AlertTriangle, color: "var(--warning)",     badge: "warning" as const },
-  info:     { Icon: Info,           color: "var(--info)",        badge: "info" as const },
+const ALERT_VARIANTS: Record<
+  AlertKind,
+  { Icon: React.ComponentType<{ className?: string }>; color: string; badge: "danger" | "warning" | "info" }
+> = {
+  critical: { Icon: AlertOctagon, color: "var(--destructive)", badge: "danger" },
+  warn: { Icon: AlertTriangle, color: "var(--warning)", badge: "warning" },
+  info: { Icon: Info, color: "var(--info)", badge: "info" },
 };
 
 export function TabDashboard() {
-  const { campaigns, daysElapsed } = useDashboard();
+  const { campaigns, daysElapsed, dateRange } = useDashboard();
   const m = computeMetrics(campaigns);
+  const ctx = React.useMemo(
+    () => describeRange(dateRange.from, dateRange.to),
+    [dateRange.from, dateRange.to],
+  );
 
-  const c1 = campaigns.find((c) => c.code === "C1");
-  const c2 = campaigns.find((c) => c.code === "C2");
+  const alerts = React.useMemo(
+    () => dynamicAlerts(campaigns, ctx, daysElapsed),
+    [campaigns, ctx, daysElapsed],
+  );
 
-  const alerts: Array<{
-    kind: keyof typeof ALERT_VARIANTS;
-    title: string;
-    desc: React.ReactNode;
-  }> = [
-    {
-      kind: "critical",
-      title: `C2 MX_COMERCIO — CPT €${c2?.cpt?.toFixed(2)} crítico`,
-      desc: (
-        <>
-          {c2?.evCompleteReg} CompleteRegistration con €{c2?.spend.toFixed(2)} gastados.
-          Plan B (switch a InitiateCheckout) ya debió activarse — revisar adsets A2.1/A2.2 con 0 conv.
-        </>
-      ),
-    },
-    {
-      kind: "critical",
-      title: `C1 MX_BELLEZA — CPT €${c1?.cpt?.toFixed(2)} cruzó umbral crítico`,
-      desc: `A1.3_INT_BELLEZA acumula gran parte del gasto sin conversiones. Reasignar budget hacia A1.1_LOK o pausar.`,
-    },
-    {
-      kind: "warn",
-      title: "C3 MX_SERVICIOS — Anomalía pixel confirmada",
-      desc: "InitiateCheckout dispara en page load. Excluida del CPT global. No pausar — genera señal de volumen.",
-    },
-    {
-      kind: "info",
-      title: `Día ${daysElapsed} — Reasignación libre disponible (≤20%)`,
-      desc: `C5 (CPT €${campaigns.find((c) => c.code === "C5")?.cpt?.toFixed(2)}) y C6 (CPT €${campaigns.find((c) => c.code === "C6")?.cpt?.toFixed(2)}) están en objetivo. Mover budget de C2 sin requerir aprobación.`,
-    },
-  ];
+  const critCount = alerts.filter((a) => a.kind === "critical").length;
+  const warnCount = alerts.filter((a) => a.kind === "warn").length;
+  const infoCount = alerts.filter((a) => a.kind === "info").length;
 
   return (
     <div className="space-y-7 max-w-[1500px]">
+      {/* CONTEXT BANNERS · aclaraciones cruciales según el rango */}
+      {(ctx.includesPreLaunch || ctx.includesPrePixelFix) && (
+        <Reveal>
+          <div className="space-y-2">
+            {ctx.includesPreLaunch && (
+              <ContextBanner
+                tone="info"
+                Icon={Info}
+                title="Datos MAY26 arrancan el 12-may"
+                desc="El lanzamiento de las 6 campañas nuevas fue el 12 de mayo. Pre-12-may había una marca B2B anterior con presupuesto pequeño que NO cuenta en este reporte."
+              />
+            )}
+            {ctx.includesPrePixelFix && (
+              <ContextBanner
+                tone="warning"
+                Icon={AlertTriangle}
+                title="Tracking duplicado hasta 16-may"
+                desc="Hasta el 16-may hubo duplicación de eventos (pixel + CAPI). Desde 16-may solo CAPI server-side. Comparaciones cross-período tienen que tener esto en cuenta."
+              />
+            )}
+          </div>
+        </Reveal>
+      )}
+
       {/* HERO */}
       <Reveal>
         <div className="relative overflow-hidden rounded-2xl border border-border bg-card/30 backdrop-blur-sm">
@@ -95,6 +113,8 @@ export function TabDashboard() {
               <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-3">
                 <span className="size-1.5 rounded-full bg-[hsl(var(--success))] animate-pulse-glow" />
                 Operativo · día {daysElapsed} / {PLAN.totalDays}
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-[hsl(var(--brand-violet))]">{ctx.label}</span>
               </div>
               <h1 className="font-display font-bold tracking-[-0.025em] text-3xl md:text-5xl leading-[1.02] mb-3 text-balance">
                 Control de pauta{" "}
@@ -114,20 +134,20 @@ export function TabDashboard() {
                 sub={`${Math.round(m.budgetPct)}% del budget`}
               />
               <HeroStat
-                label="Registros"
+                label="Leads (CR)"
                 value={m.totalConvCR}
                 format={(v) => fmt.int(v)}
-                sub={`obj. 1.350 al 31/5`}
+                sub="objetivo 1.350 al 31/5"
               />
               <HeroStat
                 label="Inicio pago"
                 value={m.totalConvIC}
                 format={(v) => fmt.int(v)}
-                sub="excluye C3"
+                sub="excluye C3 (anomalía)"
                 tone="cyan"
               />
               <HeroStat
-                label="CPT registro"
+                label="CPL"
                 value={m.cptReg ?? 0}
                 format={(v) => fmt.eur(v)}
                 sub={`obj. ≤ €${PLAN.cpt.target}`}
@@ -138,51 +158,57 @@ export function TabDashboard() {
         </div>
       </Reveal>
 
-      {/* ALERTS */}
+      {/* ALERTS · dinámicas según rango */}
       <section>
         <SectionHeader
-          title="Señales operativas"
-          sub={`${alerts.filter((a) => a.kind === "critical").length} críticas · ${alerts.filter((a) => a.kind === "warn").length} en atención · ${alerts.filter((a) => a.kind === "info").length} informativas`}
+          title={`Señales operativas · ${ctx.label.toLowerCase()}`}
+          sub={`${critCount} críticas · ${warnCount} en atención · ${infoCount} informativas`}
         />
-        <StaggerGroup className="grid md:grid-cols-2 gap-3">
-          {alerts.map((a, i) => {
-            const v = ALERT_VARIANTS[a.kind];
-            return (
-              <StaggerItem key={i}>
-                <SpotlightCard
-                  spotlightColor={v.color}
-                  intensity={0.25}
-                  className="p-4"
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className="shrink-0 grid place-items-center size-9 rounded-lg border"
-                      style={{
-                        background: `hsl(${v.color} / 0.12)`,
-                        borderColor: `hsl(${v.color} / 0.4)`,
-                        color: `hsl(${v.color})`,
-                      }}
-                    >
-                      <v.Icon className="size-[18px]" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <h3 className="text-[13px] font-semibold leading-tight">{a.title}</h3>
-                        <Badge variant={v.badge} className="shrink-0">
-                          {a.kind === "critical" ? "Acción" : a.kind === "warn" ? "Revisar" : "Info"}
-                        </Badge>
+        {alerts.length === 0 ? (
+          <TextureCard className="p-6 text-center text-[12px] text-muted-foreground">
+            Sin señales operativas en {ctx.label.toLowerCase()}.
+          </TextureCard>
+        ) : (
+          <StaggerGroup className="grid md:grid-cols-2 gap-3">
+            {alerts.map((a, i) => {
+              const v = ALERT_VARIANTS[a.kind];
+              return (
+                <StaggerItem key={i}>
+                  <SpotlightCard
+                    spotlightColor={v.color}
+                    intensity={0.25}
+                    className="p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="shrink-0 grid place-items-center size-9 rounded-lg border"
+                        style={{
+                          background: `hsl(${v.color} / 0.12)`,
+                          borderColor: `hsl(${v.color} / 0.4)`,
+                          color: `hsl(${v.color})`,
+                        }}
+                      >
+                        <v.Icon className="size-[18px]" />
                       </div>
-                      <p className="text-[12px] text-muted-foreground leading-relaxed">{a.desc}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <h3 className="text-[13px] font-semibold leading-tight">{a.title}</h3>
+                          <Badge variant={v.badge} className="shrink-0">
+                            {a.kind === "critical" ? "Acción" : a.kind === "warn" ? "Revisar" : "Info"}
+                          </Badge>
+                        </div>
+                        <p className="text-[12px] text-muted-foreground leading-relaxed">{a.desc}</p>
+                      </div>
                     </div>
-                  </div>
-                </SpotlightCard>
-              </StaggerItem>
-            );
-          })}
-        </StaggerGroup>
+                  </SpotlightCard>
+                </StaggerItem>
+              );
+            })}
+          </StaggerGroup>
+        )}
       </section>
 
-      {/* KPI ROW */}
+      {/* KPI ROW · terminología clarificada (CPL / CPIC / CPTrial) */}
       <section>
         <SectionHeader title="Métricas clave" sub="Snapshot agregado de las 6 campañas" />
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -197,22 +223,66 @@ export function TabDashboard() {
             delay={0.02}
           />
           <KpiCard
-            label="CPT Registro"
+            label="CPL"
             value={m.cptReg ?? 0}
             format={(v) => fmt.eur(v)}
-            sub={`C1 + C2 + C4 · ${m.totalConvCR} CR`}
+            sub={
+              <ExplainedMetric
+                explanation={
+                  <div>
+                    <strong>{GLOSSARY.cr.term}</strong> · {GLOSSARY.cr.short}
+                    <br />
+                    {GLOSSARY.cpt.long}
+                  </div>
+                }
+              >
+                <span className="text-[10px]">C1 + C2 + C4 · {m.totalConvCR} CR</span>
+              </ExplainedMetric>
+            }
             tone={cptTone(m.cptReg) === "success" ? "success" : cptTone(m.cptReg) === "warning" ? "warning" : "danger"}
             trend={fakeTrend(2, m.cptReg ?? 0, 12, 0.12)}
             delay={0.06}
           />
           <KpiCard
-            label="CPT Inicio pago"
+            label="CPIC"
             value={m.cptIco ?? 0}
             format={(v) => fmt.eur(v)}
-            sub={`C5 + C6 · ${m.totalConvIC} IC`}
+            sub={
+              <ExplainedMetric
+                explanation={
+                  <div>
+                    <strong>{GLOSSARY.ic.term}</strong> · {GLOSSARY.ic.short}
+                    <br />
+                    Cost per Initiate Checkout · C5 + C6 (C3 excluido por anomalía pixel).
+                  </div>
+                }
+              >
+                <span className="text-[10px]">C5 + C6 · {m.totalConvIC} IC</span>
+              </ExplainedMetric>
+            }
             tone={cptTone(m.cptIco) === "success" ? "lime" : "warning"}
             trend={fakeTrend(3, m.cptIco ?? 0)}
             delay={0.1}
+          />
+          <KpiCard
+            label="CPTrial"
+            value={0}
+            format={() => "pendiente"}
+            sub={
+              <ExplainedMetric
+                explanation={
+                  <div>
+                    <strong>CPTrial</strong> · costo por trial activado en app (registro
+                    que efectivamente entró a Bewe). Depende de PostHog conectado a la
+                    web app — métrica pendiente.
+                  </div>
+                }
+              >
+                <span className="text-[10px]">PostHog pendiente</span>
+              </ExplainedMetric>
+            }
+            tone="violet"
+            delay={0.14}
           />
           <KpiCard
             label="CTR global"
@@ -221,7 +291,7 @@ export function TabDashboard() {
             sub="objetivo 1.5 – 2.5 %"
             tone={ctrTone(m.ctr) === "success" ? "success" : ctrTone(m.ctr) === "warning" ? "warning" : "danger"}
             trend={fakeTrend(4, m.ctr)}
-            delay={0.14}
+            delay={0.18}
           />
           <KpiCard
             label="CPM global"
@@ -230,15 +300,6 @@ export function TabDashboard() {
             sub="objetivo < €9"
             tone={cpmTone(m.cpm) === "success" ? "cyan" : cpmTone(m.cpm) === "warning" ? "warning" : "danger"}
             trend={fakeTrend(5, m.cpm)}
-            delay={0.18}
-          />
-          <KpiCard
-            label="Días activo"
-            value={daysElapsed}
-            format={(v) => `${Math.round(v)}`}
-            sub={`de ${PLAN.totalDays} · 12 – 31 mayo`}
-            tone="violet"
-            trend={fakeTrend(6, daysElapsed)}
             delay={0.22}
           />
         </div>
@@ -249,12 +310,69 @@ export function TabDashboard() {
         <DailySummary />
       </Reveal>
 
-      {/* FUNNEL + TIMELINE */}
-      <section className="grid lg:grid-cols-[1.6fr_1fr] gap-4">
-        <FunnelCard />
+      {/* FUNNELS · CR + IC lado a lado · TRIAL placeholder */}
+      <section>
+        <SectionHeader
+          title="Embudos por tipo de evento"
+          sub="CR (adquisición) e IC (pago) se miden por separado · Trial real pendiente de PostHog"
+        />
+        <div className="grid lg:grid-cols-2 gap-3">
+          <FunnelCard kind="CR" />
+          <FunnelCard kind="IC" />
+        </div>
+        <div className="mt-3">
+          <TrialPlaceholderCard />
+        </div>
+      </section>
+
+      {/* TIMELINE */}
+      <section>
         <TimelineCard daysElapsed={daysElapsed} />
       </section>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Subcomponentes
+ * ─────────────────────────────────────────────────────────────────────── */
+
+function ContextBanner({
+  tone,
+  Icon,
+  title,
+  desc,
+}: {
+  tone: "info" | "warning";
+  Icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  desc: string;
+}) {
+  const color = tone === "info" ? "var(--info)" : "var(--warning)";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="flex items-start gap-3 px-4 py-3 rounded-xl border"
+      style={{
+        background: `hsl(${color} / 0.08)`,
+        borderColor: `hsl(${color} / 0.35)`,
+      }}
+    >
+      <div
+        className="size-7 grid place-items-center rounded-lg shrink-0"
+        style={{ background: `hsl(${color} / 0.18)`, color: `hsl(${color})` }}
+      >
+        <Icon className="size-3.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] font-semibold leading-tight" style={{ color: `hsl(${color})` }}>
+          {title}
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{desc}</p>
+      </div>
+    </motion.div>
   );
 }
 
@@ -291,88 +409,152 @@ function HeroStat({
   );
 }
 
-function FunnelCard() {
+function FunnelCard({ kind }: { kind: "CR" | "IC" }) {
   const { campaigns } = useDashboard();
-  const totC = campaigns.reduce((s, c) => s + (c.evContact || 0), 0);
-  const totI = campaigns.reduce((s, c) => s + (c.evInitCheckout || 0), 0);
-  const totR = campaigns.reduce((s, c) => s + (c.evCompleteReg || 0), 0);
-  const max = Math.max(totC, totI, totR, 1);
-  const cvr1 = totC > 0 ? ((totI / totC) * 100).toFixed(1) : "—";
-  const cvr2 = totI > 0 ? ((totR / totI) * 100).toFixed(1) : "—";
+  const data = kind === "CR" ? funnelCR(campaigns) : funnelIC(campaigns);
+  const isCR = kind === "CR";
+
+  const accent = isCR ? "var(--brand-lime)" : "var(--brand-cyan)";
+  const title = isCR ? "Funnel CR · Adquisición" : "Funnel IC · Pago";
+  const subtitle = isCR
+    ? `C1 · C2 · C4 · objetivo CompleteRegistration`
+    : `C3 · C5 · C6 · objetivo InitiateCheckout`;
+  const eventLabel = isCR ? "CompleteRegistration" : "InitiateCheckout";
+  const costLabel = isCR ? "CPL" : "CPIC";
+  const max = Math.max(data.impressions, data.clicks, data.events, 1);
 
   const steps = [
-    {
-      label: "Contactos",
-      sub: "Linda · WhatsApp",
-      value: totC,
-      color: "var(--brand-cyan)",
-      Icon: Sparkles,
-    },
-    {
-      label: "Inicio pago",
-      sub: '"Probar gratis" → onboarding',
-      value: totI,
-      color: "var(--brand-violet)",
-      Icon: Activity,
-    },
-    {
-      label: "Registro",
-      sub: "trial confirmado",
-      value: totR,
-      color: "var(--brand-lime)",
-      Icon: Target,
-    },
+    { label: "Impresiones", value: data.impressions, Icon: Eye, color: "var(--brand-violet)" },
+    { label: "Clicks", value: data.clicks, Icon: MousePointerClick, color: "var(--brand-cyan)" },
+    { label: eventLabel, value: data.events, Icon: Target, color: accent },
   ];
 
   return (
-    <TextureCard className="p-6">
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          Embudo de conversión
-        </h3>
-        <Badge variant="outline" className="font-mono">6 campañas</Badge>
+    <TextureCard className="p-5">
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <div className="min-w-0">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-foreground">
+            {title}
+          </h3>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>
+        </div>
+        {data.pausedCount === data.campaigns.length && data.campaigns.length > 0 ? (
+          <Badge variant="warning" className="shrink-0 gap-1">
+            <PauseCircle className="size-3" />
+            Pausado 22-may
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="shrink-0 font-mono">
+            {data.activeCount} activa{data.activeCount === 1 ? "" : "s"}
+          </Badge>
+        )}
       </div>
 
-      <div className="flex items-end gap-1 mb-3 h-[180px]">
+      {/* Barras */}
+      <div className="flex items-end gap-1 mb-4 h-[160px]">
         {steps.map((s, i) => {
-          const heightPct = Math.max(8, (s.value / max) * 100);
+          const heightPct = Math.max(6, (s.value / max) * 100);
           return (
             <React.Fragment key={i}>
-              <div className="flex-1 flex flex-col items-center gap-3 h-full justify-end">
-                {i > 0 && (
-                  <div className="text-[11px] font-bold text-muted-foreground/80">
-                    {i === 1 ? cvr1 : cvr2}%
-                  </div>
-                )}
+              <div className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
                 <motion.div
                   initial={{ height: 0 }}
                   animate={{ height: `${heightPct}%` }}
-                  transition={{ duration: 1.3, ease: [0.16, 1, 0.3, 1] }}
-                  className="w-[70%] rounded-t-lg relative overflow-hidden"
+                  transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: i * 0.08 }}
+                  className="w-[68%] rounded-t-lg relative overflow-hidden"
                   style={{
-                    background: `linear-gradient(180deg, hsl(${s.color} / 0.9), hsl(${s.color} / 0.35))`,
-                    boxShadow: `0 0 30px -8px hsl(${s.color} / 0.6), inset 0 1px 0 hsl(${s.color})`,
+                    background: `linear-gradient(180deg, hsl(${s.color} / 0.9), hsl(${s.color} / 0.3))`,
+                    boxShadow: `0 0 24px -8px hsl(${s.color} / 0.55), inset 0 1px 0 hsl(${s.color})`,
                   }}
                 />
                 <div className="flex flex-col items-center">
                   <div
-                    className="font-mono font-bold text-2xl tabular leading-none"
+                    className="font-mono font-bold text-xl tabular leading-none"
                     style={{ color: `hsl(${s.color})` }}
                   >
                     <AnimatedNumber value={s.value} format={(v) => fmt.int(v)} />
                   </div>
-                  <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground mt-1.5">
+                  <div className="text-[9px] uppercase tracking-[0.08em] text-muted-foreground mt-1 text-center">
                     {s.label}
                   </div>
-                  <div className="text-[10px] text-muted-foreground/60 text-center">{s.sub}</div>
                 </div>
               </div>
               {i < steps.length - 1 && (
-                <div className="self-center text-muted-foreground/40 text-2xl pb-12">→</div>
+                <div className="self-center text-muted-foreground/40 text-xl pb-10">→</div>
               )}
             </React.Fragment>
           );
         })}
+      </div>
+
+      {/* Métricas resumen del funnel */}
+      <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/40">
+        <FunnelStat label="CTR" value={fmt.pct(data.ctr)} tone={ctrTone(data.ctr)} />
+        <FunnelStat
+          label={costLabel}
+          value={data.costPerEvent !== null ? fmt.eur(data.costPerEvent) : "—"}
+          tone={cptTone(data.costPerEvent)}
+        />
+        <FunnelStat
+          label="Click → Event"
+          value={data.clicks > 0 ? fmt.pct(data.conversionPct) : "—"}
+          tone="default"
+        />
+      </div>
+    </TextureCard>
+  );
+}
+
+function FunnelStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "default" | "success" | "warning" | "danger" | "info" | "violet" | "lime" | "ember" | "cyan";
+}) {
+  const colorMap: Record<string, string> = {
+    success: "text-[hsl(var(--success))]",
+    warning: "text-[hsl(var(--warning))]",
+    danger: "text-[hsl(var(--destructive))]",
+    default: "text-foreground",
+    info: "text-[hsl(var(--info))]",
+    violet: "text-[hsl(var(--brand-violet))]",
+    lime: "text-[hsl(var(--brand-lime))]",
+    ember: "text-[hsl(var(--brand-ember))]",
+    cyan: "text-[hsl(var(--brand-cyan))]",
+  };
+  return (
+    <div className="text-center">
+      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">{label}</div>
+      <div className={cn("font-mono font-bold text-[15px] tabular leading-tight mt-1", colorMap[tone])}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function TrialPlaceholderCard() {
+  return (
+    <TextureCard className="p-4">
+      <div className="flex items-start gap-3">
+        <div className="size-9 grid place-items-center rounded-lg border border-[hsl(var(--brand-violet)/0.4)] bg-[hsl(var(--brand-violet)/0.12)] text-[hsl(var(--brand-violet))]">
+          <FlaskConical className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[12px] font-semibold leading-tight">
+              Trial real · Lead → Trial activado en app
+            </h3>
+            <Badge variant="violet" className="shrink-0">PostHog pendiente</Badge>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Una vez conectado PostHog vamos a poder medir cuántos de los CompleteRegistration
+            realmente activan trial en bewe.ai (no solo registran email). El CPTrial real es
+            la métrica clave para validar la calidad de los leads, no solo el volumen.
+          </p>
+        </div>
       </div>
     </TextureCard>
   );

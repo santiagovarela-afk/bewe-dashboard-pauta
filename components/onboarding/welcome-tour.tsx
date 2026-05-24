@@ -2,23 +2,29 @@
 /**
  * Welcome Tour · onboarding full-screen para usuarios recién logueados.
  *
- * 10 slides:
- *   0. Welcome           — saludo personalizado
- *   1. Las 4 áreas       — grid Pauta · Contenido · Analítica · Copiloto
- *   2. Tu rol y tabs     — pills + botón "Mostrarme alrededor"
- *   3. Pauta · Inversión — mini cards (Dashboard, Campañas, Estrategia, Paid)
- *   4. Contenido         — mini cards (Anuncios, Orgánico, Parrilla, SEO)
- *   5. Analítica         — mini cards (Performance, Open Design, Informe)
- *   6. Copiloto IA       — Mark + Lúa lado a lado + memorias + Ctrl+K
- *   7. Tour visual       — botón opcional para lanzar role-tour
- *   8. Resumen           — wrap-up con bullets de "qué viste / qué falta"
- *   9. Cierre            — "Buena suerte · que tu CPT esté siempre bajo €2.20"
+ * Nueva estructura (hasta 17 slides para admin · menos para otros roles):
+ *
+ *   Fijas (4):
+ *     0. Welcome           — saludo personalizado · "te llevo pestaña por pestaña"
+ *     1. Las 4 áreas       — overview corto del agrupado del sidebar
+ *     2. Mark + Lúa        — el slide doble agente (memoria + Ctrl+K)
+ *     3. Tour visual       — botón opcional para lanzar role-tour
+ *
+ *   Dinámicas (12 max, filtradas por ROLE_TABS[role]):
+ *     · Dashboard, Campañas, Estrategia, Paid Media, Anuncios,
+ *       Orgánico, Parrilla, Open Design, SEO, Performance, Informe, Config
+ *
+ *   Cierre (1):
+ *     · Resumen + cierre combinado · "Listo Santiago, que tu CPT < €2.20"
+ *
+ * Total real depende del rol:
+ *   - admin   → 4 fijas + 12 tab + 1 cierre = 17
+ *   - lead    → 4 fijas + 11 tab + 1 cierre = 16  (sin config)
+ *   - content → 4 fijas + 5  tab + 1 cierre = 10
  *
  * Flow welcome ↔ role-tour:
- *   - El user puede lanzar el role-tour desde slide 2 o 7.
- *   - El welcome se cierra y queda con flag `cameFromRoleTour=true`.
- *   - Cuando el role-tour cierra, dispara `bw:role-tour-done` → re-abrimos
- *     el welcome saltando directo al slide 8 (Resumen).
+ *   - El user puede lanzar el role-tour desde el slide 3 (Tour visual).
+ *   - El welcome se cierra; al cerrar el role-tour, re-abre en el slide de cierre.
  *
  * Re-disparable desde Config con `triggerWelcomeAgain()`.
  */
@@ -30,13 +36,16 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
+  FileText,
   Gauge,
+  Image as ImageIcon,
   KeyRound,
   LayoutDashboard,
   Megaphone,
   Palette,
   PartyPopper,
   Search,
+  Settings2,
   Sparkles,
   Target,
   TrendingUp,
@@ -47,12 +56,25 @@ import { ROLE_TABS, TABS } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { RoleTour } from "./role-tour";
-import { SlideSections } from "./slide-sections";
 import { SlideAgents } from "./slide-agents";
+import {
+  MockAnuncios,
+  MockCampanas,
+  MockConfig,
+  MockDashboard,
+  MockEstrategia,
+  MockInforme,
+  MockOpenDesign,
+  MockOrganico,
+  MockPaid,
+  MockParrilla,
+  MockPerformance,
+  MockSeo,
+  SlideTabDetail,
+  type TabDetailContent,
+} from "./slide-tab-detail";
 
 const STORAGE_KEY = "bw_welcome_seen";
-const TOTAL_STEPS = 10;
-const SUMMARY_STEP = 8; // Slide al que volvemos tras el role-tour
 
 /** Permite a otros componentes (Config) re-disparar el welcome. */
 export function triggerWelcomeAgain() {
@@ -65,47 +87,255 @@ const AREAS = [
   {
     id: "pauta",
     title: "Pauta · Inversión",
-    desc: "Dashboard, campañas Meta, estrategia y paid media (Google · TikTok).",
+    desc: "Dashboard, campañas Meta, estrategia y paid media.",
     icon: TrendingUp,
     grad: "from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))]",
   },
   {
     id: "contenido",
     title: "Contenido · Creativo",
-    desc: "Anuncios, orgánico, parrilla editorial y SEO on-page.",
+    desc: "Anuncios, orgánico, parrilla y diseño AI.",
     icon: Sparkles,
     grad: "from-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))]",
   },
   {
     id: "analitica",
     title: "Analítica",
-    desc: "Performance LTV/CAC, Open Design e informe ejecutivo.",
+    desc: "Performance LTV/CAC, SEO, AEO e informe ejecutivo.",
     icon: Gauge,
     grad: "from-[hsl(var(--brand-lime))] to-[hsl(var(--brand-violet))]",
   },
   {
     id: "ai",
     title: "Copiloto IA",
-    desc: "Mark o Lúa, con memoria del plan Julián, siempre a un Ctrl+K.",
+    desc: "Mark o Lúa, con memoria viva del plan Julián.",
     icon: Bot,
     grad: "from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-lime))]",
   },
 ];
 
-const TAB_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  dashboard: LayoutDashboard,
-  campanas: Megaphone,
-  estrategia: Target,
-  paid: TrendingUp,
-  anuncios: Sparkles,
-  organico: Sparkles,
-  parrilla: CalendarDays,
-  seo: Search,
-  performance: Gauge,
-  "open-bui": Palette,
-  informe: Bot,
-  config: Bot,
+/* ──────── Contenido detallado por tab ──────── */
+
+const TAB_DETAIL: Record<string, TabDetailContent> = {
+  dashboard: {
+    id: "dashboard",
+    label: "Dashboard",
+    Icon: LayoutDashboard,
+    accent: "var(--brand-violet)",
+    emoji: "🎯",
+    whatIs:
+      "Tu panel ejecutivo · resumen de todo lo que pasa en pauta.",
+    achievements: [
+      "KPIs globales · gasto, CPL, CR, IC, CTR, CPM",
+      "Señales operativas críticas (qué necesita acción)",
+      "Embudo de conversión visual",
+      "Resumen diario · «ayer vs hoy»",
+    ],
+    firstStep:
+      "Click el botón «Actualizar» arriba para traer datos vivos de Meta.",
+    Mockup: MockDashboard,
+  },
+  campanas: {
+    id: "campanas",
+    label: "Campañas",
+    Icon: Megaphone,
+    accent: "var(--brand-violet)",
+    emoji: "📣",
+    whatIs: "Las 6 campañas MAY26 con su estado en tiempo real.",
+    achievements: [
+      "Estado ACTIVE/PAUSED de cada campaña",
+      "Pacing del presupuesto en barras",
+      "Drill-down a adsets con datos por anuncio",
+      "Comparativos por vertical (Belleza · Comercio · Servicios) y geo (MX · LATAM)",
+    ],
+    firstStep:
+      "Click la card de una campaña para abrir sus adsets y anuncios.",
+    Mockup: MockCampanas,
+  },
+  estrategia: {
+    id: "estrategia",
+    label: "Estrategia",
+    Icon: Target,
+    accent: "var(--brand-cyan)",
+    emoji: "🎯",
+    whatIs: "El «porqué» detrás de los números · semáforos + reglas Julián.",
+    achievements: [
+      "Semáforo CPT/CPL/Budget con gauges animados",
+      "Reglas operativas de Julián (ABO, día 7 Plan B, día 14 contingencia)",
+      "Análisis profundo por campaña · qué pasó · qué hacer",
+      "Proyección al 31-may",
+    ],
+    firstStep:
+      "Revisa el semáforo CPT · si está rojo, necesita acción hoy.",
+    Mockup: MockEstrategia,
+  },
+  paid: {
+    id: "paid",
+    label: "Paid Media",
+    Icon: TrendingUp,
+    accent: "var(--brand-cyan)",
+    emoji: "📈",
+    whatIs: "Vista cross-platform · Meta + Google Ads + TikTok (placeholders).",
+    achievements: [
+      "Comparativo de inversión entre plataformas",
+      "Best/worst campañas en una sola tabla",
+      "ROAS estimado y cross-platform attribution",
+    ],
+    firstStep:
+      "Conecta Google Ads cuando tengas credenciales · ya está la UI lista.",
+    Mockup: MockPaid,
+  },
+  anuncios: {
+    id: "anuncios",
+    label: "Anuncios",
+    Icon: ImageIcon,
+    accent: "var(--brand-lime)",
+    emoji: "🖼",
+    whatIs: "Cada anuncio individual con preview, métricas y alertas.",
+    achievements: [
+      "Grid de creativos con thumbnails HD",
+      "Separar imágenes vs videos en pestañas",
+      "Alertas automáticas (frecuencia alta, CPR caro, etc)",
+      "Drawer con insights pro al click",
+    ],
+    firstStep:
+      "Filtra por «Imágenes» y ordena por CPR para ver tus ganadores.",
+    Mockup: MockAnuncios,
+  },
+  organico: {
+    id: "organico",
+    label: "Orgánico",
+    Icon: Sparkles,
+    accent: "var(--brand-lime)",
+    emoji: "✨",
+    whatIs:
+      "IG (@bewe_software · 50k followers) + FB (114k fans) en tiempo real.",
+    achievements: [
+      "Posts cargados de cada red social",
+      "Métricas de engagement reales (likes, comments, shares)",
+      "Comparativo IG vs FB lado a lado",
+      "Top 3 posts del período seleccionado",
+    ],
+    firstStep:
+      "Click «Cargar» para traer los últimos posts publicados.",
+    Mockup: MockOrganico,
+  },
+  parrilla: {
+    id: "parrilla",
+    label: "Parrilla",
+    Icon: CalendarDays,
+    accent: "var(--brand-cyan)",
+    emoji: "📅",
+    whatIs: "Calendario editorial estilo Metricool con IA integrada.",
+    achievements: [
+      "Calendario mensual con posts programados",
+      "Composer con preview real (cómo se vería en IG/FB)",
+      "Hashtag finder + Idea generator powered by Mark/Lúa",
+      "Mejor hora de publicación sugerida",
+    ],
+    firstStep:
+      "Click «Nuevo post» para programar tu primera publicación.",
+    Mockup: MockParrilla,
+  },
+  "open-bui": {
+    id: "open-bui",
+    label: "Open Design",
+    Icon: Palette,
+    accent: "var(--brand-violet)",
+    emoji: "🎨",
+    whatIs: "Generador AI de piezas creativas (post IG, FB ad, banner, etc).",
+    achievements: [
+      "12 skill templates listos para usar",
+      "Brand kit Bewe pre-cargado · colores, fuentes, logos",
+      "HTML+CSS auto-generado por Mark/Lúa",
+      "Preview live + export PNG/HTML · canvas tldraw como opción",
+    ],
+    firstStep:
+      "Elige «Instagram Post» + describe tu idea + click Generar.",
+    Mockup: MockOpenDesign,
+  },
+  seo: {
+    id: "seo",
+    label: "SEO+AEO",
+    Icon: Search,
+    accent: "var(--brand-lime)",
+    emoji: "🔍",
+    whatIs: "Keywords, on-page, backlinks + AEO (cómo apareces en LLMs).",
+    achievements: [
+      "GSC integration · top keywords y posiciones",
+      "On-page audit checklist auto",
+      "AEO monitor · ¿Mark/Lúa te menciona en ChatGPT/Claude/Gemini?",
+      "30 prompts trackeados semanalmente",
+    ],
+    firstStep:
+      "Espera al lunes · María Paula y tú conectan GSC en sesión conjunta.",
+    Mockup: MockSeo,
+  },
+  performance: {
+    id: "performance",
+    label: "Performance",
+    Icon: Gauge,
+    accent: "var(--brand-violet)",
+    emoji: "📊",
+    whatIs: "Vista para Performance Lead · funnel + unit economics.",
+    achievements: [
+      "Funnel ejecutivo Impresiones → Activated",
+      "CAC · LTV · LTV/CAC · payback period",
+      "ROAS por campaña ordenado",
+      "Decisión rápida pausar/escalar",
+    ],
+    firstStep:
+      "Revisa el ratio LTV/CAC · sano si está ≥ 3×.",
+    Mockup: MockPerformance,
+  },
+  informe: {
+    id: "informe",
+    label: "Informe",
+    Icon: FileText,
+    accent: "var(--brand-cyan)",
+    emoji: "📄",
+    whatIs: "Reporte ejecutivo listo en 3 formatos para distintas audiencias.",
+    achievements: [
+      "Slack short (3 líneas pegables al chat)",
+      "Email ejecutivo (1 página · interna)",
+      "Reporte completo para Julián (3 páginas)",
+    ],
+    firstStep:
+      "Genera el de Slack y pégalo en #bewe-pauta antes de las 11am.",
+    Mockup: MockInforme,
+  },
+  config: {
+    id: "config",
+    label: "Config",
+    Icon: Settings2,
+    accent: "var(--brand-violet)",
+    emoji: "⚙️",
+    whatIs: "Tokens, memoria del agente y preferencias de sesión.",
+    achievements: [
+      "Setup del token Meta (✓ ya conectado)",
+      "Memoria del agente · ver / borrar / agregar",
+      "Personalidad copiloto (Mark / Lúa)",
+    ],
+    firstStep: "Verifica que «Meta Conectado» esté en verde.",
+    Mockup: MockConfig,
+  },
 };
+
+/** Orden canónico en el que mostramos las tabs durante el tour. */
+const TAB_ORDER: string[] = [
+  "dashboard",
+  "campanas",
+  "estrategia",
+  "paid",
+  "anuncios",
+  "organico",
+  "parrilla",
+  "open-bui",
+  "seo",
+  "performance",
+  "informe",
+  "config",
+];
 
 interface WelcomeTourProps {
   open: boolean;
@@ -120,36 +350,72 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
   // cuando re-abrimos el welcome al terminar el role-tour. Se consume una vez.
   const pendingReturnStepRef = React.useRef<number | null>(null);
 
+  const role = user?.role ?? "admin";
+  const displayName = user?.name ?? "tú";
+  const allowed = ROLE_TABS[role] ?? [];
+
+  // Tabs ordenadas y filtradas por rol (para los slides per-tab)
+  const visibleTabIds = React.useMemo(
+    () => TAB_ORDER.filter((id) => allowed.includes(id) && TAB_DETAIL[id]),
+    [allowed],
+  );
+
+  // Estructura final de slides: [fijas-pre] + [per-tab] + [cierre]
+  // Identificamos cada slide por un kind para renderizar.
+  type Slide =
+    | { kind: "welcome" }
+    | { kind: "areas" }
+    | { kind: "agents" }
+    | { kind: "tour-optional" }
+    | { kind: "tab"; tabId: string }
+    | { kind: "closing" };
+
+  const slides = React.useMemo<Slide[]>(() => {
+    const list: Slide[] = [
+      { kind: "welcome" },
+      { kind: "areas" },
+      { kind: "agents" },
+      { kind: "tour-optional" },
+      ...visibleTabIds.map<Slide>((id) => ({ kind: "tab", tabId: id })),
+      { kind: "closing" },
+    ];
+    return list;
+  }, [visibleTabIds]);
+
+  const totalSteps = slides.length;
+  const closingStep = totalSteps - 1;
+
+  // Allowed tabs ordenados (para SlideAreas)
+  const allowedTabs = TABS.filter((t) => allowed.includes(t.id));
+
   // Reset to first step when opening, salvo que vengamos del role-tour
-  // (en cuyo caso pendingReturnStepRef tiene el slide al que queremos saltar).
   React.useEffect(() => {
     if (!open) return;
     if (pendingReturnStepRef.current != null) {
-      setStep(pendingReturnStepRef.current);
+      // Clamp por seguridad (si el rol cambia entre sesiones)
+      setStep(
+        Math.min(Math.max(0, pendingReturnStepRef.current), totalSteps - 1),
+      );
       pendingReturnStepRef.current = null;
     } else {
       setStep(0);
     }
-  }, [open]);
+  }, [open, totalSteps]);
 
   // Cerrar welcome y, una vez la animación de salida termina, abrir el role tour.
   function launchRoleTour() {
-    // Marcamos que al volver del role-tour saltamos al slide Resumen.
-    pendingReturnStepRef.current = SUMMARY_STEP;
+    pendingReturnStepRef.current = closingStep;
     onClose();
     window.setTimeout(() => setShowRoleTour(true), 420);
   }
 
   function closeRoleTour() {
     setShowRoleTour(false);
-    // Si veníamos del welcome, re-abrirlo en el slide Resumen.
     if (pendingReturnStepRef.current != null) {
-      // Emitir evento global para que el trigger nos vuelva a abrir.
       window.setTimeout(() => {
         window.dispatchEvent(new CustomEvent("bw:show-welcome"));
       }, 220);
     }
-    // Notificar a posibles listeners (por consistencia con el contrato del evento).
     window.dispatchEvent(new CustomEvent("bw:role-tour-done"));
   }
 
@@ -158,14 +424,14 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") finish();
-      else if (e.key === "ArrowRight" && step < TOTAL_STEPS - 1)
+      else if (e.key === "ArrowRight" && step < totalSteps - 1)
         setStep((s) => s + 1);
       else if (e.key === "ArrowLeft" && step > 0) setStep((s) => s - 1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, step]);
+  }, [open, step, totalSteps]);
 
   function finish() {
     try {
@@ -178,7 +444,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
   }
 
   function next() {
-    if (step >= TOTAL_STEPS - 1) finish();
+    if (step >= totalSteps - 1) finish();
     else setStep((s) => s + 1);
   }
 
@@ -186,21 +452,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
     if (step > 0) setStep((s) => s - 1);
   }
 
-  const displayName = user?.name ?? "tú";
-  const role = user?.role ?? "admin";
-  const allowed = ROLE_TABS[role] ?? [];
-  const allowedTabs = TABS.filter((t) => allowed.includes(t.id));
-
-  // Filtrar tabs por grupo (solo los que el rol puede ver)
-  const pautaTabs = allowedTabs
-    .filter((t) => t.group === "pauta")
-    .map((t) => t.id);
-  const contenidoTabs = allowedTabs
-    .filter((t) => t.group === "contenido")
-    .map((t) => t.id);
-  const analiticaTabs = allowedTabs
-    .filter((t) => t.group === "analítica")
-    .map((t) => t.id);
+  const current = slides[step] ?? slides[0];
 
   return (
     <>
@@ -252,7 +504,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
             >
               {/* Progress dots */}
               <div className="flex items-center gap-1.5 mb-6">
-                {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                {slides.map((_, i) => (
                   <span
                     key={i}
                     className={cn(
@@ -266,82 +518,40 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                   />
                 ))}
                 <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-                  {step + 1} / {TOTAL_STEPS}
+                  {step + 1} / {totalSteps}
                 </span>
               </div>
 
               {/* Slide content */}
               <AnimatePresence mode="wait">
-                {step === 0 && (
-                  <SlideWelcome key="s0" displayName={displayName} />
-                )}
-                {step === 1 && <SlideAreas key="s1" />}
-                {step === 2 && (
-                  <SlideRole
-                    key="s2"
-                    role={role}
-                    tabs={allowedTabs.map((t) => ({ id: t.id, label: t.label }))}
-                    onShowAround={launchRoleTour}
+                {current.kind === "welcome" && (
+                  <SlideWelcome
+                    key="welcome"
+                    displayName={displayName}
+                    tabsCount={visibleTabIds.length}
                   />
                 )}
-                {step === 3 && (
-                  <SlideSections
-                    key="s3"
-                    title="Pauta · Inversión"
-                    subtitle="Donde vive la inversión Meta y el plan diario."
-                    accent="var(--brand-violet)"
-                    tabIds={
-                      pautaTabs.length > 0
-                        ? pautaTabs
-                        : ["dashboard", "campanas", "estrategia", "paid"]
-                    }
-                    HeaderIcon={TrendingUp}
-                  />
-                )}
-                {step === 4 && (
-                  <SlideSections
-                    key="s4"
-                    title="Contenido · Creativo"
-                    subtitle="Anuncios pagados, orgánico, parrilla y SEO en un solo flujo."
-                    accent="var(--brand-cyan)"
-                    tabIds={
-                      contenidoTabs.length > 0
-                        ? contenidoTabs
-                        : ["anuncios", "organico", "parrilla", "seo"]
-                    }
-                    HeaderIcon={Sparkles}
-                  />
-                )}
-                {step === 5 && (
-                  <SlideSections
-                    key="s5"
-                    title="Analítica"
-                    subtitle="Cómo se ve el resultado del plan Julián."
-                    accent="var(--brand-lime)"
-                    tabIds={
-                      analiticaTabs.length > 0
-                        ? analiticaTabs
-                        : ["performance", "open-bui", "informe"]
-                    }
-                    HeaderIcon={Gauge}
-                  />
-                )}
-                {step === 6 && <SlideAgents key="s6" />}
-                {step === 7 && (
+                {current.kind === "areas" && <SlideAreas key="areas" />}
+                {current.kind === "agents" && <SlideAgents key="agents" />}
+                {current.kind === "tour-optional" && (
                   <SlideTourOptional
-                    key="s7"
+                    key="tour-optional"
                     onShowAround={launchRoleTour}
                   />
                 )}
-                {step === 8 && (
-                  <SlideSummary
-                    key="s8"
+                {current.kind === "tab" && (
+                  <SlideTabDetail
+                    key={`tab-${current.tabId}`}
+                    content={TAB_DETAIL[current.tabId]!}
+                  />
+                )}
+                {current.kind === "closing" && (
+                  <SlideClosingCombined
+                    key="closing"
+                    displayName={displayName}
                     sectionsCount={allowedTabs.length}
                     role={role}
                   />
-                )}
-                {step === 9 && (
-                  <SlideClosing key="s9" displayName={displayName} />
                 )}
               </AnimatePresence>
 
@@ -375,7 +585,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                   onClick={next}
                   className="gap-1.5"
                 >
-                  {step >= TOTAL_STEPS - 1 ? "Empezar" : "Siguiente"}
+                  {step >= totalSteps - 1 ? "Empezar" : "Siguiente"}
                   <ArrowRight className="size-3.5" />
                 </Button>
               </div>
@@ -389,9 +599,15 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
   );
 }
 
-/* ──────── Slides ──────── */
+/* ──────── Slides fijas ──────── */
 
-function SlideWelcome({ displayName }: { displayName: string }) {
+function SlideWelcome({
+  displayName,
+  tabsCount,
+}: {
+  displayName: string;
+  tabsCount: number;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -408,16 +624,29 @@ function SlideWelcome({ displayName }: { displayName: string }) {
         </div>
       </div>
       <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-3">
-        Hola {displayName} · bienvenido al sistema de pauta de Bewe.
+        Hola {displayName} · te voy a llevar pestaña por pestaña.
       </h1>
       <p className="text-[14px] text-muted-foreground leading-relaxed">
-        Esto es <strong className="text-foreground">Bewe Pauta OS</strong>: un único panel
-        donde conviven la <strong className="text-foreground">pauta paga</strong>, el{" "}
-        <strong className="text-foreground">contenido orgánico</strong>, el{" "}
-        <strong className="text-foreground">SEO</strong> y la{" "}
-        <strong className="text-foreground">analítica de performance</strong> del plan que
-        Julián montó para mayo 2026. Te tomará menos de un minuto.
+        Esto es <strong className="text-foreground">Bewe Pauta OS</strong>: el panel
+        operativo del plan que Julián montó para mayo 2026. En lugar de un resumen
+        de áreas, voy a abrir{" "}
+        <strong className="text-foreground">cada una de las {tabsCount} pestañas</strong>{" "}
+        a las que tienes acceso · qué es, qué consigues, qué hacer primero.
       </p>
+      <div className="mt-4 text-[11.5px] text-muted-foreground/80 leading-relaxed flex items-start gap-2">
+        <span aria-hidden className="text-[13px] leading-none mt-0.5">⏱</span>
+        <span>
+          Te tomará un par de minutos · puedes saltarlo con{" "}
+          <kbd className="px-1 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
+            Esc
+          </kbd>{" "}
+          o navegar con{" "}
+          <kbd className="px-1 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
+            ← →
+          </kbd>
+          .
+        </span>
+      </div>
     </motion.div>
   );
 }
@@ -434,7 +663,7 @@ function SlideAreas() {
         Las 4 áreas
       </h2>
       <p className="text-[13px] text-muted-foreground mb-5 leading-relaxed">
-        Cuatro áreas. Una sola fuente de verdad.
+        Vista rápida antes de entrar tab por tab. Una sola fuente de verdad.
       </p>
       <div className="grid grid-cols-2 gap-3">
         {AREAS.map((a, i) => {
@@ -471,65 +700,6 @@ function SlideAreas() {
   );
 }
 
-function SlideRole({
-  role,
-  tabs,
-  onShowAround,
-}: {
-  role: string;
-  tabs: Array<{ id: string; label: string }>;
-  onShowAround: () => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -16 }}
-      transition={{ duration: 0.35 }}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-          Tu rol
-        </span>
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono uppercase bg-[hsl(var(--brand-violet)/0.18)] text-[hsl(var(--brand-violet))] border border-[hsl(var(--brand-violet)/0.35)]">
-          {role}
-        </span>
-      </div>
-      <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight mb-2">
-        Estas son las secciones a las que tienes acceso
-      </h2>
-      <p className="text-[13px] text-muted-foreground mb-4 leading-relaxed">
-        El sidebar las agrupa por área. Cambia entre tabs en cualquier momento.
-      </p>
-      <div className="flex flex-wrap gap-1.5 mb-5">
-        {tabs.map((t) => {
-          const Icon = TAB_ICONS[t.id] ?? LayoutDashboard;
-          return (
-            <span
-              key={t.id}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border border-border bg-background/40 text-foreground/85"
-            >
-              <Icon className="size-3 text-[hsl(var(--brand-violet))]" />
-              {t.label}
-            </span>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        onClick={onShowAround}
-        className="text-[12px] font-medium text-[hsl(var(--brand-violet))] hover:underline underline-offset-4"
-      >
-        Mostrarme alrededor →
-      </button>
-      <p className="text-[10.5px] text-muted-foreground/70 mt-2 leading-relaxed">
-        Lanza un pequeño tour visual sobre sidebar, topbar y copiloto. Al terminar
-        vuelves aquí con el resumen.
-      </p>
-    </motion.div>
-  );
-}
-
 function SlideTourOptional({ onShowAround }: { onShowAround: () => void }) {
   return (
     <motion.div
@@ -552,9 +722,9 @@ function SlideTourOptional({ onShowAround }: { onShowAround: () => void }) {
         </div>
       </div>
       <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
-        Si quieres ver dónde está cada cosa antes de empezar, lanza el tour visual:
-        ilumina sidebar, topbar, theme toggle y copiloto, uno por uno. Cuando termine
-        volverás aquí con el resumen final.
+        Antes de meternos tab por tab, si quieres puedo iluminar sidebar, topbar,
+        theme toggle y copiloto, uno por uno. Cuando termine volverás aquí en el
+        slide final.
       </p>
       <button
         type="button"
@@ -564,32 +734,36 @@ function SlideTourOptional({ onShowAround }: { onShowAround: () => void }) {
         Hacer tour visual ahora →
       </button>
       <p className="text-[11px] text-muted-foreground/70 leading-relaxed mt-3">
-        ¿Prefieres saltarlo? Continúa con <strong className="text-foreground/80">Siguiente</strong> para ver el resumen.
+        ¿Prefieres saltarlo? Continúa con{" "}
+        <strong className="text-foreground/80">Siguiente</strong> y entramos directo
+        a cada pestaña.
       </p>
     </motion.div>
   );
 }
 
-function SlideSummary({
+function SlideClosingCombined({
+  displayName,
   sectionsCount,
   role,
 }: {
+  displayName: string;
   sectionsCount: number;
   role: string;
 }) {
-  const items = [
+  const recap = [
     {
       icon: CheckCircle2,
       tone: "ok" as const,
       text: (
         <>
-          Tienes acceso a{" "}
-          <strong className="text-foreground">{sectionsCount} secciones</strong> según
+          Vimos las{" "}
+          <strong className="text-foreground">{sectionsCount} pestañas</strong> de
           tu rol{" "}
           <span className="font-mono text-[10.5px] text-[hsl(var(--brand-violet))]">
             ({role})
-          </span>
-          .
+          </span>{" "}
+          · qué son y qué hacer primero en cada una.
         </>
       ),
     },
@@ -600,18 +774,8 @@ function SlideSummary({
         <>
           Tu copiloto{" "}
           <strong className="text-foreground">Mark</strong> /{" "}
-          <strong className="text-foreground">Lúa</strong> entiende el plan, los datos en vivo
-          y la memoria creativa.
-        </>
-      ),
-    },
-    {
-      icon: CheckCircle2,
-      tone: "ok" as const,
-      text: (
-        <>
-          El conector vigila el token Meta · status visible como{" "}
-          <strong className="text-foreground">pill</strong> en el topbar.
+          <strong className="text-foreground">Lúa</strong> conoce el plan, los datos
+          en vivo y la memoria creativa.
         </>
       ),
     },
@@ -621,8 +785,8 @@ function SlideSummary({
       text: (
         <>
           Pendiente:{" "}
-          <strong className="text-foreground">conecta tu Meta System User Token</strong>{" "}
-          (ver{" "}
+          <strong className="text-foreground">verifica el token Meta</strong> en
+          Config si la pill del topbar no está verde (
           <code className="px-1 py-0.5 rounded bg-background/60 border border-border text-[10.5px] font-mono">
             _docs/SETUP-TOKENS.md
           </code>
@@ -639,7 +803,7 @@ function SlideSummary({
           <kbd className="px-1.5 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
             Ctrl/Cmd+K
           </kbd>{" "}
-          para abrir el copiloto desde donde estés.
+          para abrir el copiloto desde cualquier tab.
         </>
       ),
     },
@@ -651,75 +815,54 @@ function SlideSummary({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.35 }}
-    >
-      <div className="flex items-center gap-3 mb-4">
-        <div className="size-11 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_8px_24px_-8px_hsl(var(--brand-violet)/0.65)]">
-          <CheckCircle2 className="size-5 text-white" />
-        </div>
-        <div>
-          <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight leading-tight">
-            Resumen
-          </h2>
-          <p className="text-[11.5px] text-muted-foreground mt-0.5">
-            Qué acabas de ver y qué hacer primero.
-          </p>
-        </div>
-      </div>
-      <ul className="space-y-2.5">
-        {items.map((it, i) => {
-          const Icon = it.icon;
-          const toneClass =
-            it.tone === "ok"
-              ? "text-[hsl(var(--brand-lime))]"
-              : it.tone === "warn"
-                ? "text-[hsl(var(--brand-ember,38_92%_50%))]"
-                : "text-[hsl(var(--brand-cyan))]";
-          return (
-            <motion.li
-              key={i}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.06 * i, duration: 0.28 }}
-              className="flex gap-2.5 items-start text-[12.5px] text-muted-foreground leading-relaxed"
-            >
-              <Icon className={cn("size-4 shrink-0 mt-0.5", toneClass)} />
-              <span>{it.text}</span>
-            </motion.li>
-          );
-        })}
-      </ul>
-    </motion.div>
-  );
-}
-
-function SlideClosing({ displayName }: { displayName: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -16 }}
-      transition={{ duration: 0.35 }}
-      className="text-center py-4"
+      className="text-center"
     >
       <motion.div
         initial={{ scale: 0.6, rotate: -10 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: "spring", stiffness: 220, damping: 16 }}
-        className="mx-auto size-16 rounded-3xl bg-gradient-to-br from-[hsl(var(--brand-violet))] via-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_16px_48px_-12px_hsl(var(--brand-violet)/0.8)] mb-4"
+        className="mx-auto size-14 rounded-3xl bg-gradient-to-br from-[hsl(var(--brand-violet))] via-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_16px_48px_-12px_hsl(var(--brand-violet)/0.8)] mb-3"
       >
-        <PartyPopper className="size-8 text-white" />
+        <PartyPopper className="size-7 text-white" />
       </motion.div>
-      <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-2">
+      <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-1.5">
         Listo, {displayName}.
       </h2>
-      <p className="text-[14px] text-foreground/85 leading-relaxed max-w-md mx-auto mb-1">
-        Buena suerte.
-      </p>
-      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-4 italic">
-        Que tu CPT esté siempre bajo{" "}
+      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-1 italic">
+        Buena suerte · que tu CPT esté siempre bajo{" "}
         <strong className="text-[hsl(var(--brand-violet))] not-italic">€2.20</strong>.
       </p>
-      <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-md mx-auto">
+
+      <div className="mt-4 text-left">
+        <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground mb-2">
+          Resumen rápido
+        </div>
+        <ul className="space-y-2">
+          {recap.map((it, i) => {
+            const Icon = it.icon;
+            const toneClass =
+              it.tone === "ok"
+                ? "text-[hsl(var(--brand-lime))]"
+                : it.tone === "warn"
+                  ? "text-[hsl(var(--brand-ember,38_92%_50%))]"
+                  : "text-[hsl(var(--brand-cyan))]";
+            return (
+              <motion.li
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 + 0.06 * i, duration: 0.28 }}
+                className="flex gap-2.5 items-start text-[12px] text-muted-foreground leading-relaxed"
+              >
+                <Icon className={cn("size-4 shrink-0 mt-0.5", toneClass)} />
+                <span>{it.text}</span>
+              </motion.li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-md mx-auto mt-4">
         Puedes re-disparar este tour desde{" "}
         <strong className="text-foreground/85">Config → Memoria del agente</strong>.
       </p>

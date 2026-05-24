@@ -95,6 +95,42 @@ export const SKILLS: Skill[] = [
     height: 200,
     hint: "Cabecera de newsletter",
   },
+  {
+    id: "tiktok-cover",
+    label: "TikTok · Cover",
+    aspect: "9:16",
+    size: "1080×1920",
+    width: 1080,
+    height: 1920,
+    hint: "Reel cover · TikTok-style",
+  },
+  {
+    id: "ig-carousel-1",
+    label: "Carrusel IG · slide 1",
+    aspect: "1:1",
+    size: "1080×1080",
+    width: 1080,
+    height: 1080,
+    hint: "Hook del carrusel",
+  },
+  {
+    id: "x-post",
+    label: "Twitter/X · Post",
+    aspect: "16:9",
+    size: "1200×675",
+    width: 1200,
+    height: 675,
+    hint: "Imagen para tweet",
+  },
+  {
+    id: "wa-status",
+    label: "WhatsApp · Status",
+    aspect: "9:16",
+    size: "1080×1920",
+    width: 1080,
+    height: 1920,
+    hint: "Estado vertical 24h",
+  },
 ];
 
 export function getSkill(id: string): Skill {

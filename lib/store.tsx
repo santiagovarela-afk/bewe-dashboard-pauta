@@ -359,25 +359,40 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (cAgg.error) throw new Error(cAgg.error.message ?? "Meta API error");
-      if (aAgg.error) throw new Error(aAgg.error.message ?? "Meta API error");
+      // Errores resilientes: si un endpoint falla, dejamos warning pero
+      // seguimos con los demás. Solo tiramos si AMBOS aggregates fallaron.
+      const cAggOk = !cAgg?.error && Array.isArray(cAgg?.data);
+      const aAggOk = !aAgg?.error && Array.isArray(aAgg?.data);
+      if (!cAggOk && !aAggOk) {
+        throw new Error(
+          (cAgg?.error?.message ?? aAgg?.error?.message) || "Meta API error · revisa META_TOKEN",
+        );
+      }
+      // Logging de warnings · no rompen flow
+      if (!cAggOk && typeof window !== "undefined") {
+        console.warn("[meta] cAgg failed:", cAgg?.error?.message);
+      }
+      if (!aAggOk && typeof window !== "undefined") {
+        console.warn("[meta] aAgg failed:", aAgg?.error?.message);
+      }
       // daily errores los toleramos: si el plan/cuenta no soporta time_increment seguimos con agregado
       const dailyCampOk = !cDaily?.error && Array.isArray(cDaily?.data);
       const dailyAdsetOk = !aDaily?.error && Array.isArray(aDaily?.data);
 
       // 1. Update rawCampaigns con el AGREGADO
+      const cAggData = (cAggOk ? cAgg.data : []) as Array<{
+        campaign_id: string;
+        spend: string;
+        impressions: string;
+        clicks: string;
+        ctr: string;
+        cpm: string;
+        reach: string;
+        frequency: string;
+        actions?: Array<{ action_type: string; value: string }>;
+      }>;
       const nextCampaigns = rawCampaigns.map((c) => {
-        const row = (cAgg.data as Array<{
-          campaign_id: string;
-          spend: string;
-          impressions: string;
-          clicks: string;
-          ctr: string;
-          cpm: string;
-          reach: string;
-          frequency: string;
-          actions?: Array<{ action_type: string; value: string }>;
-        }>).find((r) => r.campaign_id === c.cid);
+        const row = cAggData.find((r) => r.campaign_id === c.cid);
         // Status real desde /campaigns endpoint (sobreescribe el seed)
         const liveStatus = statusByCid.get(c.cid) || c.status;
         if (!row) return { ...c, status: liveStatus };

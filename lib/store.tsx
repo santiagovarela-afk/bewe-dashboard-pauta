@@ -89,6 +89,60 @@ function getAction(actions: Array<{ action_type: string; value: string }> | unde
 }
 
 /**
+ * Determina si una campaña pertenece al plan del mes actual (PLAN.monthLabel).
+ * Filtra ruido de campañas viejas (MARZO_2026, ABRIL_2026, etc.) que pueden
+ * tener spend residual en el período pero no son parte del plan vigente.
+ *
+ * Retorna true si:
+ *  - El nombre contiene el patrón corto del mes vigente (ej. "MAY26")
+ *  - O contiene el patrón largo (ej. "MAYO_2026" o "MAYO_26")
+ *  - O el nombre no tiene ningún sufijo de mes/año (puede ser test/manual)
+ */
+function isRelevantToPlanMonth(campaignName: string): boolean {
+  if (!campaignName) return true;
+  const monthMap: Record<string, string> = {
+    enero: "ENE",
+    febrero: "FEB",
+    marzo: "MAR",
+    abril: "ABR",
+    mayo: "MAY",
+    junio: "JUN",
+    julio: "JUL",
+    agosto: "AGO",
+    septiembre: "SEP",
+    octubre: "OCT",
+    noviembre: "NOV",
+    diciembre: "DIC",
+  };
+  const parts = PLAN.monthLabel.split(" ");
+  const monthEs = parts[0]?.toLowerCase();
+  const year = parts[1];
+  if (!monthEs || !year) return true;
+  const monthShort = monthMap[monthEs];
+  if (!monthShort) return true;
+  const yearShort = year.slice(-2);
+  const monthLongUpper = monthEs.toUpperCase();
+  const upperName = campaignName.toUpperCase();
+  const patterns = [
+    `${monthShort}${yearShort}`, // MAY26
+    `${monthLongUpper}_${year}`, // MAYO_2026
+    `${monthLongUpper}_${yearShort}`, // MAYO_26
+  ];
+  // Si el nombre no menciona ningún mes ESPECÍFICO de otro mes/año, lo aceptamos.
+  // (Para evitar excluir campañas legítimas sin sufijo de mes).
+  const allMonthCodesShort = Object.values(monthMap);
+  const allMonthCodesLong = Object.keys(monthMap).map((m) => m.toUpperCase());
+  const hasAnyOtherMonth =
+    allMonthCodesShort.some((m) => m !== monthShort && new RegExp(`${m}\\d{2,4}`).test(upperName)) ||
+    allMonthCodesLong.some((m) => m !== monthLongUpper && upperName.includes(`${m}_`));
+  if (hasAnyOtherMonth) {
+    return patterns.some((p) => upperName.includes(p));
+  }
+  // Sin otro mes en el nombre → aceptamos
+  return true;
+}
+
+/**
  * Infiere metadata de una campaña a partir de su nombre.
  * Convención Bewe: `{GEO}_{VERTICAL}_{TIPO}_{MES}{AÑO}[_CONVERSION]`
  * Ej: MX_BELLEZA_WEB_MAY26 / CR_PA_CL_CO_BELLEZA_WEB_MAY26 / MX_SERVICIOS_WEB_MAY26_CONVERSION
@@ -551,6 +605,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       for (const row of cAggData) {
         const seed = seedMetadataByCid.get(row.campaign_id);
         const liveStatus = statusByCid.get(row.campaign_id) || seed?.status || "PAUSED";
+
+        // FILTRO · si la campaña no es del seed Y su nombre referencia otro
+        // mes/año, la excluimos. Esto evita que LATAM_MULTI_FORM_MARZO_2026
+        // u otras campañas viejas con spend residual contaminen los totales
+        // del plan vigente.
+        if (!seed && !isRelevantToPlanMonth(row.campaign_name ?? "")) {
+          continue;
+        }
+
         const inferred =
           seed ?? inferCampaignMetadata(row.campaign_name ?? row.campaign_id, row.campaign_id);
 

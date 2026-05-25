@@ -13,13 +13,15 @@ import {
   AlertOctagon,
   AlertTriangle,
   CheckCircle2,
-  Info,
   TrendingDown,
   MessageSquareText,
+  PauseCircle,
+  PlayCircle,
+  Wallet,
+  UserPlus,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { fmt, cn, cptTone, ctrTone, cpmTone, CPT_THRESHOLDS } from "@/lib/utils";
-import { PLAN } from "@/lib/config";
 import {
   attentionCampaigns,
   bestCptCampaign,
@@ -34,6 +36,18 @@ import {
   type GroupAggregate,
   type Severity,
 } from "@/lib/selectors";
+import {
+  CAMPAIGN_LIFECYCLE,
+  campaignTypeBadgeVariant,
+  campaignTypeLabel,
+  getCampaignType,
+  getDisplayName,
+  getPausedReason,
+  isActive,
+  isPaused,
+  shouldShowAsActive,
+  type CampaignType,
+} from "@/lib/campaign-metadata";
 import { SectionHeader } from "@/components/shared/section-header";
 import { SpotlightCard } from "@/components/fx/spotlight-card";
 import { TextureCard } from "@/components/fx/texture-card";
@@ -119,6 +133,7 @@ export function TabCampanas() {
   const [selected, setSelected] = React.useState<string | null>(null);
   const [sortBy, setSortBy] = React.useState<SortKey>("spend");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
+  const [pausedOpen, setPausedOpen] = React.useState<boolean>(false);
 
   const crit = criticalCampaigns(campaigns);
   const attn = attentionCampaigns(campaigns);
@@ -128,6 +143,39 @@ export function TabCampanas() {
   const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0);
   const totalCR = campaigns.reduce((s, c) => s + c.evCompleteReg, 0);
   const totalIC = campaigns.reduce((s, c) => s + c.evInitCheckout, 0);
+
+  // ── Partición activas / pausadas según CAMPAIGN_LIFECYCLE + fallback spend ──
+  const activeCampaigns = React.useMemo(
+    () =>
+      campaigns.filter((c) =>
+        shouldShowAsActive({ cid: c.cid, spend: c.spend, status: c.status }),
+      ),
+    [campaigns],
+  );
+  const pausedCampaigns = React.useMemo(
+    () =>
+      campaigns
+        .filter((c) => isPaused(c.cid))
+        .sort((a, b) => b.spend - a.spend),
+    [campaigns],
+  );
+
+  // ── Sub-grupos de activas por tipo (CR · IC · Retargeting) ──
+  const activeByType = React.useMemo(() => {
+    const buckets: Record<CampaignType, Campaign[]> = {
+      CR: [],
+      IC: [],
+      Retargeting: [],
+    };
+    for (const c of activeCampaigns) {
+      const t = getCampaignType({ name: c.name, event: c.event });
+      buckets[t].push(c);
+    }
+    for (const k of Object.keys(buckets) as CampaignType[]) {
+      buckets[k].sort((a, b) => b.spend - a.spend);
+    }
+    return buckets;
+  }, [activeCampaigns]);
 
   function toggleSort(key: SortKey) {
     if (sortBy === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -183,68 +231,65 @@ export function TabCampanas() {
         title="Campañas · MAY26"
         sub={
           <>
-            6 campañas · {fmt.eur(totalSpend, { decimals: 0 })} gastado · {fmt.int(totalCR)} CR ·{" "}
+            {activeCampaigns.length} activas · {pausedCampaigns.length} pausadas ·{" "}
+            {fmt.eur(totalSpend, { decimals: 0 })} gastado · {fmt.int(totalCR)} leads ·{" "}
             {fmt.int(totalIC)} IC
           </>
         }
       />
 
-      {/* ───────────────── 1 · TOP KPIs accionables ───────────────── */}
-      <section className="grid md:grid-cols-3 gap-3">
+      {/* ───────────────── 1 · KPIs resumen · 4 cards ───────────────── */}
+      <section className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
         <Reveal delay={0}>
           <TopKpi
-            label="Campañas en crítico"
-            value={crit.length}
+            label="Campañas activas"
+            value={activeCampaigns.length}
             sub={
-              crit.length > 0
-                ? `${crit.map((c) => c.code).join(" · ")} requieren acción`
-                : "Sin críticos abiertos"
-            }
-            tone={crit.length > 0 ? "danger" : "success"}
-            Icon={crit.length > 0 ? AlertOctagon : CheckCircle2}
-          />
-        </Reveal>
-        <Reveal delay={0.06}>
-          <TopKpi
-            label="Mejor CPT del grupo"
-            value={best?.cpt ?? 0}
-            valueFormat={(v) => (best ? fmt.eur(v) : "—")}
-            sub={
-              best
-                ? `${best.code} ${best.vertical} · ${best.conversions} conv`
-                : "Sin datos suficientes"
+              activeCampaigns.length > 0
+                ? activeCampaigns
+                    .map((c) => getDisplayName(c.name))
+                    .slice(0, 3)
+                    .join(" · ") + (activeCampaigns.length > 3 ? "…" : "")
+                : "Ninguna activa en el período"
             }
             tone="success"
-            Icon={CheckCircle2}
+            Icon={PlayCircle}
           />
         </Reveal>
-        <Reveal delay={0.12}>
+        <Reveal delay={0.05}>
           <TopKpi
-            label="Plan B · C2"
-            valueText={
-              planB.status === "activated"
-                ? "Activado"
-                : planB.status === "pending"
-                  ? "Pendiente"
-                  : planB.status === "watch"
-                    ? "Vigilando"
-                    : "—"
+            label="Campañas pausadas"
+            value={pausedCampaigns.length}
+            sub={
+              pausedCampaigns.length > 0
+                ? "Razones detalladas más abajo"
+                : "Ninguna pausada"
             }
-            sub={planB.detail}
-            tone={
-              planB.status === "pending"
-                ? "danger"
-                : planB.status === "activated"
-                  ? "success"
-                  : "warning"
+            tone={pausedCampaigns.length > 0 ? "warning" : "success"}
+            Icon={PauseCircle}
+          />
+        </Reveal>
+        <Reveal delay={0.1}>
+          <TopKpi
+            label="Gasto del mes"
+            value={totalSpend}
+            valueFormat={(v) => fmt.eur(v, { decimals: 0 })}
+            sub={`${fmt.int(daysElapsed)} días transcurridos · €${(totalSpend / Math.max(1, daysElapsed)).toFixed(0)}/día`}
+            tone="success"
+            Icon={Wallet}
+          />
+        </Reveal>
+        <Reveal delay={0.15}>
+          <TopKpi
+            label="Leads del mes"
+            value={totalCR}
+            sub={
+              best && best.cpt !== null
+                ? `Mejor costo por lead · ${getDisplayName(best.name)} €${best.cpt.toFixed(2)}`
+                : `${fmt.int(totalIC)} IC complementarios`
             }
-            Icon={
-              planB.status === "pending"
-                ? AlertOctagon
-                : planB.status === "activated"
-                  ? CheckCircle2
-                  : AlertTriangle
-            }
+            tone="success"
+            Icon={UserPlus}
           />
         </Reveal>
       </section>
@@ -254,7 +299,33 @@ export function TabCampanas() {
         <section>
           <SectionHeader
             title={`Atención requerida · ${attn.length}`}
-            sub="Campañas que necesitan acción esta semana"
+            sub={
+              <>
+                Campañas que necesitan acción esta semana
+                {crit.length > 0 && (
+                  <>
+                    {" · "}
+                    <span className="text-[hsl(var(--destructive))] font-semibold">
+                      {crit.length} en crítico
+                    </span>
+                  </>
+                )}
+                {planB.status === "pending" && (
+                  <>
+                    {" · "}
+                    <span className="text-[hsl(var(--destructive))] font-semibold">
+                      Plan B C2 pendiente
+                    </span>
+                  </>
+                )}
+                {planB.status === "activated" && (
+                  <>
+                    {" · "}
+                    <span className="text-[hsl(var(--success))]">Plan B C2 activado</span>
+                  </>
+                )}
+              </>
+            }
           />
           <StaggerGroup className="grid lg:grid-cols-2 gap-3" stagger={0.08}>
             {attn.map((c) => (
@@ -271,11 +342,119 @@ export function TabCampanas() {
         </section>
       )}
 
-      {/* ───────────────── 3 · Status grid (tabla densa) ───────────────── */}
+      {/* ───────────────── 3 · Campañas activas · agrupadas por tipo ───────────────── */}
+      <section>
+        <SectionHeader
+          title={`Campañas activas · ${activeCampaigns.length}`}
+          sub="Agrupadas por objetivo · click en card para ver detalle"
+          right={
+            <div className="flex items-center gap-1.5">
+              {(Object.keys(activeByType) as CampaignType[])
+                .filter((t) => activeByType[t].length > 0)
+                .map((t) => (
+                  <Badge key={t} variant={campaignTypeBadgeVariant(t)} className="!text-[9px]">
+                    {activeByType[t].length} {campaignTypeLabel(t)}
+                  </Badge>
+                ))}
+            </div>
+          }
+        />
+        {activeCampaigns.length === 0 ? (
+          <TextureCard className="p-8 text-center text-[12px] text-muted-foreground/70">
+            Sin campañas activas en el período actual.
+          </TextureCard>
+        ) : (
+          <div className="space-y-5">
+            {(Object.keys(activeByType) as CampaignType[]).map((type) => {
+              const list = activeByType[type];
+              if (list.length === 0) return null;
+              return (
+                <ActiveTypeGroup
+                  key={type}
+                  type={type}
+                  campaigns={list}
+                  daysElapsed={daysElapsed}
+                  onOpen={(cid) => setSelected((s) => (s === cid ? null : cid))}
+                  selected={selected}
+                />
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ───────────────── 4 · Campañas pausadas · colapsable ───────────────── */}
+      {pausedCampaigns.length > 0 && (
+        <section>
+          <button
+            type="button"
+            onClick={() => setPausedOpen((o) => !o)}
+            className={cn(
+              "w-full flex items-center justify-between px-4 py-3 rounded-lg border border-border/60",
+              "bg-background/40 hover:bg-secondary/40 transition-colors text-left group",
+            )}
+            aria-expanded={pausedOpen}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className="size-8 grid place-items-center rounded-md border shrink-0"
+                style={{
+                  background: "hsl(var(--warning) / 0.10)",
+                  borderColor: "hsl(var(--warning) / 0.35)",
+                  color: "hsl(var(--warning))",
+                }}
+              >
+                <PauseCircle className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-foreground">
+                  Campañas pausadas · {pausedCampaigns.length}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                  {pausedOpen
+                    ? "Click para colapsar"
+                    : `Razón visible al expandir · ${pausedCampaigns
+                        .map((c) => getDisplayName(c.name))
+                        .slice(0, 3)
+                        .join(" · ")}${pausedCampaigns.length > 3 ? "…" : ""}`}
+                </div>
+              </div>
+            </div>
+            {pausedOpen ? (
+              <ChevronUp className="size-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
+          <AnimatePresence initial={false}>
+            {pausedOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, y: -8 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -8 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="grid md:grid-cols-2 gap-3 mt-3">
+                  {pausedCampaigns.map((c) => (
+                    <PausedCard
+                      key={c.cid}
+                      c={c}
+                      onOpen={() => setSelected(c.cid)}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+      )}
+
+      {/* ───────────────── 5 · Status grid (tabla densa · vista compacta) ───────────────── */}
       <section>
         <SectionHeader
           title="Estado completo · todas las campañas"
-          sub="Click en fila para ver adsets y métricas detalladas"
+          sub="Vista tabular densa · click en fila para ver adsets y métricas detalladas"
           right={
             <Badge variant="outline" className="font-mono">
               {sorted.length} campañas
@@ -487,7 +666,7 @@ function AttentionCard({
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <span
-            className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded shrink-0"
+            className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
             style={{
               background: `hsl(${vertColor} / 0.18)`,
               color: `hsl(${vertColor})`,
@@ -496,10 +675,20 @@ function AttentionCard({
             {c.code}
           </span>
           <div className="min-w-0">
-            <div className="text-[12px] font-semibold leading-tight truncate">
-              {c.vertical} · {c.geo}
+            <div className="text-[13px] font-semibold leading-tight truncate" title={c.name}>
+              {getDisplayName(c.name)}
             </div>
-            <div className="text-[10px] text-muted-foreground font-mono truncate" title={c.name}>{c.name}</div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Badge
+                variant={campaignTypeBadgeVariant(
+                  getCampaignType({ name: c.name, event: c.event }),
+                )}
+                className="!text-[8px] !py-0 !px-1.5"
+              >
+                {campaignTypeLabel(getCampaignType({ name: c.name, event: c.event }))}
+              </Badge>
+              <span className="text-[9px] text-muted-foreground font-mono truncate">{c.geo}</span>
+            </div>
           </div>
         </div>
         <HealthPill severity={sev} />
@@ -776,17 +965,22 @@ function CampaignRow({
       style={{ borderLeft: `2px solid hsl(${sevColor} / ${sev === "ok" ? 0 : 0.7})` }}
     >
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2 min-w-[180px]">
           <SeverityDot severity={sev} pulse={sev === "critical"} />
-          <span
-            className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded"
-            style={{
-              background: `hsl(${vertColor} / 0.15)`,
-              color: `hsl(${vertColor})`,
-            }}
-          >
-            {c.code}
-          </span>
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold leading-tight truncate" title={c.name}>
+              {getDisplayName(c.name)}
+            </div>
+            <span
+              className="font-mono text-[9px] px-1 py-0 rounded inline-block mt-0.5"
+              style={{
+                background: `hsl(${vertColor} / 0.12)`,
+                color: `hsl(${vertColor})`,
+              }}
+            >
+              {c.code}
+            </span>
+          </div>
         </div>
       </td>
       <td className="px-3 py-2.5">
@@ -796,14 +990,17 @@ function CampaignRow({
       <td className="px-3 py-2.5">
         <div className="flex flex-col gap-1 items-start">
           <Badge
-            variant={c.status === "ACTIVE" ? "success" : "outline"}
+            variant={isPaused(c.cid) ? "warning" : c.status === "ACTIVE" ? "success" : "outline"}
             className="!text-[8px] !py-0 !px-1.5"
           >
-            {c.status}
+            {isPaused(c.cid) ? "PAUSED" : c.status}
           </Badge>
-          <span className="text-[9px] text-muted-foreground/80 uppercase tracking-wider">
-            {c.event === "CompleteRegistration" ? "CR" : "IC"}
-          </span>
+          <Badge
+            variant={campaignTypeBadgeVariant(getCampaignType({ name: c.name, event: c.event }))}
+            className="!text-[8px] !py-0 !px-1.5"
+          >
+            {campaignTypeLabel(getCampaignType({ name: c.name, event: c.event }))}
+          </Badge>
         </div>
       </td>
       <td className="px-3 py-2.5 text-right">
@@ -930,16 +1127,28 @@ function DetailPanel({
         style={{ borderLeft: `3px solid hsl(${sevColor})` }}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span
-            className="font-mono font-bold text-[11px] px-2 py-0.5 rounded"
-            style={{
-              background: `hsl(${vertColor} / 0.18)`,
-              color: `hsl(${vertColor})`,
-            }}
+          <div className="min-w-0 flex items-center gap-2">
+            <span
+              className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
+              style={{
+                background: `hsl(${vertColor} / 0.18)`,
+                color: `hsl(${vertColor})`,
+              }}
+            >
+              {campaign.code}
+            </span>
+            <span className="text-[14px] font-semibold leading-tight truncate" title={campaign.name}>
+              {getDisplayName(campaign.name)}
+            </span>
+          </div>
+          <Badge
+            variant={campaignTypeBadgeVariant(
+              getCampaignType({ name: campaign.name, event: campaign.event }),
+            )}
+            className="!text-[9px] shrink-0"
           >
-            {campaign.code}
-          </span>
-          <span className="font-mono text-[12px] font-medium truncate" title={campaign.name}>{campaign.name}</span>
+            {campaignTypeLabel(getCampaignType({ name: campaign.name, event: campaign.event }))}
+          </Badge>
           <HealthPill severity={sev} />
           <Badge variant="outline" className="!text-[9px]">
             {adsets.length} adsets
@@ -1356,6 +1565,283 @@ function GroupCard({
           );
         })}
       </div>
+    </TextureCard>
+  );
+}
+
+/* ─────────────── Active type group (CR / IC / Retargeting) ─────────────── */
+
+function ActiveTypeGroup({
+  type,
+  campaigns,
+  daysElapsed,
+  onOpen,
+  selected,
+}: {
+  type: CampaignType;
+  campaigns: Campaign[];
+  daysElapsed: number;
+  onOpen: (cid: string) => void;
+  selected: string | null;
+}) {
+  const variant = campaignTypeBadgeVariant(type);
+  const accent =
+    variant === "violet"
+      ? "var(--brand-violet)"
+      : variant === "cyan"
+        ? "var(--brand-cyan)"
+        : "var(--brand-ember)";
+  const groupSpend = campaigns.reduce((s, c) => s + c.spend, 0);
+  const groupConv = campaigns.reduce(
+    (s, c) => s + (type === "IC" ? c.evInitCheckout : c.evCompleteReg),
+    0,
+  );
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2">
+          <span
+            className="size-2 rounded-full"
+            style={{ background: `hsl(${accent})` }}
+            aria-hidden
+          />
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-foreground">
+            {campaignTypeLabel(type)}
+          </h3>
+          <Badge variant={variant} className="!text-[8px]">
+            {campaigns.length}
+          </Badge>
+        </div>
+        <div className="text-[10px] text-muted-foreground font-mono">
+          {fmt.eur(groupSpend, { decimals: 0 })} · {fmt.int(groupConv)}{" "}
+          {type === "IC" ? "IC" : type === "Retargeting" ? "conv" : "leads"}
+        </div>
+      </div>
+      <StaggerGroup className="grid lg:grid-cols-2 xl:grid-cols-3 gap-3" stagger={0.06}>
+        {campaigns.map((c) => (
+          <StaggerItem key={c.cid}>
+            <ActiveCampaignCard
+              c={c}
+              daysElapsed={daysElapsed}
+              expanded={selected === c.cid}
+              onOpen={() => onOpen(c.cid)}
+              accent={accent}
+            />
+          </StaggerItem>
+        ))}
+      </StaggerGroup>
+    </div>
+  );
+}
+
+function ActiveCampaignCard({
+  c,
+  daysElapsed,
+  expanded,
+  onOpen,
+  accent,
+}: {
+  c: Campaign;
+  daysElapsed: number;
+  expanded: boolean;
+  onOpen: () => void;
+  accent: string;
+}) {
+  const sev = severityOf(c);
+  const sevColor =
+    sev === "critical"
+      ? "var(--destructive)"
+      : sev === "warn"
+        ? "var(--warning)"
+        : sev === "anomaly"
+          ? "var(--brand-ember)"
+          : "var(--success)";
+  const vertColor = VERT_COLOR[c.vertical];
+  const pacing = pacingPct(c, daysElapsed);
+  const pacingTone: "danger" | "warning" | "success" =
+    pacing > 115 ? "danger" : pacing < 70 && daysElapsed >= 3 ? "warning" : "success";
+  const type = getCampaignType({ name: c.name, event: c.event });
+  const hasSpend = c.spend > 0;
+  const lifecycle = CAMPAIGN_LIFECYCLE[c.cid];
+  const isLifecycleActive = isActive(c.cid);
+
+  return (
+    <SpotlightCard
+      spotlightColor={accent}
+      intensity={0.25}
+      className={cn(
+        "p-0 overflow-hidden transition-colors",
+        expanded && "ring-1 ring-border",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full text-left"
+        aria-expanded={expanded}
+      >
+        <div
+          className="px-4 py-3 border-b border-border/40 flex items-start justify-between gap-3"
+          style={{ background: `linear-gradient(135deg, hsl(${accent} / 0.08), transparent 70%)` }}
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <SeverityDot severity={sev} pulse={sev === "critical"} />
+              <span
+                className="font-mono text-[9px] px-1 py-0 rounded"
+                style={{
+                  background: `hsl(${vertColor} / 0.15)`,
+                  color: `hsl(${vertColor})`,
+                }}
+              >
+                {c.code}
+              </span>
+              <Badge
+                variant={campaignTypeBadgeVariant(type)}
+                className="!text-[8px] !py-0 !px-1.5"
+              >
+                {campaignTypeLabel(type)}
+              </Badge>
+            </div>
+            <div className="text-[13px] font-semibold leading-tight truncate" title={c.name}>
+              {getDisplayName(c.name)}
+            </div>
+            <div className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
+              {c.vertical} · {c.geo}
+            </div>
+          </div>
+          <div className="shrink-0 flex flex-col items-end gap-1">
+            <HealthPill severity={sev} />
+            {!hasSpend && isLifecycleActive && (
+              <Badge variant="outline" className="!text-[8px] !py-0 !px-1.5">
+                Sin gasto en período
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="px-4 py-3 grid grid-cols-4 gap-3 border-b border-border/40 bg-background/20">
+          <SmallStat label="Gasto" value={fmt.eur(c.spend, { decimals: 0 })} />
+          <SmallStat
+            label={type === "IC" ? "IC" : "Leads"}
+            value={fmt.int(type === "IC" ? c.evInitCheckout : c.evCompleteReg)}
+            tone={c.conversions > 0 ? "success" : "muted"}
+          />
+          <SmallStat
+            label="CPT"
+            value={c.cpt === null ? "—" : fmt.eur(c.cpt)}
+            tone={
+              cptTone(c.cpt) === "success"
+                ? "success"
+                : cptTone(c.cpt) === "warning"
+                  ? "warning"
+                  : cptTone(c.cpt) === "danger"
+                    ? "danger"
+                    : "muted"
+            }
+          />
+          <SmallStat
+            label="Pacing"
+            value={hasSpend ? `${Math.round(pacing)}%` : "—"}
+            tone={hasSpend ? pacingTone : "muted"}
+          />
+        </div>
+
+        <div className="px-4 py-2.5 flex items-center justify-between gap-2 bg-background/30">
+          <div className="text-[10px] text-muted-foreground/80 truncate">
+            {lifecycle?.reason ?? `€${c.daily}/d · €${c.total} plan`}
+          </div>
+          <div
+            className="size-6 grid place-items-center rounded-md border shrink-0 text-muted-foreground/60"
+            style={{
+              borderColor: `hsl(${sevColor} / 0.3)`,
+            }}
+          >
+            <ChevronRight className="size-3" />
+          </div>
+        </div>
+      </button>
+    </SpotlightCard>
+  );
+}
+
+/* ─────────────── Paused campaign card ─────────────── */
+
+function PausedCard({ c, onOpen }: { c: Campaign; onOpen: () => void }) {
+  const reason = getPausedReason(c.cid);
+  const vertColor = VERT_COLOR[c.vertical];
+  const type = getCampaignType({ name: c.name, event: c.event });
+  const lifecycle = CAMPAIGN_LIFECYCLE[c.cid];
+  return (
+    <TextureCard className="p-0 overflow-hidden">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full text-left hover:bg-secondary/20 transition-colors"
+      >
+        <div className="px-4 py-3 border-b border-border/40 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span
+                className="font-mono text-[9px] px-1 py-0 rounded"
+                style={{
+                  background: `hsl(${vertColor} / 0.12)`,
+                  color: `hsl(${vertColor})`,
+                }}
+              >
+                {c.code}
+              </span>
+              <Badge
+                variant={campaignTypeBadgeVariant(type)}
+                className="!text-[8px] !py-0 !px-1.5"
+              >
+                {campaignTypeLabel(type)}
+              </Badge>
+              <Badge variant="warning" className="!text-[8px] !py-0 !px-1.5">
+                Pausada
+              </Badge>
+            </div>
+            <div className="text-[13px] font-semibold leading-tight truncate" title={c.name}>
+              {getDisplayName(c.name)}
+            </div>
+            <div className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
+              {c.vertical} · {c.geo}
+            </div>
+          </div>
+          {lifecycle?.pausedAt && (
+            <div className="text-[9px] text-muted-foreground font-mono shrink-0">
+              {lifecycle.pausedAt}
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-3 flex items-start gap-2.5 bg-background/20">
+          <PauseCircle
+            className="size-3.5 mt-0.5 shrink-0"
+            style={{ color: "hsl(var(--warning))" }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground mb-0.5">
+              Razón
+            </div>
+            <div className="text-[11px] text-foreground/90 leading-snug">
+              {reason ?? "Sin razón registrada"}
+            </div>
+          </div>
+        </div>
+        <div className="px-4 py-2 grid grid-cols-3 gap-2 border-t border-border/40 bg-background/10">
+          <SmallStat label="Gasto" value={fmt.eur(c.spend, { decimals: 0 })} tone="muted" />
+          <SmallStat
+            label={type === "IC" ? "IC" : "Leads"}
+            value={fmt.int(type === "IC" ? c.evInitCheckout : c.evCompleteReg)}
+            tone="muted"
+          />
+          <SmallStat
+            label="CPT final"
+            value={c.cpt === null ? "—" : fmt.eur(c.cpt)}
+            tone="muted"
+          />
+        </div>
+      </button>
     </TextureCard>
   );
 }

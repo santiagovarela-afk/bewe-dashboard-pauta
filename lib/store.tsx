@@ -85,6 +85,66 @@ function getAction(actions: Array<{ action_type: string; value: string }> | unde
   return parseInt(actions.find((a) => a.action_type === type)?.value ?? "0", 10);
 }
 
+/**
+ * Infiere metadata de una campaña a partir de su nombre.
+ * Convención Bewe: `{GEO}_{VERTICAL}_{TIPO}_{MES}{AÑO}[_CONVERSION]`
+ * Ej: MX_BELLEZA_WEB_MAY26 / CR_PA_CL_CO_BELLEZA_WEB_MAY26 / MX_SERVICIOS_WEB_MAY26_CONVERSION
+ *     RETARGETING_LATAM_ONB_MAY26
+ */
+function inferCampaignMetadata(campaignName: string, cid: string): Campaign {
+  const isConversion = /_CONV(ERSION)?$/i.test(campaignName);
+
+  // Geo · tomar prefijos compuestos o el primer token de 2-3 letras
+  let geo = "MX";
+  if (campaignName.startsWith("CR_PA_CL_CO_")) geo = "CR+PA+CL+CO";
+  else if (campaignName.startsWith("MX_")) geo = "MX";
+  else if (campaignName.startsWith("RETARGETING_LATAM")) geo = "LATAM";
+  else {
+    const first = campaignName.split("_")[0];
+    if (/^[A-Z]{2,3}$/.test(first)) geo = first;
+  }
+
+  // Vertical · keywords conocidas
+  let vertical: Campaign["vertical"] = "Servicios";
+  if (/BELLEZA/i.test(campaignName)) vertical = "Belleza";
+  else if (/COMERCIO/i.test(campaignName)) vertical = "Comercio";
+  else if (/SERVICIOS|SERVICES/i.test(campaignName)) vertical = "Servicios";
+
+  // Event · _CONVERSION optimiza a CR · _IC explícito a IC · default CR
+  const event: Campaign["event"] = isConversion
+    ? "CompleteRegistration"
+    : /INICIAR_CHECKOUT|INIT_CHECKOUT|_IC$/i.test(campaignName)
+      ? "InitiateCheckout"
+      : "CompleteRegistration";
+
+  const code = `META.${cid.slice(-6)}`;
+
+  return {
+    code,
+    cid,
+    name: campaignName,
+    event,
+    geo,
+    vertical,
+    status: "ACTIVE",
+    daily: 0,
+    total: 0,
+    spend: 0,
+    impressions: 0,
+    clicks: 0,
+    ctr: 0,
+    cpm: 0,
+    reach: 0,
+    freq: 0,
+    conversions: 0,
+    cpt: null,
+    flag: null,
+    evContact: 0,
+    evInitCheckout: 0,
+    evCompleteReg: 0,
+  };
+}
+
 /** Devuelve un rango ISO basado en preset (relativo a hoy). */
 function rangeFromPreset(preset: DatePreset): DateRange {
   const today = new Date();
@@ -379,9 +439,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const dailyCampOk = !cDaily?.error && Array.isArray(cDaily?.data);
       const dailyAdsetOk = !aDaily?.error && Array.isArray(aDaily?.data);
 
-      // 1. Update rawCampaigns con el AGREGADO
+      // 1. Update rawCampaigns con el AGREGADO · procesar TODAS las campañas
+      //    que devuelve Meta + cruzar con metadata del seed (vertical, geo,
+      //    event optimization). Si no hay metadata en el seed, inferir desde
+      //    el nombre. Esto evita perder campañas creadas después del env var.
       const cAggData = (cAggOk ? cAgg.data : []) as Array<{
         campaign_id: string;
+        campaign_name?: string;
         spend: string;
         impressions: string;
         clicks: string;
@@ -391,19 +455,27 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         frequency: string;
         actions?: Array<{ action_type: string; value: string }>;
       }>;
-      const nextCampaigns = rawCampaigns.map((c) => {
-        const row = cAggData.find((r) => r.campaign_id === c.cid);
-        // Status real desde /campaigns endpoint (sobreescribe el seed)
-        const liveStatus = statusByCid.get(c.cid) || c.status;
-        if (!row) return { ...c, status: liveStatus };
+
+      // Mapa cid → metadata del seed (vertical, geo, event opt, budgets)
+      const seedMetadataByCid = new Map<string, Campaign>();
+      for (const c of rawCampaigns) seedMetadataByCid.set(c.cid, c);
+
+      const nextCampaigns: Campaign[] = [];
+      for (const row of cAggData) {
+        const seed = seedMetadataByCid.get(row.campaign_id);
+        const liveStatus = statusByCid.get(row.campaign_id) || seed?.status || "PAUSED";
+        const inferred =
+          seed ?? inferCampaignMetadata(row.campaign_name ?? row.campaign_id, row.campaign_id);
+
         const evCR = getAction(row.actions, ACTION_KEYS.completeReg);
         const evIC = getAction(row.actions, ACTION_KEYS.initCheckout);
         const evCT = getAction(row.actions, ACTION_KEYS.contact);
-        const conv = c.event === "CompleteRegistration" ? evCR : evIC;
+        const conv = inferred.event === "CompleteRegistration" ? evCR : evIC;
         const spend = parseFloat(row.spend) || 0;
         const cpt = conv > 0 ? +(spend / conv).toFixed(2) : null;
+
         const flag: Campaign["flag"] =
-          c.cid === "52551556895286"
+          row.campaign_id === "52551556895286"
             ? "anomaly"
             : cpt === null
               ? null
@@ -412,8 +484,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                 : cpt > CPT_THRESHOLDS.warn
                   ? "warn"
                   : null;
-        return {
-          ...c,
+
+        nextCampaigns.push({
+          ...inferred,
+          cid: row.campaign_id,
+          name: row.campaign_name ?? inferred.name,
           status: liveStatus,
           spend,
           impressions: parseInt(row.impressions, 10) || 0,
@@ -428,12 +503,39 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           conversions: conv,
           cpt,
           flag,
-        };
-      });
+        });
+      }
+
+      // Agregar también las campañas del seed que NO devolvió Meta API
+      // (ej. viejas pausadas o con 0 spend en el período) para que el panel
+      // siga listándolas con métricas en 0.
+      for (const seed of rawCampaigns) {
+        if (!nextCampaigns.find((c) => c.cid === seed.cid)) {
+          nextCampaigns.push({
+            ...seed,
+            status: statusByCid.get(seed.cid) || seed.status,
+            spend: 0,
+            impressions: 0,
+            clicks: 0,
+            ctr: 0,
+            cpm: 0,
+            reach: 0,
+            freq: 0,
+            evCompleteReg: 0,
+            evInitCheckout: 0,
+            evContact: 0,
+            conversions: 0,
+            cpt: null,
+            flag: null,
+          });
+        }
+      }
+
       setRawCampaigns(nextCampaigns);
 
-      // 2. Update rawAdsets
-      const adsetRows = aAgg.data as Array<{
+      // 2. Update rawAdsets · si la campaña padre no está en nextCampaigns
+      //    (caso raro · cAgg falló pero aAgg ok), default a CompleteRegistration.
+      const adsetRows = (aAggOk ? aAgg.data : []) as Array<{
         adset_id: string;
         adset_name: string;
         campaign_id: string;
@@ -450,7 +552,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         const camp = nextCampaigns.find((c) => c.cid === row.campaign_id);
         const evCR = getAction(row.actions, ACTION_KEYS.completeReg);
         const evIC = getAction(row.actions, ACTION_KEYS.initCheckout);
-        const conv = camp?.event === "CompleteRegistration" ? evCR : evIC;
+        const campEvent: Campaign["event"] = camp?.event ?? "CompleteRegistration";
+        const conv = campEvent === "CompleteRegistration" ? evCR : evIC;
         const spend = parseFloat(row.spend) || 0;
         return {
           cid: row.campaign_id,

@@ -1,6 +1,7 @@
 import type { Campaign, DailyRow, DateRange } from "./types";
 import { PLAN } from "./config";
 import { CPT_THRESHOLDS } from "./utils";
+import { isActive } from "./campaign-metadata";
 
 export interface DashboardMetrics {
   spend: number;
@@ -866,4 +867,382 @@ export function closingLevers(): ClosingLever[] {
       tone: "success",
     },
   ];
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Proyección multi-escenario (Pesimista · Base · Optimista)
+ *  Aditivos · usa SOLO campañas activas + ritmo últimos 7d.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+export type ScenarioKind = "pessimistic" | "base" | "optimistic";
+
+export interface ScenarioProjection {
+  kind: ScenarioKind;
+  /** Etiqueta humana. */
+  label: string;
+  /** Multiplicador aplicado al daily promedio (0.8 / 1.0 / 1.3). */
+  multiplier: number;
+  /** Daily promedio esperado (€/día) en este escenario. */
+  expectedDaily: number;
+  /** Spend total proyectado al 31-may. */
+  projectedSpend: number;
+  /** CR proyectados al cierre. */
+  projectedCR: number;
+  /** CPL final esperado (spend / CR), null si CR == 0. */
+  projectedCPL: number | null;
+  /** % vs objetivo Julián (1.350 CR). */
+  goalAchievementPct: number;
+  /** CR esperados solo en los próximos N días. */
+  nextDaysCR: number;
+  /** Spend esperado en los próximos N días. */
+  nextDaysSpend: number;
+}
+
+export interface ActiveProjectionResult {
+  daysElapsed: number;
+  daysRemaining: number;
+  totalDays: number;
+  /** Spend acumulado hoy (sólo campañas activas). */
+  spendToDate: number;
+  /** CR acumulados hoy (sólo campañas activas). */
+  crToDate: number;
+  /** Ritmo daily de los últimos 7 días sólo de las activas. */
+  recentDailyAvg: number;
+  /** CPL live (spend hoy / CR hoy de las activas). */
+  liveCPL: number | null;
+  /** Cuántos días reales de daily se usaron (1..7) · 0 = fallback config. */
+  windowDaysUsed: number;
+  /** Cantidad de campañas activas consideradas. */
+  activeCount: number;
+  /** True si no había daily breakdown y usamos `daily` config como fallback. */
+  usedFallback: boolean;
+  /** Tres escenarios proyectados al cierre. */
+  scenarios: Record<ScenarioKind, ScenarioProjection>;
+  /** Ventana corta · cuántos CR esperar en los próximos `shortHorizonDays`. */
+  shortHorizonDays: number;
+}
+
+const SCENARIO_MULTIPLIERS: Record<ScenarioKind, number> = {
+  pessimistic: 0.8,
+  base: 1.0,
+  optimistic: 1.3,
+};
+
+const SCENARIO_LABELS: Record<ScenarioKind, string> = {
+  pessimistic: "Pesimista",
+  base: "Base",
+  optimistic: "Optimista",
+};
+
+function recentDailyForCids(
+  daily: DailyRow[],
+  cids: Set<string>,
+  windowDays = 7,
+): { dailyAvg: number; windowDaysUsed: number; dailyCR: number } {
+  if (daily.length === 0 || cids.size === 0) {
+    return { dailyAvg: 0, windowDaysUsed: 0, dailyCR: 0 };
+  }
+  const byDate = new Map<string, { spend: number; crConv: number }>();
+  for (const row of daily) {
+    if (row.adsetId) continue;
+    if (!cids.has(row.campaignId)) continue;
+    const acc = byDate.get(row.date) ?? { spend: 0, crConv: 0 };
+    acc.spend += row.spend;
+    acc.crConv += row.evCompleteReg;
+    byDate.set(row.date, acc);
+  }
+  const sortedDesc = Array.from(byDate.entries()).sort((a, b) =>
+    a[0] > b[0] ? -1 : 1,
+  );
+  const slice = sortedDesc.slice(0, windowDays);
+  if (slice.length === 0) return { dailyAvg: 0, windowDaysUsed: 0, dailyCR: 0 };
+  const sumSpend = slice.reduce((s, [, v]) => s + v.spend, 0);
+  const sumCR = slice.reduce((s, [, v]) => s + v.crConv, 0);
+  return {
+    dailyAvg: sumSpend / slice.length,
+    dailyCR: sumCR / slice.length,
+    windowDaysUsed: slice.length,
+  };
+}
+
+/**
+ * Proyecta 3 escenarios al cierre del plan usando ÚNICAMENTE las campañas
+ * activas + ritmo daily de los últimos 7d. Si no hay daily breakdown, cae
+ * al `daily` config de cada activa + tasa CR/€ live (o 1/€2.20 si no hay
+ * live data).
+ *
+ * Para responder "¿cuántos CR esperar en próximos N días?" usar
+ * `result.scenarios.base.nextDaysCR`.
+ */
+export function projectMonthEndScenarios(
+  campaigns: Campaign[],
+  daily: DailyRow[],
+  daysElapsed: number,
+  opts: { shortHorizonDays?: number; windowDays?: number } = {},
+): ActiveProjectionResult {
+  const shortHorizonDays = opts.shortHorizonDays ?? 5;
+  const windowDays = opts.windowDays ?? 7;
+  const activeOnly = campaigns.filter((c) => isActive(c.cid));
+  const activeCids = new Set(activeOnly.map((c) => c.cid));
+  const daysRemaining = Math.max(0, PLAN.totalDays - daysElapsed);
+
+  const spendToDate = activeOnly.reduce((s, c) => s + c.spend, 0);
+  const crToDate = activeOnly.reduce((s, c) => s + (c.evCompleteReg || 0), 0);
+  const liveCPL = crToDate > 0 ? spendToDate / crToDate : null;
+
+  const { dailyAvg: recentDailyAvg, windowDaysUsed, dailyCR: recentDailyCR } =
+    recentDailyForCids(daily, activeCids, windowDays);
+
+  let usedDailyAvg = recentDailyAvg;
+  let usedDailyCR = recentDailyCR;
+  let usedFallback = false;
+  if (windowDaysUsed === 0) {
+    usedFallback = true;
+    const configDaily = activeOnly.reduce((s, c) => s + (c.daily || 0), 0);
+    usedDailyAvg = configDaily;
+    const crPerEur =
+      spendToDate > 0 && crToDate > 0 ? crToDate / spendToDate : 1 / 2.2;
+    usedDailyCR = configDaily * crPerEur;
+  }
+
+  const buildScenario = (kind: ScenarioKind): ScenarioProjection => {
+    const multiplier = SCENARIO_MULTIPLIERS[kind];
+    const expectedDaily = usedDailyAvg * multiplier;
+    const expectedDailyCR = usedDailyCR * multiplier;
+    const futureSpend = expectedDaily * daysRemaining;
+    const projectedSpend = spendToDate + futureSpend;
+    const futureCR = expectedDailyCR * daysRemaining;
+    const projectedCR = Math.round(crToDate + futureCR);
+    const projectedCPL = projectedCR > 0 ? projectedSpend / projectedCR : null;
+    const horizon = Math.min(shortHorizonDays, daysRemaining);
+    const nextDaysSpend = expectedDaily * horizon;
+    const nextDaysCR = Math.round(expectedDailyCR * horizon);
+    return {
+      kind,
+      label: SCENARIO_LABELS[kind],
+      multiplier,
+      expectedDaily,
+      projectedSpend,
+      projectedCR,
+      projectedCPL,
+      goalAchievementPct: (projectedCR / TARGET_GOAL.registrations) * 100,
+      nextDaysCR,
+      nextDaysSpend,
+    };
+  };
+
+  return {
+    daysElapsed,
+    daysRemaining,
+    totalDays: PLAN.totalDays,
+    spendToDate,
+    crToDate,
+    recentDailyAvg: usedDailyAvg,
+    liveCPL,
+    windowDaysUsed,
+    activeCount: activeOnly.length,
+    usedFallback,
+    scenarios: {
+      pessimistic: buildScenario("pessimistic"),
+      base: buildScenario("base"),
+      optimistic: buildScenario("optimistic"),
+    },
+    shortHorizonDays,
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Pacing real vs esperado · gasto acumulado vs ritmo ideal por días corridos
+ * ─────────────────────────────────────────────────────────────────────── */
+
+export interface PacingState {
+  /** Gasto acumulado total (TODAS las campañas · activas + pausadas que gastaron). */
+  spendTotal: number;
+  /** Budget plan (€3.000). */
+  budget: number;
+  /** Días corridos desde launchISO hasta hoy (clamped 1..totalDays). */
+  daysElapsed: number;
+  /** Días totales del plan (20). */
+  totalDays: number;
+  /** % real = spend / budget × 100. */
+  realPct: number;
+  /** % esperado = daysElapsed / totalDays × 100. */
+  expectedPct: number;
+  /** Diferencia (real − expected). Positivo = sobre-pacing. */
+  deltaPct: number;
+  /** Estado · "on-track" si |delta| ≤ 5pp. */
+  status: "on-track" | "over" | "under";
+  /** Ritmo medio diario hasta hoy. */
+  dailyAvg: number;
+  /** Ritmo requerido para gastar exactamente budget en los días restantes. */
+  requiredDailyToFinish: number;
+}
+
+/** Calcula pacing real vs esperado del plan completo. */
+export function computePacing(
+  campaigns: Campaign[],
+  daysElapsed: number,
+): PacingState {
+  const spendTotal = campaigns.reduce((s, c) => s + c.spend, 0);
+  const budget = PLAN.budget;
+  const totalDays = PLAN.totalDays;
+  const safeDays = Math.max(1, daysElapsed);
+  const realPct = budget > 0 ? (spendTotal / budget) * 100 : 0;
+  const expectedPct = totalDays > 0 ? (daysElapsed / totalDays) * 100 : 0;
+  const deltaPct = realPct - expectedPct;
+  const status: PacingState["status"] =
+    Math.abs(deltaPct) <= 5 ? "on-track" : deltaPct > 0 ? "over" : "under";
+  const dailyAvg = spendTotal / safeDays;
+  const daysLeft = Math.max(1, totalDays - daysElapsed);
+  const requiredDailyToFinish = Math.max(0, (budget - spendTotal) / daysLeft);
+  return {
+    spendTotal,
+    budget,
+    daysElapsed,
+    totalDays,
+    realPct,
+    expectedPct,
+    deltaPct,
+    status,
+    dailyAvg,
+    requiredDailyToFinish,
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Reglas Julián vivas · evaluadas contra data viva
+ * ─────────────────────────────────────────────────────────────────────── */
+
+export type LiveRuleStatus = "pass" | "fail" | "watch" | "historic";
+
+export interface LiveRule {
+  /** Agrupación operativa. */
+  category: "active-pass" | "active-fail" | "historic";
+  /** Enunciado de la regla. */
+  title: string;
+  /** Detalle con cifras vivas. */
+  detail: string;
+  /** Estado evaluado dinámicamente. */
+  status: LiveRuleStatus;
+}
+
+interface AdsetLite {
+  cid: string;
+  name: string;
+  cpt: number | null;
+  conversions: number;
+  spend: number;
+}
+
+/**
+ * Evalúa las reglas operativas de Julián contra la data viva.
+ * Reglas aplicadas a campañas ACTIVE · las pausadas pasan a la sección
+ * histórica con su razón documentada.
+ */
+export function evaluateLiveRules(
+  campaigns: Campaign[],
+  adsets: AdsetLite[],
+): LiveRule[] {
+  const rules: LiveRule[] = [];
+  const active = campaigns.filter((c) => isActive(c.cid));
+
+  // ── Regla 1 · CPR < critical en todas las activas ──────────────────
+  const overCritical = active.filter(
+    (c) =>
+      c.cpt !== null && c.cpt > CPT_THRESHOLDS.critical && c.flag !== "anomaly",
+  );
+  rules.push({
+    category: overCritical.length === 0 ? "active-pass" : "active-fail",
+    title: `CPR < €${CPT_THRESHOLDS.critical} en todas las activas`,
+    detail:
+      overCritical.length === 0
+        ? `Todas las ${active.length} activas con CPR bajo umbral crítico.`
+        : `${overCritical.length} campaña${overCritical.length !== 1 ? "s" : ""} excede: ${overCritical
+            .map((c) => `${c.code} (€${c.cpt?.toFixed(2)})`)
+            .join(" · ")}`,
+    status: overCritical.length === 0 ? "pass" : "fail",
+  });
+
+  // ── Regla 2 · Frecuencia < 2.5 ─────────────────────────────────────
+  const overFreq = active.filter((c) => c.freq >= 2.5);
+  const maxFreq =
+    active.length > 0 ? Math.max(...active.map((c) => c.freq)) : 0;
+  rules.push({
+    category: overFreq.length === 0 ? "active-pass" : "active-fail",
+    title: "Frecuencia < 2.5× en todas las activas",
+    detail:
+      overFreq.length === 0
+        ? `Freq máxima ${maxFreq.toFixed(2)}× · dentro del límite.`
+        : `${overFreq.map((c) => `${c.code} freq ${c.freq.toFixed(2)}×`).join(" · ")} · refrescar creativos.`,
+    status: overFreq.length === 0 ? "pass" : "fail",
+  });
+
+  // ── Regla 3 · No gastar > 5× target sin conv (CR) ──────────────────
+  const wastingCR = active.filter(
+    (c) =>
+      c.event === "CompleteRegistration" &&
+      c.spend >= CPT_THRESHOLDS.target * 5 &&
+      (c.evCompleteReg || 0) === 0,
+  );
+  rules.push({
+    category: wastingCR.length === 0 ? "active-pass" : "active-fail",
+    title: `Sin gasto > €${(CPT_THRESHOLDS.target * 5).toFixed(0)} sin conv (CR)`,
+    detail:
+      wastingCR.length === 0
+        ? "Todas las activas CR registran conversiones."
+        : `${wastingCR.map((c) => `${c.code} €${c.spend.toFixed(0)} / 0 CR`).join(" · ")}`,
+    status: wastingCR.length === 0 ? "pass" : "fail",
+  });
+
+  // ── Regla 4 · Atribución 7d clic / 1d view ─────────────────────────
+  rules.push({
+    category: "active-pass",
+    title: "Atribución 7d clic / 1d view",
+    detail: "Configurada en setup · no se modifica durante el plan.",
+    status: "pass",
+  });
+
+  // ── Regla 5 · CAPI puro desde 16-may ───────────────────────────────
+  rules.push({
+    category: "active-pass",
+    title: "CAPI puro · dominio bewe.ai",
+    detail:
+      "Pixel eliminado 16-may · sin duplicados. Datos limpios desde esa fecha.",
+    status: "pass",
+  });
+
+  // ── Regla 6 · Histórica · IC pausado ───────────────────────────────
+  const icHistoric = campaigns.filter(
+    (c) => c.event === "InitiateCheckout" && !isActive(c.cid),
+  );
+  if (icHistoric.length > 0) {
+    rules.push({
+      category: "historic",
+      title: "IC pausado · validación 8× peor que CR",
+      detail: `${icHistoric.map((c) => c.code).join(" · ")} pausadas tras validar tasa IC→signup <1%. Junio: cero IC.`,
+      status: "historic",
+    });
+  }
+
+  // ── Regla 7 · Adsets activos con CPR ≤ crítico ─────────────────────
+  const activeCids = new Set(active.map((c) => c.cid));
+  const overCriticalAdsets = adsets.filter(
+    (a) =>
+      activeCids.has(a.cid) &&
+      a.cpt !== null &&
+      a.cpt > CPT_THRESHOLDS.critical &&
+      a.conversions > 0,
+  );
+  const evaluatedAdsets = adsets.filter((a) => activeCids.has(a.cid)).length;
+  rules.push({
+    category: overCriticalAdsets.length === 0 ? "active-pass" : "active-fail",
+    title: `Adsets activos con CPR ≤ €${CPT_THRESHOLDS.critical}`,
+    detail:
+      overCriticalAdsets.length === 0
+        ? `Sin adsets activos sobre umbral crítico (${evaluatedAdsets} evaluados).`
+        : `${overCriticalAdsets.length} adset${overCriticalAdsets.length !== 1 ? "s" : ""} sobre €${CPT_THRESHOLDS.critical} · pausar.`,
+    status: overCriticalAdsets.length === 0 ? "pass" : "fail",
+  });
+
+  return rules;
 }

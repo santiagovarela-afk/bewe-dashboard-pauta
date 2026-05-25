@@ -4,23 +4,26 @@ import { motion } from "motion/react";
 import {
   AlertTriangle,
   Calendar,
+  Clock,
   Flag,
   Mail,
   Palette,
   Sparkles,
   Target,
+  TrendingDown,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
-import { PLAN } from "@/lib/config";
 import { cn, fmt } from "@/lib/utils";
 import {
   closingLevers,
-  projectMonthEnd,
+  projectMonthEndScenarios,
   TARGET_GOAL,
-  HISTORIC_CR_TO_TRIAL_RATE,
+  type ActiveProjectionResult,
   type ClosingLever,
-  type ProjectionResult,
+  type ScenarioKind,
+  type ScenarioProjection,
 } from "@/lib/selectors";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
@@ -31,86 +34,94 @@ import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 /**
  * Card de proyección al 31-may + Realidad vs Objetivo Julián.
  *
- * Estructura:
- *  - Header con días restantes y badge de objetivo
- *  - Grid de proyecciones (spend, CR, CPL, trials)
- *  - Barra horizontal Realidad vs Objetivo con marker actual + proyección
- *  - Brecha explicada con multiplier
- *  - Palancas para cerrar la brecha (closingLevers)
+ * Cambios mayo 2026:
+ *  - Proyección basada SÓLO en campañas ACTIVE (isActive cid)
+ *  - Ritmo daily de los últimos 7 días (no del rango filtrado)
+ *  - 3 escenarios: Pesimista (−20%) · Base · Optimista (+30%)
+ *  - "Próximos N días" para responder cuántos CR esperar a corto plazo
  */
 export function ProjectionCard({ className }: { className?: string }) {
-  const { campaigns, daysElapsed } = useDashboard();
-  const proj = projectMonthEnd(campaigns, daysElapsed);
+  const { campaigns, daysElapsed, daily } = useDashboard();
+  const result = projectMonthEndScenarios(campaigns, daily, daysElapsed, {
+    shortHorizonDays: 5,
+    windowDays: 7,
+  });
   const levers = closingLevers();
+  const base = result.scenarios.base;
 
   return (
     <TextureCard className={cn("p-5", className)}>
-      <Header proj={proj} />
+      <Header result={result} />
 
-      {/* Grid de proyecciones */}
-      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+      {/* Próximos N días (responde "cuántos leads esperar en próximos 5 días") */}
+      <Reveal>
+        <NextDaysCallout result={result} />
+      </Reveal>
+
+      {/* Grid de escenarios */}
+      <ScenariosGrid result={result} />
+
+      {/* Métricas vivas del escenario base */}
+      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4 mb-5">
         <StaggerItem>
           <ProjMetric
             icon={<Calendar className="size-3.5" />}
-            k="Spend proyectado"
-            v={fmt.eur(proj.projectedSpend, { decimals: 0 })}
-            sub={`${fmt.eur(proj.dailyAvg, { decimals: 0 })}/día × ${PLAN.totalDays}d`}
-            help="Ritmo de gasto actual extrapolado al cierre del 31-may. Asume que el mix activo se mantiene."
+            k="Spend hoy"
+            v={fmt.eur(result.spendToDate, { decimals: 0 })}
+            sub={`solo ${result.activeCount} activas`}
+            help="Gasto acumulado SOLO de las campañas activas hoy. Las pausadas se contabilizan aparte en la card de Pacing."
           />
         </StaggerItem>
         <StaggerItem>
           <ProjMetric
             icon={<Users className="size-3.5" />}
-            k="CR proyectados"
-            v={<AnimatedNumber value={proj.projectedCR} format={fmt.int} />}
-            sub={`${fmt.int(proj.projectedIC)} IC esperados`}
-            help={
-              <>
-                <b>CR (CompleteRegistration)</b> proyectados a 31-may manteniendo la tasa actual.
-                <br />Solo cuentan C1 + C2 + C4 (las activas en CR).
-              </>
-            }
+            k="CR hoy"
+            v={<AnimatedNumber value={result.crToDate} format={fmt.int} />}
+            sub={`CPL live ${result.liveCPL !== null ? fmt.eur(result.liveCPL) : "—"}`}
+            help="CompleteRegistration acumulados de las activas hasta hoy. CPL live = spend hoy / CR hoy."
           />
         </StaggerItem>
         <StaggerItem>
           <ProjMetric
             icon={<Target className="size-3.5" />}
-            k="CPL final"
-            v={proj.projectedCPL !== null ? fmt.eur(proj.projectedCPL) : "—"}
+            k="CPL base proy."
+            v={base.projectedCPL !== null ? fmt.eur(base.projectedCPL) : "—"}
             sub={`obj. €${TARGET_GOAL.cpa.toFixed(2)}`}
             tone={
-              proj.projectedCPL !== null && proj.projectedCPL > TARGET_GOAL.cpa * 2
+              base.projectedCPL !== null && base.projectedCPL > TARGET_GOAL.cpa * 2
                 ? "danger"
-                : proj.projectedCPL !== null && proj.projectedCPL > TARGET_GOAL.cpa
+                : base.projectedCPL !== null && base.projectedCPL > TARGET_GOAL.cpa
                   ? "warning"
                   : "success"
             }
             help={
               <>
-                <b>CPL (Costo Por Lead)</b> proyectado = spend final ÷ CR final.
-                <br />Objetivo Julián: ≤ €{TARGET_GOAL.cpa.toFixed(2)}. Crítico {">"} €5.50.
+                <b>CPL final base</b> = spend final / CR final manteniendo el ritmo actual.
+                <br />Objetivo Julián: ≤ €{TARGET_GOAL.cpa.toFixed(2)}.
               </>
             }
           />
         </StaggerItem>
         <StaggerItem>
           <ProjMetric
-            icon={<Sparkles className="size-3.5" />}
-            k="Trials esperados"
-            v={
-              <span className="inline-flex items-center gap-1.5">
-                <AnimatedNumber value={proj.expectedTrials} format={fmt.int} />
-                <Badge variant="outline" className="text-[8px] font-normal normal-case tracking-normal">
-                  supuesto histórico
-                </Badge>
-              </span>
+            icon={<Clock className="size-3.5" />}
+            k="Ritmo 7d"
+            v={`${fmt.eur(result.recentDailyAvg, { decimals: 0 })}/d`}
+            sub={
+              result.usedFallback
+                ? "fallback config"
+                : `${result.windowDaysUsed}d reales`
             }
-            sub={`tasa ${(HISTORIC_CR_TO_TRIAL_RATE * 100).toFixed(1)}% CR→trial · handoff abril 2026`}
             help={
-              <>
-                Trials reales estimados aplicando la tasa observada CR→trial ({(HISTORIC_CR_TO_TRIAL_RATE * 100).toFixed(1)}%) tomada del handoff de abril 2026 (cohortes anteriores · NO medido en runtime).
-                <br />Orgánico convierte al 45% — palanca pendiente. Si se conecta PostHog y mide trials reales, preferir esos.
-              </>
+              result.usedFallback ? (
+                <>
+                  <b>Fallback</b> · sin daily breakdown disponible para las activas. Se usa el `daily` config + tasa CR/€ live.
+                </>
+              ) : (
+                <>
+                  <b>Ritmo daily</b> calculado sobre los últimos {result.windowDaysUsed} días de las {result.activeCount} campañas activas.
+                </>
+              )
             }
           />
         </StaggerItem>
@@ -118,12 +129,12 @@ export function ProjectionCard({ className }: { className?: string }) {
 
       {/* Barra horizontal Realidad vs Objetivo */}
       <Reveal delay={0.05}>
-        <RealityVsGoalBar proj={proj} />
+        <RealityVsGoalBar base={base} />
       </Reveal>
 
       {/* Brecha explicada */}
       <Reveal delay={0.1}>
-        <GapExplainer proj={proj} />
+        <GapExplainer base={base} />
       </Reveal>
 
       {/* Palancas */}
@@ -145,7 +156,7 @@ export function ProjectionCard({ className }: { className?: string }) {
   );
 }
 
-function Header({ proj }: { proj: ProjectionResult }) {
+function Header({ result }: { result: ActiveProjectionResult }) {
   return (
     <div className="flex items-start justify-between gap-3 mb-4">
       <div>
@@ -156,16 +167,178 @@ function Header({ proj }: { proj: ProjectionResult }) {
           </h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-1">
-          Día {proj.daysElapsed} / {proj.totalDays} ·{" "}
-          {proj.daysRemaining > 0
-            ? `${proj.daysRemaining} día${proj.daysRemaining !== 1 ? "s" : ""} restantes`
+          Día {result.daysElapsed} / {result.totalDays} ·{" "}
+          {result.daysRemaining > 0
+            ? `${result.daysRemaining} día${result.daysRemaining !== 1 ? "s" : ""} restantes`
             : "Plan cerrado"}{" "}
-          · Ritmo {fmt.eur(proj.dailyAvg, { decimals: 0 })}/día
+          · Sólo {result.activeCount} activas · Ritmo {fmt.eur(result.recentDailyAvg, { decimals: 0 })}/día
         </p>
       </div>
       <Badge variant="violet" className="shrink-0">
         objetivo {fmt.int(TARGET_GOAL.registrations)} CR
       </Badge>
+    </div>
+  );
+}
+
+/** Callout grande respondiendo "cuántos leads esperar en próximos N días". */
+function NextDaysCallout({ result }: { result: ActiveProjectionResult }) {
+  const base = result.scenarios.base;
+  const pess = result.scenarios.pessimistic;
+  const opt = result.scenarios.optimistic;
+  const horizon = result.shortHorizonDays;
+  return (
+    <div
+      className="rounded-lg border bg-background/40 p-4 mb-4"
+      style={{
+        borderLeftWidth: "3px",
+        borderLeftColor: "hsl(var(--brand-violet))",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <Sparkles className="size-4 text-[hsl(var(--brand-violet))]" aria-hidden />
+        <h4 className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+          Próximos {horizon} días · qué esperar
+        </h4>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <NextDaysScenario label="Pesimista" scenario={pess} tone="warning" />
+        <NextDaysScenario label="Base" scenario={base} tone="violet" highlight />
+        <NextDaysScenario label="Optimista" scenario={opt} tone="success" />
+      </div>
+      <p className="text-[10.5px] text-muted-foreground/80 mt-2.5 leading-relaxed">
+        Calculado sobre el ritmo daily de las {result.activeCount} campañas activas en los últimos{" "}
+        {result.windowDaysUsed > 0 ? `${result.windowDaysUsed} días` : "días config"}.
+      </p>
+    </div>
+  );
+}
+
+function NextDaysScenario({
+  label,
+  scenario,
+  tone,
+  highlight,
+}: {
+  label: string;
+  scenario: ScenarioProjection;
+  tone: "warning" | "violet" | "success";
+  highlight?: boolean;
+}) {
+  const color =
+    tone === "warning"
+      ? "var(--warning)"
+      : tone === "success"
+        ? "var(--success)"
+        : "var(--brand-violet)";
+  return (
+    <div
+      className={cn(
+        "rounded-md border px-3 py-2",
+        highlight && "shadow-[0_0_0_1px_hsl(var(--brand-violet)/0.4)]",
+      )}
+      style={{
+        background: `hsl(${color} / 0.08)`,
+        borderColor: `hsl(${color} / 0.35)`,
+      }}
+    >
+      <div
+        className="text-[9px] uppercase tracking-[0.1em] font-bold mb-1"
+        style={{ color: `hsl(${color})` }}
+      >
+        {label}
+      </div>
+      <div className="font-mono font-bold tabular text-[18px] leading-none text-foreground">
+        <AnimatedNumber value={scenario.nextDaysCR} format={fmt.int} /> CR
+      </div>
+      <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+        {fmt.eur(scenario.nextDaysSpend, { decimals: 0 })} esperados
+      </div>
+    </div>
+  );
+}
+
+/** Grid de los 3 escenarios a cierre. */
+function ScenariosGrid({ result }: { result: ActiveProjectionResult }) {
+  const order: ScenarioKind[] = ["pessimistic", "base", "optimistic"];
+  return (
+    <div>
+      <h4 className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-2 flex items-center gap-2">
+        Escenarios al cierre
+        <ExplainedMetric
+          explanation={
+            <>
+              <b>Tres escenarios</b> al 31-may según cómo se mueve el daily:
+              <ul className="mt-1 ml-3 list-disc">
+                <li><b>Pesimista</b> · daily baja 20% el resto del mes</li>
+                <li><b>Base</b> · sigue al ritmo actual</li>
+                <li><b>Optimista</b> · subimos daily 30% en las que rentan</li>
+              </ul>
+              <br />Calculado sobre las {result.activeCount} campañas activas + sus últimos 7d de daily real.
+            </>
+          }
+        >
+          <span className="text-[10px] text-muted-foreground/60">cómo se calcula</span>
+        </ExplainedMetric>
+      </h4>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        {order.map((k) => (
+          <ScenarioCard key={k} scenario={result.scenarios[k]} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScenarioCard({ scenario }: { scenario: ScenarioProjection }) {
+  const color =
+    scenario.kind === "pessimistic"
+      ? "var(--warning)"
+      : scenario.kind === "optimistic"
+        ? "var(--success)"
+        : "var(--brand-violet)";
+  const Arrow = scenario.kind === "pessimistic" ? TrendingDown : scenario.kind === "optimistic" ? TrendingUp : Target;
+  const goalPct = Math.min(100, Math.max(0, scenario.goalAchievementPct));
+  return (
+    <div
+      className="rounded-lg border bg-background/40 p-3"
+      style={{
+        borderLeftWidth: "3px",
+        borderLeftColor: `hsl(${color})`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Arrow className="size-3.5" style={{ color: `hsl(${color})` }} aria-hidden />
+        <span
+          className="text-[10px] uppercase tracking-[0.1em] font-bold"
+          style={{ color: `hsl(${color})` }}
+        >
+          {scenario.label}
+        </span>
+        <span className="text-[9px] text-muted-foreground ml-auto font-mono">
+          ×{scenario.multiplier.toFixed(2)}
+        </span>
+      </div>
+      <div className="text-[15px] font-mono font-bold tabular leading-none mt-1 mb-2">
+        <AnimatedNumber value={scenario.projectedCR} format={fmt.int} /> CR
+      </div>
+      <div className="text-[10px] text-muted-foreground mb-2">
+        Spend final {fmt.eur(scenario.projectedSpend, { decimals: 0 })} · CPL{" "}
+        {scenario.projectedCPL !== null ? fmt.eur(scenario.projectedCPL) : "—"}
+      </div>
+      <div className="h-1 rounded-full bg-border/60 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          whileInView={{ width: `${goalPct}%` }}
+          viewport={{ once: true }}
+          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+          className="h-full"
+          style={{ background: `hsl(${color})` }}
+        />
+      </div>
+      <div className="text-[10px] text-muted-foreground/70 mt-1 font-mono">
+        {goalPct.toFixed(0)}% del objetivo
+      </div>
     </div>
   );
 }
@@ -212,14 +385,8 @@ function ProjMetric({
   );
 }
 
-/**
- * Barra horizontal "Realidad vs Objetivo":
- * - El track entero representa el objetivo Julián (1.350 CR).
- * - El fill verde representa los CR proyectados al 31-may.
- * - Marker vertical en la posición % cumplimiento.
- */
-function RealityVsGoalBar({ proj }: { proj: ProjectionResult }) {
-  const pct = Math.min(100, Math.max(0, proj.goalAchievementPct));
+function RealityVsGoalBar({ base }: { base: ScenarioProjection }) {
+  const pct = Math.min(100, Math.max(0, base.goalAchievementPct));
   const tone =
     pct >= 80
       ? "var(--success)"
@@ -231,14 +398,13 @@ function RealityVsGoalBar({ proj }: { proj: ProjectionResult }) {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <h4 className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-            Realidad vs Objetivo Julián
+            Realidad vs Objetivo Julián (escenario base)
           </h4>
           <ExplainedMetric
             explanation={
               <>
-                <b>Brecha</b> = diferencia entre lo proyectado al cierre y el objetivo formal
-                de 1.350 CR · €2.20 CPA firmado en el plan mayo.
-                <br />La barra muestra qué % del objetivo se llegará a tocar manteniendo el ritmo.
+                <b>Brecha</b> = diferencia entre lo proyectado al cierre (escenario base) y el objetivo formal de 1.350 CR · €2.20 CPA firmado.
+                <br />La barra muestra qué % del objetivo se llegará a tocar manteniendo el ritmo actual.
               </>
             }
           >
@@ -250,7 +416,6 @@ function RealityVsGoalBar({ proj }: { proj: ProjectionResult }) {
         </span>
       </div>
 
-      {/* Track con marker proyección + flag objetivo */}
       <div className="relative h-3 rounded-full bg-border/60 overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
@@ -260,7 +425,6 @@ function RealityVsGoalBar({ proj }: { proj: ProjectionResult }) {
           className="absolute inset-y-0 left-0"
           style={{ background: `hsl(${tone})` }}
         />
-        {/* Marker del actual (sólo si > 0) */}
         {pct > 1 && (
           <motion.div
             initial={{ opacity: 0, x: -4 }}
@@ -275,7 +439,8 @@ function RealityVsGoalBar({ proj }: { proj: ProjectionResult }) {
 
       <div className="flex items-center justify-between mt-2 text-[10px]">
         <span className="text-muted-foreground">
-          Proyección: <span className="font-mono font-bold text-foreground">{fmt.int(proj.projectedCR)} CR</span>
+          Proyección base:{" "}
+          <span className="font-mono font-bold text-foreground">{fmt.int(base.projectedCR)} CR</span>
         </span>
         <span className="text-muted-foreground inline-flex items-center gap-1">
           <Flag className="size-2.5" aria-hidden />
@@ -289,17 +454,18 @@ function RealityVsGoalBar({ proj }: { proj: ProjectionResult }) {
   );
 }
 
-function GapExplainer({ proj }: { proj: ProjectionResult }) {
-  const gap = proj.gapMultiplier;
-  if (gap === null) {
+function GapExplainer({ base }: { base: ScenarioProjection }) {
+  if (base.projectedCPL === null) {
     return (
       <div className="mt-4 rounded-lg border border-border bg-background/40 p-3 text-[11px] text-muted-foreground">
-        Sin datos suficientes para calcular brecha CPA.
+        Sin datos suficientes para calcular brecha CPA · esperar a que las activas registren CR.
       </div>
     );
   }
+  const gap = base.projectedCPL / TARGET_GOAL.cpa;
   const over = gap > 1;
   const color = over ? "destructive" : "success";
+  const registrationsGap = TARGET_GOAL.registrations - base.projectedCR;
   return (
     <div
       className="mt-4 rounded-lg border p-3"
@@ -325,7 +491,7 @@ function GapExplainer({ proj }: { proj: ProjectionResult }) {
             </span>{" "}
             {over ? "sobre" : "bajo"} el target CPA. Faltan{" "}
             <span className="font-mono font-bold tabular text-foreground">
-              {fmt.int(Math.max(0, proj.registrationsGap))} CR
+              {fmt.int(Math.max(0, registrationsGap))} CR
             </span>{" "}
             para tocar el objetivo de {fmt.int(TARGET_GOAL.registrations)} firmado por Julián.
           </p>

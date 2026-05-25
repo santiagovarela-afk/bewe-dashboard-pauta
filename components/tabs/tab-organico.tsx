@@ -43,6 +43,9 @@ import { VideoAnalytics } from "@/components/organico/video-analytics";
 import { TopBottomAnalysis } from "@/components/organico/top-bottom-analysis";
 import { RecommendationsAI } from "@/components/organico/recommendations-ai";
 import { TrendsPymes } from "@/components/organico/trends-pymes";
+import { WhyItWorkedModal } from "@/components/organico/why-it-worked-modal";
+import { JunioOrganicoPlan } from "@/components/organico/junio-plan";
+import { PeriodToggle } from "@/components/shared/period-toggle";
 import { Insights24h } from "@/components/parrilla/insights-24h";
 import { RULES_2026 } from "@/components/parrilla/best-time";
 import { ExplainedMetric } from "@/components/shared/explained-metric";
@@ -110,10 +113,16 @@ function normalizeFB(p: FBPost): NormalizedPost {
   };
 }
 
+type PlanView = "actual" | "junio";
+
 export function TabOrganico() {
   const [tab, setTab] = React.useState<"ig" | "fb">("ig");
   const [sortKey, setSortKey] = React.useState<SortKey>("date");
   const [selected, setSelected] = React.useState<NormalizedPost | null>(null);
+  /** Post seleccionado para modal "Por qué funcionó" (separado del drawer) */
+  const [whyPost, setWhyPost] = React.useState<NormalizedPost | null>(null);
+  const [planView, setPlanView] = React.useState<PlanView>("actual");
+  const { setTab: setDashTab } = useDashboard();
 
   // Date range global del topbar · filtra TODO el tab Orgánico
   const { dateRange } = useDashboard();
@@ -198,6 +207,32 @@ export function TabOrganico() {
 
   return (
     <div className="space-y-6 max-w-[1500px]">
+      {/* Toggle vista plan · estado actual vs plan junio */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="min-w-0">
+          <h1 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Contenido creativo · orgánico
+          </h1>
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            {planView === "actual"
+              ? "Estado actual · posts IG/FB del período + análisis top/bottom"
+              : "Plan editorial futuro · propuesta basada en aprendizajes mayo"}
+          </p>
+        </div>
+        <PeriodToggle
+          options={[
+            { id: "actual", label: "Estado actual", hint: "mayo" },
+            { id: "junio", label: "Plan junio", hint: "propuesta" },
+          ]}
+          value={planView}
+          onChange={(v) => setPlanView(v as PlanView)}
+        />
+      </div>
+
+      {planView === "junio" && <JunioOrganicoPlan />}
+
+      {planView === "actual" && (
+        <>
       <OnboardingTip
         storageKey="organico"
         steps={[
@@ -483,13 +518,13 @@ export function TabOrganico() {
         </TextureCard>
       )}
 
-      {/* TOP 3 + BOTTOM 3 con análisis cualitativo */}
+      {/* TOP 3 + BOTTOM 3 con análisis cualitativo · click top post → modal "Por qué funcionó" */}
       {normalized.length > 0 && (
         <TopBottomAnalysis
           posts={normalized as unknown as AnalyticsPost[]}
           onPostClick={(ap) => {
             const found = normalized.find((n) => n.id === ap.id);
-            if (found) setSelected(found);
+            if (found) setWhyPost(found);
           }}
         />
       )}
@@ -608,6 +643,21 @@ export function TabOrganico() {
 
       {/* Drawer */}
       <PostDrawer post={selected} onClose={() => setSelected(null)} />
+        </>
+      )}
+
+      {/* Modal "Por qué funcionó" · activo sólo cuando hay whyPost */}
+      <WhyItWorkedModal
+        open={!!whyPost}
+        onClose={() => setWhyPost(null)}
+        post={whyPost as unknown as AnalyticsPost | null}
+        allPosts={normalized as unknown as AnalyticsPost[]}
+        avgEngagement={kpis.avgEng}
+        onCreateSimilar={() => {
+          // Lleva al usuario al composer · tab Parrilla
+          setDashTab("parrilla");
+        }}
+      />
     </div>
   );
 }

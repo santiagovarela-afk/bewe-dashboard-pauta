@@ -1,7 +1,15 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { Trophy, TrendingDown, Heart, MessageCircle, ImageOff } from "lucide-react";
+import {
+  Trophy,
+  TrendingDown,
+  Heart,
+  MessageCircle,
+  ImageOff,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react";
 import { SpotlightCard } from "@/components/fx/spotlight-card";
 import { Badge } from "@/components/ui/badge";
 import { topBottom, whyItWorked, whyItFailed, type AnalyticsPost } from "@/lib/organic-analytics";
@@ -45,7 +53,7 @@ export function TopBottomAnalysis({ posts, onPostClick }: TopBottomAnalysisProps
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.07, duration: 0.4 }}
-              className="text-left"
+              className="text-left group"
             >
               <SpotlightCard
                 className="overflow-hidden h-full hover:border-[hsl(var(--brand-ember)/0.5)]"
@@ -84,6 +92,12 @@ export function TopBottomAnalysis({ posts, onPostClick }: TopBottomAnalysisProps
                     </div>
                     <div className="text-[9px] text-[hsl(var(--brand-lime))] font-medium leading-snug mt-auto pt-1 border-t border-border/40">
                       ✓ {whyItWorked(p, avgEngagement)}
+                    </div>
+                    {/* CTA explícita · abre modal con análisis profundo */}
+                    <div className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-bold text-[hsl(var(--brand-violet))] group-hover:translate-x-0.5 transition-transform self-start">
+                      <Sparkles className="size-2.5" />
+                      Por qué funcionó
+                      <ArrowRight className="size-2.5" />
                     </div>
                   </div>
                 </div>

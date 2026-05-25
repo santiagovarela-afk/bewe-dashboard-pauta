@@ -1,10 +1,12 @@
 "use client";
 import * as React from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   AlertOctagon,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  HelpCircle,
   Pause,
   Sparkles,
   TrendingUp,
@@ -14,7 +16,20 @@ import {
 import { useDashboard } from "@/lib/store";
 import { PLAN } from "@/lib/config";
 import { fmt, cn, cptTone, daysUntil, CPT_THRESHOLDS } from "@/lib/utils";
-import { computeMetrics, planBStatus } from "@/lib/selectors";
+import {
+  computeMetrics,
+  computePacing,
+  evaluateLiveRules,
+  planBStatus,
+  type LiveRule,
+  type PacingState,
+} from "@/lib/selectors";
+import {
+  isActive,
+  isPaused,
+  getPausedReason,
+  shouldShowAsActive,
+} from "@/lib/campaign-metadata";
 import { SectionHeader } from "@/components/shared/section-header";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Gauge } from "@/components/fx/gauge";
@@ -26,42 +41,127 @@ import { CampaignDeepAnalysis } from "@/components/estrategia/campaign-deep-anal
 import { ProjectionCard } from "@/components/estrategia/projection-card";
 import { CampaignExpandableCard } from "@/components/estrategia/campaign-expandable";
 import { CountryPerformance } from "@/components/estrategia/country-performance";
-import type { DailyRow } from "@/lib/types";
+import { JunioPlan } from "@/components/estrategia/junio-plan";
+import { PeriodToggle } from "@/components/shared/period-toggle";
+import type { Campaign, DailyRow } from "@/lib/types";
 
 type ProjBase = "3d" | "7d" | "all";
 
+type PlanView = "actual" | "junio";
+
 export function TabEstrategia() {
-  const { campaigns, daysElapsed, daily, hasDailyBreakdown } = useDashboard();
+  const { campaigns, adsets, daysElapsed, daily, hasDailyBreakdown } = useDashboard();
   const m = computeMetrics(campaigns);
   const [projBase, setProjBase] = React.useState<ProjBase>("3d");
+  const [planView, setPlanView] = React.useState<PlanView>("actual");
 
+  return (
+    <div className="space-y-7 max-w-[1500px]">
+      {/* Toggle vista plan · actual mayo vs plan junio */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="min-w-0">
+          <h1 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Estrategia
+          </h1>
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            {planView === "actual"
+              ? "Estado del plan actual · semáforo + reglas Julián + análisis por campaña"
+              : "Plan futuro · propuesta basada en aprendizajes mayo"}
+          </p>
+        </div>
+        <PeriodToggle
+          options={[
+            { id: "actual", label: "Estrategia actual", hint: "mayo" },
+            { id: "junio", label: "Plan junio", hint: "propuesta" },
+          ]}
+          value={planView}
+          onChange={(v) => setPlanView(v as PlanView)}
+        />
+      </div>
+
+      {planView === "junio" ? (
+        <JunioPlan />
+      ) : (
+        <ActualStrategy
+          m={m}
+          campaigns={campaigns}
+          adsets={adsets}
+          daily={daily}
+          daysElapsed={daysElapsed}
+          projBase={projBase}
+          setProjBase={setProjBase}
+          hasDailyBreakdown={hasDailyBreakdown}
+        />
+      )}
+    </div>
+  );
+}
+
+interface ActualStrategyProps {
+  m: ReturnType<typeof computeMetrics>;
+  campaigns: ReturnType<typeof useDashboard>["campaigns"];
+  adsets: ReturnType<typeof useDashboard>["adsets"];
+  daily: DailyRow[];
+  daysElapsed: number;
+  projBase: ProjBase;
+  setProjBase: (b: ProjBase) => void;
+  hasDailyBreakdown: boolean;
+}
+
+function ActualStrategy({
+  m,
+  campaigns,
+  adsets,
+  daily,
+  daysElapsed,
+  projBase,
+  setProjBase,
+  hasDailyBreakdown,
+}: ActualStrategyProps) {
   const cptCriticalPct = m.cptReg
     ? Math.min(100, (m.cptReg / PLAN.cpt.critical) * 100)
     : 0;
   const budgetPct = Math.min(100, m.budgetPct);
-
-  // ── Pacing actual (ritmo del rango entero) ────────────────────────
   const dailyAvg = daysElapsed > 0 ? m.spend / daysElapsed : 0;
-
-  // ── Ritmo según ventana elegida (últimos 3d / 7d / total) ─────────
-  const recentDailyAvg = React.useMemo(
-    () => computeRecentDailyAvg(daily, projBase, m.spend, daysElapsed),
-    [daily, projBase, m.spend, daysElapsed],
+  const recentDailyAvg = computeRecentDailyAvg(
+    daily,
+    projBase,
+    m.spend,
+    daysElapsed,
   );
   const proj = recentDailyAvg * PLAN.totalDays;
-
   const dRem = PLAN.totalDays - daysElapsed;
   const reqDaily = dRem > 0 ? m.remaining / dRem : 0;
+  const showCptIc = m.cptIco !== null && m.totalConvIC >= 5;
 
-  // ¿Tenemos CPT IC con datos suficientes? Si no, no mostramos la card
-  const showCptIc =
-    m.cptIco !== null && m.totalConvIC >= 5; // pocos eventos · no mostrar
+  // ── Pacing real vs esperado (días corridos del plan) ──────────────────
+  const pacing = computePacing(campaigns, daysElapsed);
+
+  // ── Partición activas / pausadas por lifecycle ────────────────────────
+  const activeCampaigns = React.useMemo(
+    () =>
+      campaigns.filter((c) =>
+        shouldShowAsActive({ cid: c.cid, spend: c.spend, status: c.status }),
+      ),
+    [campaigns],
+  );
+  const pausedCampaigns = React.useMemo(
+    () =>
+      campaigns.filter((c) => isPaused(c.cid)).sort((a, b) => b.spend - a.spend),
+    [campaigns],
+  );
+
+  // ── Reglas vivas evaluadas contra data viva ───────────────────────────
+  const liveRules = React.useMemo(
+    () => evaluateLiveRules(campaigns, adsets),
+    [campaigns, adsets],
+  );
 
   return (
-    <div className="space-y-7 max-w-[1500px]">
+    <div className="space-y-7">
       <SectionHeader
         title="Semáforo de rendimiento"
-        sub={`Día ${daysElapsed} / ${PLAN.totalDays} · Snapshot vivo`}
+        sub={`Día ${daysElapsed} / ${PLAN.totalDays} · ${activeCampaigns.length} activas · ${pausedCampaigns.length} pausadas`}
       />
 
       {/* Gauges semáforo */}
@@ -150,45 +250,17 @@ export function TabEstrategia() {
         </Reveal>
       </div>
 
-      {/* Pacing + Proyección con selector base */}
+      {/* Explainer collapsable de cómo se calculan los semáforos */}
+      <SemaphoreExplainer />
+
+      {/* Pacing real (vs días corridos) + Proyección quick view */}
       <div className="grid lg:grid-cols-2 gap-4">
-        <TextureCard className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-2">
-              <Wallet className="size-3.5" /> Pacing presupuesto
-            </h3>
-            <Badge variant={proj > PLAN.budget ? "danger" : "success"}>
-              proj. {fmt.eur(proj, { decimals: 0 })}
-            </Badge>
-          </div>
-          <div className="space-y-3">
-            <Row k="Gastado" v={fmt.eur(m.spend, { decimals: 0 })} sub={`${Math.round(m.budgetPct)}%`} />
-            <Row k="Ritmo medio (rango)" v={`${fmt.eur(dailyAvg, { decimals: 0 })}/día`} />
-            <Row k="Ritmo reciente" v={`${fmt.eur(recentDailyAvg, { decimals: 0 })}/día`} />
-            <Row k="Necesario ahora" v={`${fmt.eur(reqDaily, { decimals: 0 })}/día`} tone={reqDaily > dailyAvg ? "danger" : "success"} />
-            <Row k={`Proyección al 31 may`} v={fmt.eur(proj, { decimals: 0 })} tone={proj > PLAN.budget ? "danger" : "success"} />
-          </div>
-          <div className="mt-4 h-1.5 rounded-full bg-border/60 overflow-hidden">
-            <motion.div
-              className="h-full"
-              style={{
-                background: budgetPct > 100
-                  ? "hsl(var(--destructive))"
-                  : budgetPct > 60
-                    ? "hsl(var(--brand-violet))"
-                    : "hsl(var(--success))",
-              }}
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min(budgetPct, 100)}%` }}
-              transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
-            />
-          </div>
-        </TextureCard>
+        <PacingCard pacing={pacing} />
 
         <TextureCard className="p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="size-3.5" /> Proyección al 31 mayo
+              <TrendingUp className="size-3.5" /> Proyección quick view
             </h3>
             <Badge variant="violet">objetivo 1.350 CR</Badge>
           </div>
@@ -196,19 +268,19 @@ export function TabEstrategia() {
           {/* Selector de base proyección */}
           <div className="flex items-center gap-1.5 mb-3 flex-wrap">
             <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground mr-1">
-              base:
+              base ritmo:
             </span>
             <ProjBaseToggle current={projBase} onChange={setProjBase} hasDaily={hasDailyBreakdown} />
             <ExplainedMetric
               explanation={
                 <>
-                  <b>Base de cálculo</b> de la proyección:
+                  <b>Base de cálculo</b> de la proyección rápida:
                   <ul className="mt-1 ml-3 list-disc">
                     <li><b>3d</b> · ritmo de los últimos 3 días · sensible a cambios recientes</li>
                     <li><b>7d</b> · ritmo de la última semana · más estable</li>
                     <li><b>Total</b> · promedio del rango entero · referencia histórica</li>
                   </ul>
-                  <br />Si no hay breakdown diario, se usa el ritmo total automáticamente.
+                  <br />Para la proyección oficial con 3 escenarios (pesimista/base/optimista) basados en campañas activas, ver bloque "Proyección al cierre" abajo.
                 </>
               }
             >
@@ -216,8 +288,7 @@ export function TabEstrategia() {
             </ExplainedMetric>
           </div>
           <p className="text-[10.5px] text-muted-foreground/80 mb-3 leading-relaxed">
-            Calculada con ritmo {projBase === "3d" ? "diario de los últimos 3 días" : projBase === "7d" ? "diario de los últimos 7 días" : "promedio del rango activo"}
-            {" "}× {PLAN.totalDays} días totales del plan.
+            Cálculo rápido: ritmo {projBase === "3d" ? "últimos 3 días" : projBase === "7d" ? "últimos 7 días" : "promedio del rango"} × {PLAN.totalDays} días. Incluye TODAS las campañas del rango activo.
           </p>
           <div className="space-y-3">
             <Row
@@ -240,33 +311,44 @@ export function TabEstrategia() {
             />
             <Row k="Gasto proyectado" v={fmt.eur(proj, { decimals: 0 })} />
             <Row k="CPT CR proyectado" v={m.cptReg ? fmt.eur(m.cptReg) : "—"} tone={cptTone(m.cptReg) as "success" | "warning" | "danger" | "default"} />
-            <Row k="Día 14 (26 may)" v={<span className="text-[11px] text-muted-foreground">eval. C7 + contingencia</span>} />
+            <Row k="Ritmo medio rango" v={`${fmt.eur(dailyAvg, { decimals: 0 })}/día`} />
+            <Row k="Necesario ahora" v={`${fmt.eur(reqDaily, { decimals: 0 })}/día`} tone={reqDaily > dailyAvg * 1.2 ? "warning" : "default"} />
+            <Row k="Budget pct" v={`${Math.round(budgetPct)}%`} />
           </div>
         </TextureCard>
       </div>
 
-      {/* Reglas de Julián */}
+      {/* Reglas de Julián · vivas + narrativas */}
       <section>
         <SectionHeader title="Reglas Julián — estado actual" sub={<NextDecisionSub daysElapsed={daysElapsed} />} />
-        <RulesGrid />
+        <LiveRulesGrid rules={liveRules} />
+        <div className="mt-6">
+          <h4 className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-2">
+            Reglas narrativas del plan · contexto operativo
+          </h4>
+          <RulesGrid />
+        </div>
       </section>
 
-      {/* Análisis por campaña · DESGLOSABLE con nombres reales */}
+      {/* Análisis por campaña · SOLO ACTIVAS */}
       <section>
         <SectionHeader
-          title="Análisis por campaña"
-          sub="Click en cada card para desglose diario · justificación del status con datos"
+          title="Análisis por campaña activa"
+          sub={`${activeCampaigns.length} campaña${activeCampaigns.length !== 1 ? "s" : ""} en plan · click para desglose diario`}
         />
         <StaggerGroup className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {campaigns.map((c) => (
+          {activeCampaigns.map((c) => (
             <StaggerItem key={c.cid}>
               <CampaignExpandableCard campaign={c} allCampaigns={campaigns} />
             </StaggerItem>
           ))}
         </StaggerGroup>
+        {pausedCampaigns.length > 0 && (
+          <PausedHistorySection pausedCampaigns={pausedCampaigns} />
+        )}
       </section>
 
-      {/* NUEVA · Performance por país */}
+      {/* Performance por país (Meta API real) */}
       <section>
         <SectionHeader
           title="Performance por país"
@@ -277,14 +359,14 @@ export function TabEstrategia() {
         </Reveal>
       </section>
 
-      {/* Análisis profundo por campaña */}
+      {/* Análisis profundo · SOLO ACTIVAS */}
       <section>
         <SectionHeader
-          title="Análisis profundo por campaña"
+          title="Análisis profundo por campaña activa"
           sub="Hipótesis original · estado actual · aprendizajes operativos del handoff 23-may"
         />
         <StaggerGroup className="grid lg:grid-cols-2 gap-4">
-          {campaigns.map((c) => (
+          {activeCampaigns.map((c) => (
             <StaggerItem key={c.cid}>
               <CampaignDeepAnalysis campaign={c} />
             </StaggerItem>
@@ -519,11 +601,11 @@ function RulesGrid() {
       planBStamp = "sin datos";
   }
 
-  // ── Pausa C3/C5/C6 · spend dinámico desde data viva ───────────────
+  // ── Pausa C3/C5/C6 · lifecycle metadata como source of truth ──────
   const c3 = campaigns.find((c) => c.code === "C3");
   const c5 = campaigns.find((c) => c.code === "C5");
   const c6 = campaigns.find((c) => c.code === "C6");
-  const allICPaused = [c3, c5, c6].every((c) => !c || c.status === "PAUSED");
+  const allICPaused = [c3, c5, c6].every((c) => !c || isPaused(c.cid));
   const icPausedSpend = (c5?.spend ?? 0) + (c6?.spend ?? 0);
   const pauseDesc = allICPaused
     ? `Pausadas 3 campañas IC tras validar tasa IC→signup <1%. €${icPausedSpend.toFixed(
@@ -541,8 +623,10 @@ function RulesGrid() {
         )}×. Notas del equipo 23-may: C1 escalada CBO, A4.1 LOK escalado ABO. Vigilar fatigue.`
       : "Notas del equipo 23-may: C1 paraguas escalada CBO + A4.1 LOK Belleza escalado ABO.";
 
-  // ── Anti-fatigue · listado dinámico desde data viva ─────────────────
-  const fatigueCampaigns = campaigns.filter((c) => c.freq > 1.9 && c.status !== "PAUSED");
+  // ── Anti-fatigue · sólo sobre campañas activas según lifecycle ─────
+  const fatigueCampaigns = campaigns.filter(
+    (c) => c.freq > 1.9 && isActive(c.cid),
+  );
   const fatigueDesc =
     fatigueCampaigns.length > 0
       ? `Con freq >1.9: ${fatigueCampaigns
@@ -725,4 +809,456 @@ function ruleStateMeta(state: RuleState): {
     default:
       return { color: "var(--info)", glyph: "•", label: "activa", badge: "info" };
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  SemaphoreExplainer · panel collapsable explicando los umbrales CPR
+ *  Responde al feedback "agregar bloque explicativo abajo"
+ * ─────────────────────────────────────────────────────────────────────── */
+
+function SemaphoreExplainer() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <TextureCard className="p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between text-left group"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <HelpCircle className="size-4 text-[hsl(var(--brand-cyan))] shrink-0" aria-hidden />
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-foreground">
+            Entendiendo los semáforos
+          </span>
+          <span className="text-[10.5px] text-muted-foreground truncate">
+            qué se mide · cómo interpretarlos · qué hacer en cada color
+          </span>
+        </div>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform shrink-0",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="explainer"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="pt-4 space-y-3">
+              <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+                Durante el período seleccionado medimos el <b>CPR</b> (Costo Por Registro) de cada campaña activa y le asignamos un color según los umbrales firmados con Julián:
+              </p>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                <ThresholdRow
+                  color="var(--success)"
+                  label="Verde · cumple"
+                  cpr={`< €${CPT_THRESHOLDS.target.toFixed(2)}`}
+                  body="Convierte por debajo del costo objetivo. Subir budget si el winner aguanta."
+                />
+                <ThresholdRow
+                  color="var(--warning)"
+                  label="Amarillo · vigilar"
+                  cpr={`€${CPT_THRESHOLDS.target.toFixed(2)} – €${CPT_THRESHOLDS.warn.toFixed(2)}`}
+                  body="Aceptable pero monitoreado. Revisar creativos antes de escalar más."
+                />
+                <ThresholdRow
+                  color="var(--brand-ember)"
+                  label="Naranja · alto"
+                  cpr={`€${CPT_THRESHOLDS.warn.toFixed(2)} – €${CPT_THRESHOLDS.critical.toFixed(2)}`}
+                  body="Costo subiendo · considerar pausar adsets perdedores o reasignar."
+                />
+                <ThresholdRow
+                  color="var(--destructive)"
+                  label="Rojo · crítico"
+                  cpr={`> €${CPT_THRESHOLDS.critical.toFixed(2)}`}
+                  body="Costo insostenible · pausar campaña o switch a otra optimización."
+                />
+              </div>
+              <p className="text-[10.5px] text-muted-foreground/80 leading-relaxed">
+                El semáforo agregado de arriba mide el CPR promedio ponderado sobre todas las campañas del rango. Para ver el color por campaña, abrí la card "Análisis por campaña activa".
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </TextureCard>
+  );
+}
+
+function ThresholdRow({
+  color,
+  label,
+  cpr,
+  body,
+}: {
+  color: string;
+  label: string;
+  cpr: string;
+  body: string;
+}) {
+  return (
+    <div
+      className="rounded-lg border bg-background/40 p-3"
+      style={{
+        borderLeftWidth: "3px",
+        borderLeftColor: `hsl(${color})`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className="size-3 rounded-full"
+          style={{ background: `hsl(${color})` }}
+          aria-hidden
+        />
+        <span
+          className="text-[10px] uppercase tracking-[0.1em] font-bold"
+          style={{ color: `hsl(${color})` }}
+        >
+          {label}
+        </span>
+      </div>
+      <div className="font-mono font-bold text-[12px] mb-1 text-foreground">{cpr}</div>
+      <p className="text-[10.5px] text-muted-foreground leading-relaxed">{body}</p>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  PacingCard · gasto real vs ritmo ideal por días corridos del plan
+ *  Fix al feedback "Pacing presupuesto · a veces muestra valores raros"
+ * ─────────────────────────────────────────────────────────────────────── */
+
+function PacingCard({ pacing }: { pacing: PacingState }) {
+  const realPctClamped = Math.min(100, pacing.realPct);
+  const expectedPctClamped = Math.min(100, pacing.expectedPct);
+  const isOver = pacing.status === "over";
+  const isUnder = pacing.status === "under";
+  const statusColor = isOver
+    ? "var(--destructive)"
+    : isUnder
+      ? "var(--warning)"
+      : "var(--success)";
+  const statusLabel = isOver
+    ? "Sobre pacing"
+    : isUnder
+      ? "Bajo pacing"
+      : "En ritmo";
+
+  return (
+    <TextureCard className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-2">
+          <Wallet className="size-3.5" /> Pacing presupuesto
+        </h3>
+        <Badge
+          variant={isOver ? "danger" : isUnder ? "warning" : "success"}
+        >
+          {statusLabel} · {pacing.deltaPct > 0 ? "+" : ""}
+          {pacing.deltaPct.toFixed(1)}pp
+        </Badge>
+      </div>
+
+      {/* Barra real */}
+      <div className="space-y-1 mb-3">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>Gasto real</span>
+          <span className="font-mono tabular text-foreground">
+            {fmt.pct(pacing.realPct, 1)}
+          </span>
+        </div>
+        <div className="h-2 rounded-full bg-border/60 overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${realPctClamped}%` }}
+            transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
+            className="h-full"
+            style={{ background: `hsl(${statusColor})` }}
+          />
+        </div>
+      </div>
+
+      {/* Barra esperada */}
+      <div className="space-y-1 mb-4">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>Esperado (días corridos)</span>
+          <span className="font-mono tabular text-foreground">
+            {fmt.pct(pacing.expectedPct, 1)}
+          </span>
+        </div>
+        <div className="h-2 rounded-full bg-border/60 overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${expectedPctClamped}%` }}
+            transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+            className="h-full bg-muted-foreground/60"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Row
+          k="Gastado"
+          v={fmt.eur(pacing.spendTotal, { decimals: 0 })}
+          sub={`de €${pacing.budget.toLocaleString("es")}`}
+        />
+        <Row
+          k="Ritmo medio hasta hoy"
+          v={`${fmt.eur(pacing.dailyAvg, { decimals: 0 })}/día`}
+        />
+        <Row
+          k="Necesario ahora"
+          v={`${fmt.eur(pacing.requiredDailyToFinish, { decimals: 0 })}/día`}
+          tone={
+            pacing.requiredDailyToFinish > pacing.dailyAvg * 1.2
+              ? "warning"
+              : "default"
+          }
+        />
+        <Row
+          k={`Día ${pacing.daysElapsed} / ${pacing.totalDays}`}
+          v={`${Math.max(0, pacing.totalDays - pacing.daysElapsed)} día${
+            pacing.totalDays - pacing.daysElapsed !== 1 ? "s" : ""
+          } restantes`}
+        />
+      </div>
+    </TextureCard>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  LiveRulesGrid · reglas evaluadas contra data viva con ✓/✗
+ *  Responde al feedback "Reglas Julián · mostrar estado actual de cada regla"
+ * ─────────────────────────────────────────────────────────────────────── */
+
+function LiveRulesGrid({ rules }: { rules: LiveRule[] }) {
+  const passing = rules.filter((r) => r.category === "active-pass");
+  const failing = rules.filter((r) => r.category === "active-fail");
+  const historic = rules.filter((r) => r.category === "historic");
+
+  return (
+    <div className="space-y-4">
+      {failing.length > 0 && (
+        <RuleBlock
+          title={`Activas con incumplimiento · ${failing.length}`}
+          tone="danger"
+          rules={failing}
+        />
+      )}
+      {passing.length > 0 && (
+        <RuleBlock
+          title={`Activas y se cumplen · ${passing.length}`}
+          tone="success"
+          rules={passing}
+        />
+      )}
+      {historic.length > 0 && (
+        <RuleBlock
+          title={`Histórico · ${historic.length}`}
+          tone="muted"
+          rules={historic}
+        />
+      )}
+    </div>
+  );
+}
+
+function RuleBlock({
+  title,
+  tone,
+  rules,
+}: {
+  title: string;
+  tone: "success" | "danger" | "muted";
+  rules: LiveRule[];
+}) {
+  const color =
+    tone === "success"
+      ? "var(--success)"
+      : tone === "danger"
+        ? "var(--destructive)"
+        : "var(--muted-foreground)";
+  return (
+    <div>
+      <h4
+        className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2"
+        style={{ color: `hsl(${color})` }}
+      >
+        {title}
+      </h4>
+      <StaggerGroup className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {rules.map((r, i) => {
+          const ruleColor =
+            r.status === "pass"
+              ? "var(--success)"
+              : r.status === "fail"
+                ? "var(--destructive)"
+                : "var(--muted-foreground)";
+          const Icon =
+            r.status === "pass"
+              ? CheckCircle2
+              : r.status === "fail"
+                ? XCircle
+                : Pause;
+          return (
+            <StaggerItem key={i}>
+              <TextureCard
+                className="p-4 h-full"
+                style={{
+                  borderLeftWidth: "3px",
+                  borderLeftColor: `hsl(${ruleColor})`,
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="size-8 grid place-items-center rounded-lg border shrink-0"
+                    style={{
+                      background: `hsl(${ruleColor} / 0.12)`,
+                      borderColor: `hsl(${ruleColor} / 0.4)`,
+                      color: `hsl(${ruleColor})`,
+                    }}
+                  >
+                    <Icon className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] font-semibold leading-tight">
+                      {r.title}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                      {r.detail}
+                    </p>
+                  </div>
+                </div>
+              </TextureCard>
+            </StaggerItem>
+          );
+        })}
+      </StaggerGroup>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  PausedHistorySection · sección colapsable con campañas pausadas
+ *  Responde al feedback "no mostrar todo crítico · contextualizar"
+ * ─────────────────────────────────────────────────────────────────────── */
+
+function PausedHistorySection({
+  pausedCampaigns,
+}: {
+  pausedCampaigns: Campaign[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-border bg-background/40 hover:bg-background/60 transition-colors"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-2 text-left">
+          <Pause className="size-3.5 text-muted-foreground" aria-hidden />
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Histórico · campañas pausadas
+          </span>
+          <Badge variant="outline" className="font-mono">
+            {pausedCampaigns.length}
+          </Badge>
+        </div>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="paused-history"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="pt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {pausedCampaigns.map((c) => {
+                const reason = getPausedReason(c.cid) ?? "Razón no documentada";
+                const cptColor = cptTone(c.cpt);
+                return (
+                  <TextureCard
+                    key={c.cid}
+                    className="p-4 opacity-80 hover:opacity-100 transition-opacity"
+                    style={{
+                      borderLeftWidth: "3px",
+                      borderLeftColor: "hsl(var(--muted-foreground) / 0.4)",
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="font-mono text-[9px]">
+                        {c.code}
+                      </Badge>
+                      <Badge variant="default" className="text-[9px]">
+                        Pausada
+                      </Badge>
+                    </div>
+                    <div className="font-mono text-[11px] font-semibold text-foreground/90 mb-2 break-all">
+                      {c.name}
+                    </div>
+                    <div className="text-[10.5px] text-muted-foreground leading-relaxed mb-2">
+                      {reason}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px] mt-2 pt-2 border-t border-border/40">
+                      <div>
+                        <div className="text-muted-foreground/60 uppercase tracking-[0.08em] text-[9px]">
+                          Spend
+                        </div>
+                        <div className="font-mono font-semibold text-foreground">
+                          {fmt.eur(c.spend, { decimals: 0 })}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground/60 uppercase tracking-[0.08em] text-[9px]">
+                          Conv
+                        </div>
+                        <div className="font-mono font-semibold text-foreground">
+                          {fmt.int(c.conversions)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground/60 uppercase tracking-[0.08em] text-[9px]">
+                          CPR
+                        </div>
+                        <div
+                          className={cn(
+                            "font-mono font-semibold",
+                            cptColor === "success" && "text-[hsl(var(--success))]",
+                            cptColor === "warning" && "text-[hsl(var(--warning))]",
+                            cptColor === "danger" && "text-[hsl(var(--destructive))]",
+                          )}
+                        >
+                          {c.cpt === null ? "—" : fmt.eur(c.cpt)}
+                        </div>
+                      </div>
+                    </div>
+                  </TextureCard>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }

@@ -73,16 +73,29 @@ const ANOMALY_CID = "52551556895286";
 
 type AttentionTone = "danger" | "warning" | "info";
 
+interface AttentionReason {
+  /** Texto descriptivo del motivo. */
+  text: string;
+  /** Valor/chip asociado al motivo. */
+  value: string;
+  tone: AttentionTone;
+  Icon: React.ComponentType<{ className?: string }>;
+}
+
 interface AttentionItem {
   cid: string;
   /** Nombre legible (display name). */
   name: string;
-  /** Mensaje concreto con valor actual. */
-  reason: string;
-  /** Valor numérico/string para la chip a la derecha. */
-  value: string;
+  /** Tono máximo (peor) entre todos los motivos. */
   tone: AttentionTone;
-  Icon: React.ComponentType<{ className?: string }>;
+  /** CPL actual (7d) para mostrar en el header de la card. */
+  cpl: number | null;
+  /** Leads en el período. */
+  leads: number;
+  /** Status de la campaña (active/paused etc). */
+  status: Campaign["status"];
+  /** Lista de motivos por los que entra a atención. */
+  reasons: AttentionReason[];
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -246,17 +259,43 @@ function computeCampaignDeltas(
   return out;
 }
 
+const TONE_WEIGHT: Record<AttentionTone, number> = { info: 0, warning: 1, danger: 2 };
+
+function worstTone(reasons: AttentionReason[]): AttentionTone {
+  let worst: AttentionTone = "info";
+  for (const r of reasons) {
+    if (TONE_WEIGHT[r.tone] > TONE_WEIGHT[worst]) worst = r.tone;
+  }
+  return worst;
+}
+
 function buildAttentionItems(
   campaigns: Campaign[],
   deltas: Map<string, CampaignDelta>,
 ): AttentionItem[] {
-  const items: AttentionItem[] = [];
   // Solo campañas activas · no alertamos sobre pausadas.
   const active = campaigns.filter((c) => isActive(c.cid) || c.status === "ACTIVE");
 
-  for (const c of active) {
-    const name = getDisplayName(c.name);
+  // Acumular motivos por CID (una sola card por campaña).
+  const byCid = new Map<string, AttentionItem>();
+  function ensure(c: Campaign): AttentionItem {
+    const existing = byCid.get(c.cid);
+    if (existing) return existing;
+    const d = deltas.get(c.cid);
+    const created: AttentionItem = {
+      cid: c.cid,
+      name: getDisplayName(c.name),
+      tone: "info",
+      cpl: d?.cpl7d ?? c.cpt ?? null,
+      leads: c.evCompleteReg,
+      status: c.status,
+      reasons: [],
+    };
+    byCid.set(c.cid, created);
+    return created;
+  }
 
+  for (const c of active) {
     // 1. CPL drift +25% vs semana pasada
     const d = deltas.get(c.cid);
     if (
@@ -265,10 +304,9 @@ function buildAttentionItems(
       d.cplChangePct > 25 &&
       d.cpl7d !== null
     ) {
-      items.push({
-        cid: c.cid,
-        name,
-        reason: `CPL subió ${Math.round(d.cplChangePct)}% vs sem pasada`,
+      const item = ensure(c);
+      item.reasons.push({
+        text: `CPL subió ${Math.round(d.cplChangePct)}% vs sem pasada`,
         value: fmt.eur(d.cpl7d),
         tone: d.cplChangePct > 60 ? "danger" : "warning",
         Icon: AlertTriangle,
@@ -277,10 +315,9 @@ function buildAttentionItems(
 
     // 2. Frecuencia > 2.5
     if (c.freq > 2.5) {
-      items.push({
-        cid: c.cid,
-        name,
-        reason: "Frecuencia alta · audiencia cansada",
+      const item = ensure(c);
+      item.reasons.push({
+        text: `Frecuencia alta ${c.freq.toFixed(2)}× · audiencia cansada`,
         value: `${c.freq.toFixed(2)}x`,
         tone: c.freq > 3.5 ? "danger" : "warning",
         Icon: Activity,
@@ -289,10 +326,9 @@ function buildAttentionItems(
 
     // 3. Mucha impresión sin CR
     if (c.impressions > 10_000 && c.evCompleteReg < 5) {
-      items.push({
-        cid: c.cid,
-        name,
-        reason: "Mucha impresión sin convertir · revisar creativo",
+      const item = ensure(c);
+      item.reasons.push({
+        text: "Mucha impresión sin convertir · revisar creativo",
         value: `${fmt.int(c.impressions)} imp · ${c.evCompleteReg} CR`,
         tone: "warning",
         Icon: Eye,
@@ -301,10 +337,9 @@ function buildAttentionItems(
 
     // 4. CPM alto > €5
     if (c.cpm > 5) {
-      items.push({
-        cid: c.cid,
-        name,
-        reason: "CPM alto · costo de impresión sobre target",
+      const item = ensure(c);
+      item.reasons.push({
+        text: "CPM alto · costo de impresión sobre target",
         value: fmt.eur(c.cpm),
         tone: c.cpm > 9 ? "danger" : "warning",
         Icon: Wallet,
@@ -312,7 +347,15 @@ function buildAttentionItems(
     }
   }
 
-  return items;
+  // Computar tone máximo por card y devolver ordenado (peor tono primero).
+  const out: AttentionItem[] = [];
+  for (const item of byCid.values()) {
+    if (item.reasons.length === 0) continue;
+    item.tone = worstTone(item.reasons);
+    out.push(item);
+  }
+  out.sort((a, b) => TONE_WEIGHT[b.tone] - TONE_WEIGHT[a.tone] || b.reasons.length - a.reasons.length);
+  return out;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -606,6 +649,12 @@ export function TabDashboard() {
               <ExplainedMetric
                 explanation={
                   <div>
+                    <strong>Costo por Lead (CPL)</strong>
+                    <br />
+                    Spend total dividido por eventos CompleteRegistration de las
+                    campañas optimizadas a CR (C1, C2, C4).
+                    <br />
+                    <br />
                     <strong>{GLOSSARY.cr.term}</strong> · {GLOSSARY.cr.short}
                     <br />
                     {GLOSSARY.cpt.long}
@@ -635,9 +684,13 @@ export function TabDashboard() {
               <ExplainedMetric
                 explanation={
                   <div>
-                    <strong>{GLOSSARY.ic.term}</strong> · {GLOSSARY.ic.short}
+                    <strong>Costo por Initiate Checkout (CPIC)</strong>
                     <br />
-                    Cost per Initiate Checkout · excluye C3 (anomalía pixel).
+                    Spend de campañas IC dividido por sus eventos initiate_checkout.
+                    Excluye C3 (CID 52551556895286) por anomalía de pixel.
+                    <br />
+                    <br />
+                    <strong>{GLOSSARY.ic.term}</strong> · {GLOSSARY.ic.short}
                   </div>
                 }
               >
@@ -884,6 +937,8 @@ function AttentionCard({ item }: { item: AttentionItem }) {
       : item.tone === "warning"
         ? "var(--warning)"
         : "var(--info)";
+  const headerLabel = item.tone === "danger" ? "Crítico" : item.tone === "warning" ? "Atención" : "Aviso";
+  const PrimaryIcon = item.reasons[0]?.Icon ?? AlertTriangle;
   return (
     <SpotlightCard spotlightColor={color} intensity={0.22} className="p-4">
       <div className="flex items-start gap-3">
@@ -895,19 +950,61 @@ function AttentionCard({ item }: { item: AttentionItem }) {
             color: `hsl(${color})`,
           }}
         >
-          <item.Icon className="size-[18px]" />
+          <PrimaryIcon className="size-[18px]" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2 mb-1">
             <h3 className="text-[13px] font-semibold leading-tight">{item.name}</h3>
-            <span
-              className="shrink-0 font-mono text-[11px] font-bold tabular px-2 py-0.5 rounded-md"
-              style={{ background: `hsl(${color} / 0.12)`, color: `hsl(${color})` }}
-            >
-              {item.value}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span
+                className="font-mono text-[10px] font-bold tabular px-2 py-0.5 rounded-md uppercase tracking-[0.06em]"
+                style={{ background: `hsl(${color} / 0.14)`, color: `hsl(${color})` }}
+              >
+                {headerLabel}
+              </span>
+              {item.reasons.length > 1 && (
+                <span
+                  className="font-mono text-[10px] font-bold tabular px-1.5 py-0.5 rounded-md"
+                  style={{ background: `hsl(${color} / 0.08)`, color: `hsl(${color})` }}
+                >
+                  {item.reasons.length}
+                </span>
+              )}
+            </div>
           </div>
-          <p className="text-[12px] text-muted-foreground leading-relaxed">{item.reason}</p>
+          <div className="text-[11px] text-muted-foreground font-mono mb-2">
+            CPT {item.cpl === null ? "—" : fmt.eur(item.cpl)} · {fmt.int(item.leads)} leads
+          </div>
+          <ul className="space-y-1.5">
+            {item.reasons.map((r, idx) => {
+              const reasonColor =
+                r.tone === "danger"
+                  ? "var(--destructive)"
+                  : r.tone === "warning"
+                    ? "var(--warning)"
+                    : "var(--info)";
+              return (
+                <li
+                  key={idx}
+                  className="flex items-start justify-between gap-2 text-[12px] leading-snug"
+                >
+                  <div className="flex items-start gap-1.5 min-w-0">
+                    <span
+                      className="mt-1 inline-block size-1.5 rounded-full shrink-0"
+                      style={{ background: `hsl(${reasonColor})` }}
+                    />
+                    <span className="text-foreground/80">{r.text}</span>
+                  </div>
+                  <span
+                    className="shrink-0 font-mono text-[10.5px] font-bold tabular"
+                    style={{ color: `hsl(${reasonColor})` }}
+                  >
+                    {r.value}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       </div>
     </SpotlightCard>
@@ -1030,6 +1127,15 @@ function BigFunnelCR() {
     return prev > 0 ? (s.value / prev) * 100 : 0;
   });
 
+  // Detect si link_clicks ≈ landing_views · misma página · evita el "100%" confuso.
+  // Hoy `landing.value` es proxy de `data.clicks` (GA4 pending) · por lo tanto siempre
+  // son iguales. Cuando se conecte GA4 con un valor real, este flag se calculará
+  // contra la diferencia <5%.
+  const clicksValue = steps[1]?.value ?? 0;
+  const landingValue = steps[2]?.value ?? 0;
+  const sameLandingPage =
+    clicksValue > 0 && Math.abs(clicksValue - landingValue) / clicksValue < 0.05;
+
   return (
     <TextureCard className="p-6">
       <div className="flex items-center justify-between mb-5">
@@ -1055,9 +1161,15 @@ function BigFunnelCR() {
 
       <div className="grid grid-cols-4 gap-2 mb-5" style={{ minHeight: 400 }}>
         {steps.map((s, i) => {
-          const heightPct = Math.max(8, (s.value / max) * 100);
+          // Escala sqrt para que las barras pequeñas no colapsen a nada
+          // mantengamos monotonía: impresiones (max) = 100% · resto > 0.
+          const ratio = s.value / max;
+          const heightPct = Math.max(8, Math.sqrt(ratio) * 100);
           const isSelected = selectedStep === s.id;
           const conv = stepConv[i];
+          // No mostrar "100%" entre Link Clicks y Landing si son iguales (misma página).
+          const isLandingProxy =
+            s.id === "landing" && sameLandingPage && conv !== null && Math.abs(conv - 100) < 0.5;
           return (
             <button
               key={s.id}
@@ -1071,7 +1183,7 @@ function BigFunnelCR() {
                   : "border-border/60 hover:border-foreground/30 hover:bg-card/40",
               )}
             >
-              {i > 0 && conv !== null && (
+              {i > 0 && conv !== null && !isLandingProxy && (
                 <div
                   className="absolute top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold tabular"
                   style={{
@@ -1080,6 +1192,18 @@ function BigFunnelCR() {
                   }}
                 >
                   {conv.toFixed(1)}%
+                </div>
+              )}
+              {isLandingProxy && (
+                <div
+                  className="absolute top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full font-mono text-[9px] font-semibold"
+                  style={{
+                    background: "hsl(var(--muted) / 0.4)",
+                    color: "hsl(var(--muted-foreground))",
+                  }}
+                  title="Landing view se dispara junto al click · es la misma página"
+                >
+                  ≈ misma página
                 </div>
               )}
 
@@ -1099,12 +1223,24 @@ function BigFunnelCR() {
                   initial={{ height: 0 }}
                   animate={{ height: `${heightPct}%` }}
                   transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: i * 0.08 }}
-                  className="w-[70%] rounded-t-lg"
+                  className="w-[70%] rounded-t-lg relative"
                   style={{
-                    background: `linear-gradient(180deg, hsl(${s.color} / 0.9), hsl(${s.color} / 0.25))`,
-                    boxShadow: `0 0 24px -8px hsl(${s.color} / 0.55), inset 0 1px 0 hsl(${s.color})`,
+                    background: `linear-gradient(180deg, hsl(${s.color} / 0.95), hsl(${s.color} / 0.35))`,
+                    boxShadow: `0 0 24px -8px hsl(${s.color} / 0.6), inset 0 1px 0 hsl(${s.color})`,
                   }}
-                />
+                >
+                  {/* Lengüeta con número arriba de cada barra. */}
+                  <div
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-md font-mono text-[10px] font-bold tabular whitespace-nowrap"
+                    style={{
+                      background: `hsl(${s.color} / 0.15)`,
+                      color: `hsl(${s.color})`,
+                      border: `1px solid hsl(${s.color} / 0.4)`,
+                    }}
+                  >
+                    {fmt.int(s.value)}
+                  </div>
+                </motion.div>
               </div>
 
               <div
@@ -1626,6 +1762,20 @@ const STAGE_COLORS: Record<FunnelStage, string> = {
   subscription: "var(--brand-violet)",
 };
 
+/** Para cada stage indica cuál es el "paso anterior lógico" para
+ *  computar conversión lineal. null = no aplica (rama paralela / info). */
+const STAGE_LINEAR_PARENT: Record<FunnelStage, FunnelStage | null> = {
+  impression: null,
+  click: "impression",
+  pricing_visit: null, // parallel info · solo % vs impresiones
+  whatsapp: null, // parallel info · solo % vs impresiones
+  register_intent: "click",
+  signup: "register_intent",
+  password: null, // sub-step de signup · solo % vs impresiones
+  trial: "signup",
+  subscription: "trial",
+};
+
 function SaasJourneyFunnel() {
   const { campaigns } = useDashboard();
   const { events: ga4Events, configured: ga4Configured, loading: ga4Loading } =
@@ -1701,10 +1851,18 @@ function SaasJourneyFunnel() {
     });
   }, [metaTotals, ga4Events, ga4Configured]);
 
-  const maxValue = Math.max(
-    ...steps.map((s) => (s.value !== null ? s.value : 0)),
-    1,
-  );
+  // Total de impresiones · base para % global y para ancho de barra.
+  const impressionsTotal = metaTotals.impressions || 1;
+  // Conversión global signup / impresiones.
+  const signupTotal = metaTotals.completeReg;
+  const globalConvPct = (signupTotal / impressionsTotal) * 100;
+
+  // Lookup rápido stage → step para el padre lineal.
+  const stepByStage = React.useMemo(() => {
+    const map = new Map<FunnelStage, JourneyStepData>();
+    for (const s of steps) map.set(s.stage, s);
+    return map;
+  }, [steps]);
 
   return (
     <TextureCard className="p-6">
@@ -1718,9 +1876,11 @@ function SaasJourneyFunnel() {
             <span className="text-muted-foreground font-normal text-base">impresiones</span>
             {" → "}
             <span className="text-[hsl(var(--brand-lime))]">
-              {fmt.int(metaTotals.completeReg)}
+              {fmt.int(signupTotal)}
             </span>{" "}
-            <span className="text-muted-foreground font-normal text-base">registros</span>
+            <span className="text-muted-foreground font-normal text-base">
+              registros · {globalConvPct < 0.01 ? globalConvPct.toFixed(3) : globalConvPct.toFixed(2)}% conv. global
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1735,51 +1895,56 @@ function SaasJourneyFunnel() {
         </div>
       </div>
 
-      <div className="space-y-2.5">
+      {/* Trapecio invertido · cada paso es una fila con barra centrada cuyo
+          ancho = % vs impresiones · va angostándose hacia abajo. */}
+      <div className="flex flex-col gap-1.5">
         {steps.map((step, i) => {
-          const prev = i > 0 ? steps[i - 1] : null;
-          const conv =
-            prev && prev.value !== null && prev.value > 0 && step.value !== null
-              ? (step.value / prev.value) * 100
-              : null;
-          const widthPct =
-            step.value !== null ? Math.max(2, (step.value / maxValue) * 100) : 0;
           const isPending = step.value === null;
+          const value = step.value ?? 0;
+          // Ancho de barra = sqrt(% vs impresiones) para que el embudo
+          // no colapse a 0% cuando el valor es muy chico (sigue siendo monótono).
+          const pctOfImpressions = (value / impressionsTotal) * 100;
+          const widthPct = isPending
+            ? 6
+            : Math.max(6, Math.min(100, Math.sqrt(pctOfImpressions / 100) * 100));
+
+          // % vs padre lineal (solo cuando aplica).
+          const parentStage = STAGE_LINEAR_PARENT[step.stage];
+          const parent = parentStage ? stepByStage.get(parentStage) : null;
+          const linearConv =
+            parent && parent.value !== null && parent.value > 0 && step.value !== null
+              ? (step.value / parent.value) * 100
+              : null;
 
           return (
             <motion.div
               key={step.stage}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.04, duration: 0.4 }}
-              className={cn(
-                "relative rounded-xl border px-4 py-3 transition-colors",
-                isPending
-                  ? "border-border/30 bg-card/10 opacity-70"
-                  : "border-border/60 bg-card/30 hover:bg-card/50",
-              )}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.4 }}
+              className="grid grid-cols-[200px_1fr_180px] items-center gap-3"
             >
-              <div className="flex items-center gap-3">
+              {/* IZQUIERDA · icon + label + source */}
+              <div className="flex items-center gap-2.5 min-w-0">
                 <div
                   className="size-9 shrink-0 grid place-items-center rounded-lg border"
                   style={{
                     background: isPending
                       ? "hsl(var(--muted) / 0.2)"
-                      : `hsl(${step.color} / 0.12)`,
+                      : `hsl(${step.color} / 0.14)`,
                     borderColor: isPending
                       ? "hsl(var(--muted) / 0.3)"
-                      : `hsl(${step.color} / 0.35)`,
+                      : `hsl(${step.color} / 0.4)`,
                     color: isPending ? "hsl(var(--muted-foreground))" : `hsl(${step.color})`,
                   }}
                 >
                   <step.Icon className="size-4" />
                 </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-[12px] font-semibold leading-tight">
-                      {step.label}
-                    </span>
+                <div className="min-w-0">
+                  <div className="text-[12px] font-semibold leading-tight truncate">
+                    {step.label}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
                     {step.isConversion && !isPending && (
                       <Badge variant="lime" className="text-[9px] py-0">
                         conversión
@@ -1787,43 +1952,80 @@ function SaasJourneyFunnel() {
                     )}
                     <SourceBadge source={step.source} />
                   </div>
+                </div>
+              </div>
 
-                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${widthPct}%` }}
-                      transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
-                      className="h-full"
+              {/* CENTRO · barra horizontal del embudo (centrada · se angosta) */}
+              <div className="relative h-10 flex items-center justify-center">
+                {isPending ? (
+                  <motion.div
+                    initial={{ width: 0, opacity: 0 }}
+                    animate={{ width: `${widthPct}%`, opacity: 1 }}
+                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: i * 0.05 }}
+                    className="h-7 rounded-md border border-dashed border-border/50 grid place-items-center"
+                    style={{ background: "hsl(var(--muted) / 0.15)" }}
+                  >
+                    <span className="text-[10px] italic text-muted-foreground/70">
+                      Analytics pendiente
+                    </span>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${widthPct}%` }}
+                    transition={{ duration: 0.95, ease: [0.16, 1, 0.3, 1], delay: i * 0.05 }}
+                    className="h-8 rounded-md relative overflow-hidden"
+                    style={{
+                      background: `linear-gradient(90deg, hsl(${step.color} / 0.85), hsl(${step.color} / 0.55), hsl(${step.color} / 0.85))`,
+                      boxShadow: `0 0 24px -10px hsl(${step.color} / 0.7), inset 0 1px 0 hsl(${step.color} / 0.6)`,
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 opacity-20 mix-blend-overlay"
                       style={{
-                        background: isPending
-                          ? "hsl(var(--muted) / 0.3)"
-                          : `linear-gradient(90deg, hsl(${step.color}), hsl(${step.color} / 0.4))`,
+                        background:
+                          "linear-gradient(90deg, transparent 40%, rgba(255,255,255,0.4), transparent 60%)",
                       }}
                     />
-                  </div>
-                </div>
+                  </motion.div>
+                )}
+              </div>
 
-                <div className="text-right shrink-0 min-w-[110px]">
-                  {isPending ? (
-                    <div className="text-[11px] italic text-muted-foreground/60">
-                      Analytics pendiente
+              {/* DERECHA · valor + métricas */}
+              <div className="text-right shrink-0">
+                {isPending ? (
+                  <div className="text-[11px] italic text-muted-foreground/60">
+                    sin data
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      className="font-mono font-bold text-[18px] tabular leading-none"
+                      style={{ color: `hsl(${step.color})` }}
+                    >
+                      <AnimatedNumber value={value} format={fmt.int} />
                     </div>
-                  ) : (
-                    <>
-                      <div
-                        className="font-mono font-bold text-[18px] tabular leading-none"
-                        style={{ color: `hsl(${step.color})` }}
-                      >
-                        <AnimatedNumber value={step.value ?? 0} format={fmt.int} />
-                      </div>
-                      {conv !== null && (
-                        <div className="text-[9px] text-muted-foreground font-mono mt-1">
-                          {conv.toFixed(1)}% vs anterior
-                        </div>
+                    <div className="text-[9px] text-muted-foreground font-mono mt-1 leading-tight">
+                      {linearConv !== null ? (
+                        <>
+                          <span style={{ color: `hsl(${step.color})` }}>
+                            {linearConv.toFixed(linearConv < 1 ? 2 : 1)}%
+                          </span>{" "}
+                          del paso anterior
+                        </>
+                      ) : i === 0 ? (
+                        "base del embudo"
+                      ) : (
+                        <>
+                          {pctOfImpressions < 0.01
+                            ? pctOfImpressions.toFixed(4)
+                            : pctOfImpressions.toFixed(2)}
+                          % de impresiones
+                        </>
                       )}
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
           );

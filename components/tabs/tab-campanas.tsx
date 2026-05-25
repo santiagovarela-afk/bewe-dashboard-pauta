@@ -30,7 +30,6 @@ import {
   cptVsGroupAvg,
   criticalCampaigns,
   pacingPct,
-  planBStatus,
   severityOf,
   suggestedAction,
   type GroupAggregate,
@@ -138,7 +137,16 @@ export function TabCampanas() {
   const crit = criticalCampaigns(campaigns);
   const attn = attentionCampaigns(campaigns);
   const best = bestCptCampaign(campaigns);
-  const planB = planBStatus(campaigns, daysElapsed);
+  // Plan B status real · derivado del CID del Plan B (MX_SERVICIOS_WEB_MAY26_CONVERSION).
+  // Reemplaza a planBStatus() viejo que asumía Plan B = C2.
+  const PLAN_B_CID = "52567055064286";
+  const planBCampaign = campaigns.find((c) => c.cid === PLAN_B_CID);
+  const planB: { status: "activated" | "not_activated"; label: string } = planBCampaign && planBCampaign.spend > 0
+    ? {
+        status: "activated",
+        label: `Plan B ACTIVO · ${getDisplayName(planBCampaign.name)}`,
+      }
+    : { status: "not_activated", label: "Plan B no activado" };
 
   const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0);
   const totalCR = campaigns.reduce((s, c) => s + c.evCompleteReg, 0);
@@ -310,18 +318,18 @@ export function TabCampanas() {
                     </span>
                   </>
                 )}
-                {planB.status === "pending" && (
+                {planB.status === "not_activated" && (
                   <>
                     {" · "}
-                    <span className="text-[hsl(var(--destructive))] font-semibold">
-                      Plan B C2 pendiente
+                    <span className="text-muted-foreground font-semibold">
+                      {planB.label}
                     </span>
                   </>
                 )}
                 {planB.status === "activated" && (
                   <>
                     {" · "}
-                    <span className="text-[hsl(var(--success))]">Plan B C2 activado</span>
+                    <span className="text-[hsl(var(--success))]">{planB.label}</span>
                   </>
                 )}
               </>

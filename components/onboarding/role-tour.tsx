@@ -27,6 +27,8 @@ interface TourStep {
   selector: string;
   title: string;
   body: string;
+  /** Acción sugerida concreta · "tu primer paso". Aparece destacada bajo el body. */
+  action?: string;
   placement?: "right" | "left" | "top" | "bottom" | "center";
   /** Si está, fuerza un setTab() antes de buscar el selector. */
   tab?: string;
@@ -113,7 +115,8 @@ const STEPS: TourStep[] = [
     waitMs: 280,
     title: "Dashboard · resumen ejecutivo",
     body:
-      "KPIs globales del rango seleccionado, señales operativas críticas, embudo y daily summary. Tu primer parada cada mañana.",
+      "Esta sección sirve para tener el pulso del día en una sola pantalla · KPIs globales, atención requerida y daily summary.",
+    action: "Tu primer paso · cambiá el periodo a 7 días y mirá si hay alguna campaña en atención.",
     placement: "right",
     requiresTab: "dashboard",
   },
@@ -123,7 +126,8 @@ const STEPS: TourStep[] = [
     waitMs: 280,
     title: "Campañas · las 6 vivas",
     body:
-      "Estado ACTIVE/PAUSED, pacing del presupuesto, drill-down a adsets y anuncios · todo en cards click-ables.",
+      "Esta sección sirve para operar campañas Meta una a una · estado ACTIVE/PAUSED, pacing, drill-down a adsets y anuncios.",
+    action: "Tu primer paso · click en cualquier card para ver detalle de adsets y CPL por adset.",
     placement: "right",
     requiresTab: "campanas",
   },
@@ -133,7 +137,8 @@ const STEPS: TourStep[] = [
     waitMs: 280,
     title: "Estrategia · el porqué",
     body:
-      "Semáforos CPT/CPL/Budget, reglas Julián (día 7 Plan B · día 14 contingencia) y proyección al cierre de mes.",
+      "Esta sección sirve para entender la salud del plan · semáforos CPT/CPL/Budget, reglas Julián (día 7 · día 14) y proyección al cierre.",
+    action: "Tu primer paso · mirá el gauge de CPT y el % de budget consumido vs días transcurridos.",
     placement: "right",
     requiresTab: "estrategia",
   },
@@ -153,7 +158,8 @@ const STEPS: TourStep[] = [
     waitMs: 280,
     title: "Anuncios · cada creativo",
     body:
-      "Grid con thumbnails, CPR, frecuencia y alertas automáticas. Click cualquiera para insights pro en drawer.",
+      "Esta sección sirve para evaluar creativos uno a uno · grid con thumbnails HD, CPR, frecuencia y alertas automáticas.",
+    action: "Tu primer paso · ordená por CPR descendente para detectar el creativo más caro.",
     placement: "right",
     requiresTab: "anuncios",
   },
@@ -211,7 +217,8 @@ const STEPS: TourStep[] = [
     waitMs: 280,
     title: "Performance · LTV / CAC",
     body:
-      "Funnel ejecutivo Impresiones → Activated, CAC, LTV, ratio LTV/CAC (sano ≥ 3×) y ROAS por campaña.",
+      "Esta sección sirve para validar unit economics · funnel Impresiones → Activated, CAC, LTV y ROAS por campaña.",
+    action: "Tu primer paso · revisá el ratio LTV/CAC · sano ≥ 3× para escalar inversión.",
     placement: "right",
     requiresTab: "performance",
   },
@@ -428,7 +435,9 @@ export function RoleTour({ open, onClose }: RoleTourProps) {
 
   // Tooltip position
   const TIP_W = 320;
-  const TIP_H = 170;
+  // Aumentado de 170 a 220 porque ahora algunos steps incluyen un bloque
+  // "Acción sugerida" debajo del body que añade ~50px.
+  const TIP_H = current.action ? 230 : 180;
   let tipStyle: React.CSSProperties = {};
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
@@ -576,9 +585,19 @@ export function RoleTour({ open, onClose }: RoleTourProps) {
           <div className="font-display font-semibold text-[14.5px] mb-1 leading-tight">
             {current.title}
           </div>
-          <p className="text-[12px] text-muted-foreground leading-relaxed mb-3">
+          <p className="text-[12px] text-muted-foreground leading-relaxed mb-2">
             {current.body}
           </p>
+          {current.action && (
+            <div className="mb-3 rounded-md border border-[hsl(var(--brand-violet)/0.3)] bg-[hsl(var(--brand-violet)/0.07)] px-2.5 py-1.5">
+              <div className="text-[9px] font-mono uppercase tracking-[0.12em] text-[hsl(var(--brand-violet))] mb-0.5">
+                Acción sugerida
+              </div>
+              <p className="text-[11px] text-foreground/85 leading-snug">
+                {current.action}
+              </p>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <button
               type="button"

@@ -35,6 +35,7 @@ import {
   Bot,
   CalendarDays,
   ChevronLeft,
+  Eye,
   FileText,
   Gauge,
   Image as ImageIcon,
@@ -43,12 +44,14 @@ import {
   Megaphone,
   Palette,
   PartyPopper,
+  Plug,
   Search,
   Settings2,
   Sparkles,
   Target,
   TrendingUp,
   X,
+  Zap,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { ROLE_TABS, TABS } from "@/lib/config";
@@ -339,6 +342,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
   type Slide =
     | { kind: "welcome" }
     | { kind: "areas" }
+    | { kind: "data-sources" }
     | { kind: "agents" }
     | { kind: "tour-optional" }
     | { kind: "tab"; tabId: string }
@@ -348,6 +352,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
     const list: Slide[] = [
       { kind: "welcome" },
       { kind: "areas" },
+      { kind: "data-sources" },
       { kind: "agents" },
       { kind: "tour-optional" },
       ...visibleTabIds.map<Slide>((id) => ({ kind: "tab", tabId: id })),
@@ -507,6 +512,7 @@ export function WelcomeTour({ open, onClose }: WelcomeTourProps) {
                   />
                 )}
                 {current.kind === "areas" && <SlideAreas key="areas" />}
+                {current.kind === "data-sources" && <SlideDataSources key="data-sources" />}
                 {current.kind === "agents" && <SlideAgents key="agents" />}
                 {current.kind === "tour-optional" && (
                   <SlideTourOptional
@@ -608,39 +614,88 @@ function SlideWelcome({
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.35 }}
     >
-      <div className="flex items-center gap-3 mb-4">
-        <div className="size-12 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] grid place-items-center shadow-[0_8px_24px_-8px_hsl(var(--brand-violet)/0.7)]">
-          <Sparkles className="size-6 text-white" />
-        </div>
-        <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-[hsl(var(--brand-violet))]">
-          Bewe · Pauta · OS
+      <div className="flex items-center gap-3 mb-5">
+        <motion.div
+          initial={{ scale: 0.7, rotate: -8 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 220, damping: 16 }}
+          className="size-14 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-violet))] via-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_12px_30px_-8px_hsl(var(--brand-violet)/0.7)]"
+        >
+          <Sparkles className="size-7 text-white" />
+        </motion.div>
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-[hsl(var(--brand-violet))]">
+            Bewe · Pauta · OS
+          </div>
+          <div className="text-[10.5px] text-muted-foreground mt-0.5">
+            control center · mayo 2026
+          </div>
         </div>
       </div>
-      <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-3">
-        Hola {displayName} · te voy a llevar pestaña por pestaña.
+      <h1 className="font-display text-2xl md:text-[34px] font-bold tracking-[-0.02em] leading-[1.05] mb-3">
+        Hola {displayName} ·{" "}
+        <span className="text-aurora">bienvenido al control center</span> de
+        Bewe Pauta.
       </h1>
       <p className="text-[14px] text-muted-foreground leading-relaxed">
-        Esto es <strong className="text-foreground">Bewe Pauta OS</strong>: el panel
-        operativo del plan que Julián montó para mayo 2026. En lugar de un resumen
-        de áreas, voy a abrir{" "}
-        <strong className="text-foreground">cada una de las {tabsCount} pestañas</strong>{" "}
-        a las que tienes acceso · qué es, qué consigues, qué hacer primero.
+        Este es el panel operativo del plan de Julián. En 5 minutos te muestro{" "}
+        <strong className="text-foreground">las {tabsCount} pestañas</strong>, las
+        fuentes de datos en vivo, y los dos copilotos IA · qué hace cada uno y
+        cómo apoyarte en ellos.
       </p>
-      <div className="mt-4 text-[11.5px] text-muted-foreground/80 leading-relaxed flex items-start gap-2">
+
+      {/* Stats rápidas */}
+      <div className="mt-5 grid grid-cols-3 gap-2">
+        <MiniStat label="Pestañas" value={String(tabsCount)} accent="var(--brand-violet)" />
+        <MiniStat label="Fuentes live" value="4" accent="var(--brand-cyan)" />
+        <MiniStat label="Copilotos IA" value="2" accent="var(--brand-lime)" />
+      </div>
+
+      <div className="mt-5 text-[11px] text-muted-foreground/80 leading-relaxed flex items-start gap-2">
         <span aria-hidden className="text-[13px] leading-none mt-0.5">⏱</span>
         <span>
-          Te tomará un par de minutos · puedes saltarlo con{" "}
+          Saltá con{" "}
           <kbd className="px-1 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
             Esc
           </kbd>{" "}
-          o navegar con{" "}
+          o navegá con{" "}
           <kbd className="px-1 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
             ← →
-          </kbd>
-          .
+          </kbd>{" "}
+          · siempre podés reabrir desde el botón{" "}
+          <strong className="text-foreground/85">?</strong> del topbar.
         </span>
       </div>
     </motion.div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div
+      className="rounded-xl border border-border bg-card/40 backdrop-blur px-3 py-2.5"
+      style={{
+        background: `linear-gradient(135deg, hsl(${accent}/0.06), hsl(var(--card)/0.4))`,
+      }}
+    >
+      <div
+        className="font-mono font-bold text-[22px] leading-none tabular"
+        style={{ color: `hsl(${accent})` }}
+      >
+        {value}
+      </div>
+      <div className="text-[9.5px] uppercase tracking-[0.1em] text-muted-foreground mt-1.5">
+        {label}
+      </div>
+    </div>
   );
 }
 
@@ -690,6 +745,188 @@ function SlideAreas() {
         })}
       </div>
     </motion.div>
+  );
+}
+
+/* ──────── Data sources · diagrama de conectores ──────── */
+
+interface DataSource {
+  id: string;
+  name: string;
+  desc: string;
+  status: "connected" | "pending" | "partial";
+  Icon: React.ComponentType<{ className?: string }>;
+  accent: string;
+}
+
+const DATA_SOURCES: DataSource[] = [
+  {
+    id: "meta",
+    name: "Meta Ads API",
+    desc: "Campañas, insights, CAPI events · live",
+    status: "connected",
+    Icon: TrendingUp,
+    accent: "var(--brand-violet)",
+  },
+  {
+    id: "gsc",
+    name: "Google Search Console",
+    desc: "Keywords, posiciones, impresiones orgánicas",
+    status: "pending",
+    Icon: Search,
+    accent: "var(--brand-cyan)",
+  },
+  {
+    id: "ga4",
+    name: "Google Analytics 4",
+    desc: "Pricing visits, trial, signup, subscription",
+    status: "partial",
+    Icon: Eye,
+    accent: "var(--brand-lime)",
+  },
+  {
+    id: "groq",
+    name: "Groq AI · AEO",
+    desc: "Monitoreo en ChatGPT, Claude, Gemini, Perplexity",
+    status: "connected",
+    Icon: Zap,
+    accent: "var(--brand-ember)",
+  },
+];
+
+function SlideDataSources() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.35 }}
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="size-11 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-violet))] grid place-items-center shadow-[0_8px_24px_-8px_hsl(var(--brand-cyan)/0.6)]">
+          <Plug className="size-5 text-white" />
+        </div>
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-[hsl(var(--brand-violet))]">
+            Sin manualidad · todo live
+          </div>
+          <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight leading-tight">
+            Cómo está conectada la data
+          </h2>
+        </div>
+      </div>
+      <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-4">
+        Todo se actualiza en tiempo real desde las plataformas oficiales. Nada
+        se digita a mano, nada se sube en CSV.
+      </p>
+
+      {/* Diagrama: 4 sources → flecha animada → Bewe Pauta */}
+      <div className="relative rounded-2xl border border-border bg-background/30 p-4 mb-3 overflow-hidden">
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-30 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(180px 100px at 80% 50%, hsl(var(--brand-violet)/0.35), transparent 70%)",
+          }}
+        />
+        <div className="relative grid grid-cols-[1fr_auto_auto] items-center gap-3">
+          {/* Columna fuentes */}
+          <div className="space-y-1.5">
+            {DATA_SOURCES.map((src, i) => (
+              <motion.div
+                key={src.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.08 * i, duration: 0.35 }}
+                className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/40 px-2.5 py-1.5"
+              >
+                <div
+                  className="size-7 rounded-md grid place-items-center shrink-0 border"
+                  style={{
+                    background: `hsl(${src.accent}/0.14)`,
+                    borderColor: `hsl(${src.accent}/0.4)`,
+                    color: `hsl(${src.accent})`,
+                  }}
+                >
+                  <src.Icon className="size-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold leading-tight truncate">
+                    {src.name}
+                  </div>
+                  <div className="text-[9.5px] text-muted-foreground leading-snug truncate">
+                    {src.desc}
+                  </div>
+                </div>
+                <StatusBadge status={src.status} />
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Flecha animada */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="flex flex-col items-center justify-center px-1"
+          >
+            <motion.div
+              animate={{ x: [0, 4, 0] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+              className="text-[hsl(var(--brand-violet))]"
+            >
+              <ArrowRight className="size-5" />
+            </motion.div>
+          </motion.div>
+
+          {/* Bewe Pauta · destino */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.45, type: "spring", stiffness: 240, damping: 18 }}
+            className="relative rounded-xl p-3 min-w-[120px] text-center bg-gradient-to-br from-[hsl(var(--brand-violet))] via-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] shadow-[0_14px_36px_-10px_hsl(var(--brand-violet)/0.7)]"
+          >
+            <div className="text-[9px] uppercase tracking-[0.16em] text-white/80 mb-1">
+              Destino
+            </div>
+            <div className="font-display text-[13px] font-bold leading-tight text-white">
+              Bewe Pauta
+            </div>
+            <div className="text-[9px] text-white/80 mt-0.5">Dashboard</div>
+          </motion.div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[hsl(var(--brand-violet)/0.3)] bg-[hsl(var(--brand-violet)/0.06)] px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
+        <span className="text-foreground/90 font-semibold">Live = al toque.</span>{" "}
+        Si Meta cambia un número, lo verás aquí en el siguiente refresh manual o
+        cuando navegues entre tabs.
+      </div>
+    </motion.div>
+  );
+}
+
+function StatusBadge({ status }: { status: DataSource["status"] }) {
+  if (status === "connected") {
+    return (
+      <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))]">
+        <span className="size-1.5 rounded-full bg-[hsl(var(--success))] animate-pulse-glow" />
+        Conectado
+      </span>
+    );
+  }
+  if (status === "partial") {
+    return (
+      <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[hsl(var(--info)/0.14)] text-[hsl(var(--info))]">
+        Parcial
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[hsl(var(--warning)/0.14)] text-[hsl(var(--warning))]">
+      Pendiente
+    </span>
   );
 }
 
@@ -801,31 +1038,104 @@ function SlideClosingCombined({
   sectionsCount: number;
   role: string;
 }) {
+  const recommendedActions: Array<{
+    Icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    sub: string;
+    accent: string;
+  }> = [
+    {
+      Icon: LayoutDashboard,
+      title: "Revisá el estado de hoy",
+      sub: "Dashboard · KPIs, atención requerida, daily summary.",
+      accent: "var(--brand-violet)",
+    },
+    {
+      Icon: Target,
+      title: "Mirá quién está en atención",
+      sub: "Campañas drifteando · CPL, frecuencia, CPM fuera de rango.",
+      accent: "var(--brand-cyan)",
+    },
+    {
+      Icon: Gauge,
+      title: "Tomá decisiones con Estrategia",
+      sub: "Semáforos, reglas Julián y proyección al cierre de mes.",
+      accent: "var(--brand-lime)",
+    },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.35 }}
-      className="text-center"
     >
-      <motion.div
-        initial={{ scale: 0.6, rotate: -10 }}
-        animate={{ scale: 1, rotate: 0 }}
-        transition={{ type: "spring", stiffness: 220, damping: 16 }}
-        className="mx-auto size-14 rounded-3xl bg-gradient-to-br from-[hsl(var(--brand-violet))] via-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_16px_48px_-12px_hsl(var(--brand-violet)/0.8)] mb-3"
-      >
-        <PartyPopper className="size-7 text-white" />
-      </motion.div>
-      <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-1.5">
-        Listo, {displayName}.
-      </h2>
-      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-4">
-        {sectionsCount} pestañas a tu alcance ({role}) · CPT objetivo{" "}
-        <strong className="text-[hsl(var(--brand-violet))]">€2.20</strong>. A explorar.
-      </p>
+      <div className="text-center mb-5">
+        <motion.div
+          initial={{ scale: 0.6, rotate: -10 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 220, damping: 16 }}
+          className="mx-auto size-14 rounded-3xl bg-gradient-to-br from-[hsl(var(--brand-violet))] via-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_16px_48px_-12px_hsl(var(--brand-violet)/0.8)] mb-3"
+        >
+          <PartyPopper className="size-7 text-white" />
+        </motion.div>
+        <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-1.5">
+          Listo, {displayName}.
+        </h2>
+        <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto">
+          {sectionsCount} pestañas a tu alcance ({role}) · CPT objetivo{" "}
+          <strong className="text-[hsl(var(--brand-violet))]">€2.20</strong>.
+        </p>
+      </div>
 
-      <div className="rounded-xl border border-[hsl(var(--brand-ember)/0.3)] bg-[hsl(var(--brand-ember)/0.08)] p-3.5 max-w-md mx-auto text-left">
+      {/* 3 acciones recomendadas */}
+      <div className="mb-4">
+        <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground mb-2 text-center">
+          Por dónde empezar
+        </div>
+        <div className="space-y-2">
+          {recommendedActions.map((a, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 * i, duration: 0.4 }}
+              className="flex items-center gap-3 rounded-xl border border-border bg-card/40 backdrop-blur p-3"
+              style={{
+                background: `linear-gradient(135deg, hsl(${a.accent}/0.05), hsl(var(--card)/0.4))`,
+              }}
+            >
+              <div
+                className="size-8 rounded-lg grid place-items-center shrink-0 border"
+                style={{
+                  background: `hsl(${a.accent}/0.14)`,
+                  borderColor: `hsl(${a.accent}/0.4)`,
+                  color: `hsl(${a.accent})`,
+                }}
+              >
+                <a.Icon className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-semibold leading-tight">
+                  {i + 1}. {a.title}
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                  {a.sub}
+                </div>
+              </div>
+              <span
+                className="shrink-0 font-mono text-[10px] font-bold tabular tracking-wider"
+                style={{ color: `hsl(${a.accent})` }}
+              >
+                {String(i + 1).padStart(2, "0")}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[hsl(var(--brand-ember)/0.3)] bg-[hsl(var(--brand-ember)/0.08)] p-3 text-left">
         <div className="flex items-start gap-2.5">
           <div className="size-7 rounded-md bg-[hsl(var(--brand-ember)/0.18)] grid place-items-center shrink-0">
             <KeyRound className="size-3.5 text-[hsl(var(--brand-ember))]" />
@@ -842,8 +1152,8 @@ function SlideClosingCombined({
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-md mx-auto mt-4">
-        Re-abre el tour cuando quieras desde el botón{" "}
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed text-center mt-4">
+        Re-abrí el tour cuando quieras desde el botón{" "}
         <strong className="text-foreground/85">?</strong> del topbar.
       </p>
     </motion.div>

@@ -65,6 +65,7 @@ import { Reveal } from "@/components/fx/reveal";
 import { Badge } from "@/components/ui/badge";
 import { DailySummary } from "@/components/shared/daily-summary";
 import { ExplainedMetric } from "@/components/shared/explained-metric";
+import { HelpGuideTrigger, HELP_DASHBOARD } from "@/components/shared/help-guide";
 import type { Campaign, DateRange } from "@/lib/types";
 
 /** Plan B CID · MX_SERVICIOS_WEB_MAY26_CONVERSION (reemplazó al pixel-anómalo). */
@@ -525,7 +526,7 @@ export function TabDashboard() {
       {/* PERIOD SELECTOR · prominente arriba */}
       <Reveal>
         <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
                 Período de análisis
@@ -534,11 +535,14 @@ export function TabDashboard() {
                 Cambia la ventana sin re-llamar la API · {ctx.label}
               </p>
             </div>
-            {detectPeriod(dateRange.from, dateRange.to) === "custom" && (
-              <Badge variant="violet" className="font-mono text-[10px]">
-                {dateRange.from} → {dateRange.to}
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {detectPeriod(dateRange.from, dateRange.to) === "custom" && (
+                <Badge variant="violet" className="font-mono text-[10px]">
+                  {dateRange.from} → {dateRange.to}
+                </Badge>
+              )}
+              <HelpGuideTrigger content={HELP_DASHBOARD} />
+            </div>
           </div>
           <PeriodSelector onCustom={() => setCustomOpen(true)} />
           <AnimatePresence>
@@ -720,7 +724,24 @@ export function TabDashboard() {
             label="Gasto total"
             value={m.spend}
             format={(v) => fmt.eur(v, { decimals: 0 })}
-            sub={`${Math.round(m.budgetPct)}% · ${fmt.eur(m.remaining, { decimals: 0 })} restante`}
+            sub={
+              <ExplainedMetric
+                explanation={
+                  <div>
+                    <strong>Gasto total</strong>
+                    <br />
+                    Suma del spend de todas las campañas (activas + pausadas que
+                    gastaron) en el rango seleccionado. Convertido a EUR si la
+                    cuenta opera en otra divisa.
+                    <br />
+                    <br />
+                    Target Julián · €{PLAN.budget.toLocaleString("es")} en {PLAN.totalDays} días.
+                  </div>
+                }
+              >
+                <span className="text-[10px]">{`${Math.round(m.budgetPct)}% · ${fmt.eur(m.remaining, { decimals: 0 })} restante`}</span>
+              </ExplainedMetric>
+            }
             tone="default"
             trend={spendSeries}
             badge={
@@ -802,7 +823,23 @@ export function TabDashboard() {
             label="CTR global"
             value={m.ctr}
             format={(v) => fmt.pct(v)}
-            sub="objetivo 1.5 – 2.5 %"
+            sub={
+              <ExplainedMetric
+                explanation={
+                  <div>
+                    <strong>Click-Through Rate (CTR)</strong>
+                    <br />
+                    clicks / impresiones × 100 · agregado de todas las campañas.
+                    <br />
+                    <br />
+                    Healthy range · 1.5%-4% (display). Por debajo de 1% indica
+                    creativo flojo o targeting mal calibrado.
+                  </div>
+                }
+              >
+                <span className="text-[10px]">objetivo 1.5 – 2.5 %</span>
+              </ExplainedMetric>
+            }
             tone={
               ctrTone(m.ctr) === "success"
                 ? "success"
@@ -817,7 +854,23 @@ export function TabDashboard() {
             label="CPM global"
             value={m.cpm}
             format={(v) => fmt.eur(v)}
-            sub="objetivo < €9"
+            sub={
+              <ExplainedMetric
+                explanation={
+                  <div>
+                    <strong>Costo por mil impresiones (CPM)</strong>
+                    <br />
+                    spend / impresiones × 1000.
+                    <br />
+                    <br />
+                    Target LATAM · &lt; €9. Si supera €9 indica subasta cara o
+                    audiencia muy estrecha. Por debajo de €3 es excelente.
+                  </div>
+                }
+              >
+                <span className="text-[10px]">objetivo &lt; €9</span>
+              </ExplainedMetric>
+            }
             tone={
               cpmTone(m.cpm) === "success"
                 ? "cyan"

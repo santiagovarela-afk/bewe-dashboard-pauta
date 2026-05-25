@@ -40,6 +40,7 @@ import {
 } from "@/lib/utils";
 import {
   computeMetrics,
+  computeMonthlyTotals,
   funnelCR,
   funnelIC,
   describeRange,
@@ -64,7 +65,7 @@ import { Reveal } from "@/components/fx/reveal";
 import { Badge } from "@/components/ui/badge";
 import { DailySummary } from "@/components/shared/daily-summary";
 import { ExplainedMetric } from "@/components/shared/explained-metric";
-import type { Campaign } from "@/lib/types";
+import type { Campaign, DateRange } from "@/lib/types";
 
 /** Plan B CID · MX_SERVICIOS_WEB_MAY26_CONVERSION (reemplazó al pixel-anómalo). */
 const PLAN_B_CID = "52567055064286";
@@ -121,6 +122,58 @@ function detectPeriod(from: string, to: string): PeriodId {
   if (from === monthStart && to === today) return "this_month";
   if (from === isoDaysAgo(6) && to === today) return "last_7d";
   return "custom";
+}
+
+interface PeriodLabel {
+  /** Identificador interno del periodo. */
+  id: PeriodId;
+  /** Etiqueta corta (UPPER) para chips de KPIs · ej "HOY", "7D", "MES", "RANGO". */
+  short: string;
+  /** Etiqueta larga para el banner del hero · ej "Hoy · 25 may". */
+  long: string;
+  /** Cantidad de días que cubre el rango (inclusivo from/to). */
+  rangeDays: number;
+}
+
+/** Formato corto humano para una fecha ISO (YYYY-MM-DD). */
+function fmtShortDate(iso: string): string {
+  try {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString("es", { day: "numeric", month: "short" });
+  } catch {
+    return iso;
+  }
+}
+
+/** Resuelve etiqueta corta + larga del periodo activo a partir del dateRange. */
+function getPeriodLabel(dateRange: DateRange): PeriodLabel {
+  const id = detectPeriod(dateRange.from, dateRange.to);
+  const fromDate = new Date(dateRange.from + "T00:00:00");
+  const toDate = new Date(dateRange.to + "T00:00:00");
+  const rangeDays = Math.max(
+    1,
+    Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1,
+  );
+  if (id === "today") {
+    return { id, short: "HOY", long: `Hoy · ${fmtShortDate(dateRange.from)}`, rangeDays };
+  }
+  if (id === "last_7d") {
+    return { id, short: "7D", long: "Últimos 7 días", rangeDays };
+  }
+  if (id === "this_month") {
+    return {
+      id,
+      short: "MES",
+      long: `${PLAN.monthLabel} · acumulado`,
+      rangeDays,
+    };
+  }
+  return {
+    id,
+    short: "RANGO",
+    long: `${fmtShortDate(dateRange.from)} → ${fmtShortDate(dateRange.to)}`,
+    rangeDays,
+  };
 }
 
 function PeriodSelector({ onCustom }: { onCustom: () => void }) {
@@ -370,28 +423,23 @@ export function TabDashboard() {
     [dateRange.from, dateRange.to],
   );
 
-  // Métricas del día de HOY · siempre, independientes del rango activo.
-  const todayMetrics = React.useMemo(() => {
-    const today = isoToday();
-    let spend = 0;
-    let evCR = 0;
-    let evIC = 0;
-    let impressions = 0;
-    let clicks = 0;
-    for (const row of daily) {
-      if (row.adsetId) continue;
-      if (row.date !== today) continue;
-      spend += row.spend;
-      evCR += row.evCompleteReg;
-      if (row.campaignId !== ANOMALY_CID) {
-        evIC += row.evInitCheckout;
-      }
-      impressions += row.impressions;
-      clicks += row.clicks;
-    }
-    const cpl = evCR > 0 ? spend / evCR : null;
-    return { spend, evCR, evIC, impressions, clicks, cpl };
-  }, [daily]);
+  // Etiqueta del periodo activo · usada por el hero + chips de KPIs.
+  const period = React.useMemo(() => getPeriodLabel(dateRange), [dateRange]);
+
+  // Totales del MES completo · NO dependen del dateRange filter.
+  // Sirven como contexto persistente debajo del big number.
+  const monthly = React.useMemo(
+    () => computeMonthlyTotals(daily, campaigns),
+    [daily, campaigns],
+  );
+
+  // Métricas del PERIODO activo · usa `m` (campaigns ya viene filtrado por dateRange).
+  // Esto reemplaza al viejo `todayMetrics` (que siempre era hoy).
+  const periodSpend = m.spend;
+  const periodLeads = m.totalConvCR;
+  const periodIC = m.totalConvIC;
+  const periodCPL: number | null = m.cptReg;
+
 
   // Plan B status · derivado del CID hardcoded · live.
   const planBLive = React.useMemo(() => {
@@ -519,66 +567,107 @@ export function TabDashboard() {
 
               <div className="mb-4">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--brand-lime))] mb-1.5">
-                  Hoy · {new Date().toLocaleDateString("es", { day: "numeric", month: "short" })}
+                  {period.long}
                 </div>
                 <h1 className="font-display font-bold tracking-[-0.025em] text-3xl md:text-5xl leading-[1.02] text-balance">
-                  <span className="text-aurora">{fmt.eur(todayMetrics.spend, { decimals: 0 })}</span>{" "}
+                  <span className="text-aurora">{fmt.eur(periodSpend, { decimals: 0 })}</span>{" "}
                   gastados ·{" "}
-                  <span className="text-[hsl(var(--brand-lime))]">{todayMetrics.evCR}</span>{" "}
-                  lead{todayMetrics.evCR === 1 ? "" : "s"}
+                  <span className="text-[hsl(var(--brand-lime))]">{periodLeads}</span>{" "}
+                  lead{periodLeads === 1 ? "" : "s"}
                 </h1>
               </div>
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm md:text-base text-muted-foreground">
-                <span className="text-foreground/80 font-semibold">Mes:</span>
-                <span>
-                  <span className="font-mono text-foreground">
-                    {fmt.eur(m.spend, { decimals: 0 })}
-                  </span>{" "}
-                  / €{PLAN.budget.toLocaleString("es")}
-                </span>
-                <span className="text-muted-foreground/40">·</span>
-                <span>
-                  <span className="font-mono text-foreground">{m.totalConvCR}</span> leads totales
-                </span>
-                <span className="text-muted-foreground/40">·</span>
-                <span>
-                  CPL{" "}
-                  <span className="font-mono text-foreground">
-                    {m.cptReg === null ? "—" : fmt.eur(m.cptReg)}
+              {/* Contexto del MES · siempre visible, NO depende del filter.
+                  Cuando el periodo es "this_month" mostramos el avance del plan
+                  en su lugar para no repetir información. */}
+              {period.id === "this_month" ? (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm md:text-base text-muted-foreground">
+                  <span className="text-foreground/80 font-semibold">Plan:</span>
+                  <span>
+                    día{" "}
+                    <span className="font-mono text-foreground">{monthly.daysElapsed}</span> de{" "}
+                    <span className="font-mono text-foreground">{PLAN.totalDays}</span>
                   </span>
-                </span>
-              </div>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>
+                    <span className="font-mono text-foreground">
+                      {Math.round(monthly.budgetPct)}%
+                    </span>{" "}
+                    del budget
+                  </span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>
+                    CPL{" "}
+                    <span className="font-mono text-foreground">
+                      {monthly.cplCR > 0 ? fmt.eur(monthly.cplCR) : "—"}
+                    </span>
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm md:text-base text-muted-foreground">
+                  <span className="text-foreground/80 font-semibold">Mes:</span>
+                  <span>
+                    <span className="font-mono text-foreground">
+                      {fmt.eur(monthly.spend, { decimals: 0 })}
+                    </span>{" "}
+                    / €{PLAN.budget.toLocaleString("es")}
+                  </span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>
+                    <span className="font-mono text-foreground">{monthly.leads}</span> leads totales
+                  </span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>
+                    CPL mes{" "}
+                    <span className="font-mono text-foreground">
+                      {monthly.cplCR > 0 ? fmt.eur(monthly.cplCR) : "—"}
+                    </span>
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <HeroStat
-                label="Hoy · Gasto"
-                value={todayMetrics.spend}
+                label={`${period.short} · Gasto`}
+                value={periodSpend}
                 format={(v) => fmt.eur(v, { decimals: 0 })}
-                sub={`${
-                  m.spend > 0 ? Math.round((todayMetrics.spend / m.spend) * 100) : 0
-                }% del mes`}
+                sub={(() => {
+                  // % del BUDGET (no del mes-acumulado) · evita "100% del mes"
+                  // cuando filter = Hoy. Para Hoy/Custom mostramos % del budget;
+                  // para 7d el delta vs 7d anteriores se omite por falta de data
+                  // contigua confiable · fallback a % del budget también.
+                  if (period.id === "this_month") {
+                    const perDay = monthly.daysElapsed > 0 ? monthly.spend / monthly.daysElapsed : 0;
+                    return `${monthly.daysElapsed} días · ${fmt.eur(perDay, { decimals: 0 })}/día`;
+                  }
+                  if (period.id === "custom") {
+                    return `${period.rangeDays} día${period.rangeDays === 1 ? "" : "s"}`;
+                  }
+                  const pctBudget =
+                    PLAN.budget > 0 ? Math.round((periodSpend / PLAN.budget) * 100) : 0;
+                  return `${pctBudget}% del budget mes`;
+                })()}
                 tone="lime"
               />
               <HeroStat
-                label="Hoy · Leads"
-                value={todayMetrics.evCR}
+                label={`${period.short} · Leads`}
+                value={periodLeads}
                 format={(v) => fmt.int(v)}
-                sub={`mes ${m.totalConvCR} · objetivo 1.350`}
+                sub={`mes ${monthly.leads} · objetivo 1.350`}
               />
               <HeroStat
-                label="Hoy · CPL"
-                value={todayMetrics.cpl ?? 0}
-                format={(v) => (todayMetrics.cpl === null ? "sin leads" : fmt.eur(v))}
-                sub={`mes ${m.cptReg === null ? "—" : fmt.eur(m.cptReg)} · obj. ≤ €${PLAN.cpt.target}`}
+                label={`${period.short} · CPL`}
+                value={periodCPL ?? 0}
+                format={(v) => (periodCPL === null ? "sin leads" : fmt.eur(v))}
+                sub={`mes ${monthly.cplCR > 0 ? fmt.eur(monthly.cplCR) : "—"} · obj. ≤ €${PLAN.cpt.target}`}
                 tone="cyan"
               />
               <HeroStat
-                label="Hoy · IC"
-                value={todayMetrics.evIC}
+                label={`${period.short} · IC`}
+                value={periodIC}
                 format={(v) => fmt.int(v)}
-                sub={`mes ${m.totalConvIC} · excluye anomalía`}
+                sub={`mes ${monthly.ic} · excluye anomalía`}
               />
             </div>
           </div>

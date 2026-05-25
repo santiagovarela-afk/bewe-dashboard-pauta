@@ -1,7 +1,10 @@
 import type { Campaign, DailyRow, DateRange } from "./types";
 import { PLAN } from "./config";
-import { CPT_THRESHOLDS } from "./utils";
+import { CPT_THRESHOLDS, daysSince } from "./utils";
 import { isActive } from "./campaign-metadata";
+
+/** C3 (cid `52551556895286`) tiene pixel roto · excluida de IC. */
+const ANOMALY_CID = "52551556895286";
 
 export interface DashboardMetrics {
   spend: number;
@@ -62,6 +65,95 @@ export function computeMetrics(campaigns: Campaign[]): DashboardMetrics {
   };
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Totales del MES completo · independientes del dateRange filter
+ *  Suma TODOS los días desde PLAN.launchISO hasta hoy.
+ *  C3 (cid 52551556895286) queda excluida del cómputo de IC por anomalía pixel.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+export interface MonthlyTotals {
+  spend: number;
+  leads: number;
+  ic: number;
+  trials: number;
+  subs: number;
+  cplCR: number;
+  cpicIC: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  budgetPct: number;
+}
+
+/**
+ * Totales acumulados del mes completo · NO depende del dateRange filter.
+ * Se calculan a partir de `daily[]` (rows campaign-level · sin adsetId) entre
+ * `PLAN.launchISO` y hoy. Si `daily.length === 0`, cae al agregado de `campaigns`
+ * como fallback para que el cliente nunca reciba ceros sin razón.
+ */
+export function computeMonthlyTotals(
+  daily: DailyRow[],
+  campaigns: Campaign[],
+): MonthlyTotals {
+  const launch = PLAN.launchISO.slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+
+  let spend = 0;
+  let leads = 0;
+  let ic = 0;
+  let trials = 0;
+  let subs = 0;
+  let spendCR = 0;
+  let spendIC = 0;
+  let usedDaily = false;
+
+  for (const row of daily) {
+    if (row.adsetId) continue;
+    if (row.date < launch || row.date > today) continue;
+    usedDaily = true;
+    spend += row.spend;
+    leads += row.evCompleteReg;
+    if (row.campaignId !== ANOMALY_CID) {
+      ic += row.evInitCheckout;
+    }
+    trials += row.evStartTrial;
+    subs += row.evSubscribe;
+    // Separar gasto por evento de la campaña asociada (para CPL/CPIC limpios)
+    const camp = campaigns.find((c) => c.cid === row.campaignId);
+    if (camp?.event === "CompleteRegistration") {
+      spendCR += row.spend;
+    } else if (camp?.event === "InitiateCheckout" && row.campaignId !== ANOMALY_CID) {
+      spendIC += row.spend;
+    }
+  }
+
+  // Fallback: si no había daily breakdown · suma directa de campaigns
+  if (!usedDaily) {
+    for (const c of campaigns) {
+      spend += c.spend;
+      leads += c.evCompleteReg;
+      if (c.cid !== ANOMALY_CID) ic += c.evInitCheckout;
+      trials += c.evStartTrial;
+      subs += c.evSubscribe;
+      if (c.event === "CompleteRegistration") spendCR += c.spend;
+      else if (c.event === "InitiateCheckout" && c.cid !== ANOMALY_CID) spendIC += c.spend;
+    }
+  }
+
+  const elapsed = daysSince(PLAN.launchISO, PLAN.totalDays);
+  return {
+    spend,
+    leads,
+    ic,
+    trials,
+    subs,
+    cplCR: leads > 0 ? spendCR / leads : 0,
+    cpicIC: ic > 0 ? spendIC / ic : 0,
+    daysElapsed: elapsed,
+    daysRemaining: Math.max(0, PLAN.totalDays - elapsed),
+    budgetPct: PLAN.budget > 0 ? (spend / PLAN.budget) * 100 : 0,
+  };
+}
+
 /** Fake trend generator using the current value as the peak — looks alive without real history.
  *  DEPRECATED · solo se mantiene en uso para tab-seo (que ya está marcada como demo).
  *  Para datos reales usar `realDailySeries`.
@@ -95,8 +187,6 @@ interface DailyAccum {
   convIC: number;
 }
 
-/** C3 (cid `52551556895286`) tiene pixel roto · excluida de IC. */
-const ANOMALY_CID = "52551556895286";
 
 /**
  * Devuelve la serie real por día para una métrica dada, dentro del rango activo.

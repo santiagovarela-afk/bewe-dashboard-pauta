@@ -12,6 +12,7 @@ import type {
 import { SEED_ADSETS, SEED_CAMPAIGNS, SEED_SNAPSHOT_LABEL } from "./seed-data";
 import { PLAN } from "./config";
 import { CPT_THRESHOLDS, daysSince } from "./utils";
+import { CAMPAIGN_LIFECYCLE } from "./campaign-metadata";
 
 export type DatePreset = "last_3d" | "last_7d" | "last_14d" | "this_month";
 
@@ -486,6 +487,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
       // Mapa de campaign_id → status real (ACTIVE / PAUSED / DELETED)
       const statusByCid = new Map<string, string>();
+      // Mapa de campaign_id → nombre real (para resolver campañas que solo
+      // aparecen en /campaigns pero no en insights · ej. nuevas con €0 spend)
+      const nameByCid = new Map<string, string>();
       // Mapa de campaign_id → budget real (daily/lifetime en EUR) + flag CBO
       const campaignBudgetByCid = new Map<
         string,
@@ -494,11 +498,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       if (Array.isArray(statusResp?.data)) {
         for (const c of statusResp.data as Array<{
           id: string;
+          name?: string;
           effective_status?: string;
           status?: string;
           daily_budget?: string;
           lifetime_budget?: string;
         }>) {
+          if (c.name) nameByCid.set(c.id, c.name);
           // effective_status es lo que Meta realmente reporta (ej. CAMPAIGN_PAUSED).
           // Normalizamos a ACTIVE/PAUSED/DELETED.
           const raw = c.effective_status || c.status || "";
@@ -717,6 +723,48 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             isCBO,
           });
         }
+      }
+
+      // Agregar campañas del CAMPAIGN_LIFECYCLE que no devolvió Meta API
+      // pero existen en el ad account (ej. Remarketing con €0 spend que no
+      // aparece en insights). Las identificamos via `nameByCid` que tiene
+      // todas las campañas del account (status query).
+      for (const [cid, lifecycle] of Object.entries(CAMPAIGN_LIFECYCLE)) {
+        if (nextCampaigns.find((c) => c.cid === cid)) continue;
+        const name = nameByCid.get(cid);
+        if (!name) continue; // si Meta no la devuelve en /campaigns, no la agregamos
+        if (!isRelevantToPlanMonth(name)) continue;
+        const inferred = inferCampaignMetadata(name, cid);
+        const campBudget = campaignBudgetByCid.get(cid);
+        const adsetBudget = adsetBudgetByCampaign.get(cid);
+        const isCBO = (campBudget?.dailyBudgetEur ?? 0) > 0;
+        const liveDailyBudget = isCBO
+          ? (campBudget?.dailyBudgetEur ?? 0)
+          : (adsetBudget?.dailyTotal ?? 0);
+        const liveLifetimeBudget =
+          campBudget?.lifetimeBudgetEur ?? adsetBudget?.lifetimeTotal ?? null;
+        nextCampaigns.push({
+          ...inferred,
+          status: statusByCid.get(cid) || (lifecycle.state === "active" ? "ACTIVE" : "PAUSED"),
+          spend: 0,
+          impressions: 0,
+          clicks: 0,
+          ctr: 0,
+          cpm: 0,
+          reach: 0,
+          freq: 0,
+          evCompleteReg: 0,
+          evInitCheckout: 0,
+          evContact: 0,
+          evStartTrial: 0,
+          evSubscribe: 0,
+          conversions: 0,
+          cpt: null,
+          flag: null,
+          liveDailyBudget,
+          liveLifetimeBudget,
+          isCBO,
+        });
       }
 
       setRawCampaigns(nextCampaigns);

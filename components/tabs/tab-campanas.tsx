@@ -129,7 +129,7 @@ function computeTrail(campaignId: string, event: Campaign["event"], daily: Daily
 }
 
 export function TabCampanas() {
-  const { campaigns, adsets, daysElapsed, daily } = useDashboard();
+  const { campaigns, rawCampaigns, adsets, daysElapsed, daily } = useDashboard();
   const [selected, setSelected] = React.useState<string | null>(null);
   const [sortBy, setSortBy] = React.useState<SortKey>("spend");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
@@ -194,8 +194,11 @@ export function TabCampanas() {
     }
   }
 
+  // Tabla "Estado completo" usa rawCampaigns (acumulado del mes) en lugar
+  // de campaigns (filtrado por dateRange). Las pausadas muestran spend real
+  // del mes en vez de €0 cuando el filtro es "Hoy" o similar.
   const sorted = React.useMemo(() => {
-    const arr = [...campaigns];
+    const arr = [...rawCampaigns];
     arr.sort((a, b) => {
       let av: number | string = 0;
       let bv: number | string = 0;

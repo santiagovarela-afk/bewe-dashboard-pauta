@@ -223,3 +223,63 @@ export async function fetchTrialsBySource(days: number = 28): Promise<Array<{ so
   const summary = await fetchTrials({ days });
   return summary.bySource;
 }
+
+/**
+ * Fetchea múltiples eventos del funnel desde GA4 en una sola query.
+ * Acepta array de event names y devuelve totales + daily breakdown por cada uno.
+ */
+export interface MultiEventResult {
+  eventName: string;
+  total: number;
+  daily: Array<{ date: string; count: number }>;
+}
+
+export async function fetchMultipleEvents(
+  eventNames: string[],
+  days: number = 28,
+): Promise<MultiEventResult[]> {
+  if (eventNames.length === 0) return [];
+  const propertyId = getPropertyId();
+  const client = getGA4Client();
+  const { startDate, endDate } = buildDateRange(days);
+
+  const response = await client.properties.runReport({
+    property: `properties/${propertyId}`,
+    requestBody: {
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: "date" }, { name: "eventName" }],
+      metrics: [{ name: "eventCount" }],
+      dimensionFilter: {
+        filter: {
+          fieldName: "eventName",
+          inListFilter: { values: eventNames },
+        },
+      },
+    },
+  });
+
+  // Agrupar por eventName
+  const byEvent = new Map<string, MultiEventResult>();
+  for (const name of eventNames) {
+    byEvent.set(name, { eventName: name, total: 0, daily: [] });
+  }
+
+  for (const row of response.data.rows ?? []) {
+    const rawDate = row.dimensionValues?.[0]?.value;
+    const eventName = row.dimensionValues?.[1]?.value;
+    const count = safeInt(row.metricValues?.[0]?.value);
+    if (typeof rawDate !== "string" || typeof eventName !== "string") continue;
+
+    const entry = byEvent.get(eventName);
+    if (!entry) continue;
+    entry.total += count;
+    entry.daily.push({ date: normalizeDate(rawDate), count });
+  }
+
+  // ordenar daily por fecha asc
+  for (const entry of byEvent.values()) {
+    entry.daily.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  return Array.from(byEvent.values());
+}

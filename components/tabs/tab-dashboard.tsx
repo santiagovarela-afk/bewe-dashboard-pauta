@@ -19,9 +19,17 @@ import {
   Target,
   ChevronRight,
   X,
+  CreditCard,
+  MessageCircle,
+  KeyRound,
+  Banknote,
+  UserPlus,
+  Tag,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
+import { useFunnelEvents } from "@/lib/hooks/use-funnel-events";
 import { PLAN } from "@/lib/config";
+import { FUNNEL_EVENTS, type FunnelStage } from "@/lib/event-mapping";
 import {
   cn,
   fmt,
@@ -691,13 +699,31 @@ export function TabDashboard() {
         <DailySummary />
       </Reveal>
 
+      {/* FUNNEL SAAS COMPLETO · journey impresión → suscripción */}
+      <section>
+        <SectionHeader
+          title="Embudo SaaS completo · journey del usuario"
+          sub="Impresión → Click → Pricing → WhatsApp → Registro → Trial → Subscripción · Meta CAPI + GA4"
+        />
+        <SaasJourneyFunnel />
+      </section>
+
       {/* FUNNEL CR · GRANDE · clickeable */}
       <section>
         <SectionHeader
-          title="Embudo Completar Registro · adquisición"
+          title="Embudo Completar Registro · campañas CR"
           sub="Impresiones → Clicks → Landing → Lead · clickea cada paso para ver detalle por campaña"
         />
         <BigFunnelCR />
+      </section>
+
+      {/* TRIAL & SUBSCRIPTION KPIs · costo por conversión final */}
+      <section>
+        <SectionHeader
+          title="Trial & Subscripción · costo de conversión"
+          sub="Eventos del fondo del funnel · requieren Meta CAPI o GA4 con StartTrial / Subscribe"
+        />
+        <TrialSubscriptionKpis />
       </section>
 
       {/* FUNNEL IC */}
@@ -1554,6 +1580,427 @@ function TimelineCard({
             </motion.div>
           );
         })}
+      </div>
+    </TextureCard>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  SaasJourneyFunnel · funnel completo del viaje SaaS
+ *  Combina Meta CAPI (impresiones, clicks, lead, IC, CR, trial, subscribe)
+ *  con GA4 (pricing_page_visited, password_created, sign_up, etc).
+ *  Etapas sin data se renderizan en gris con "Analytics pendiente".
+ * ─────────────────────────────────────────────────────────────────────── */
+
+interface JourneyStepData {
+  stage: FunnelStage;
+  label: string;
+  value: number | null;
+  source: "meta" | "ga4" | "both" | "none";
+  Icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  isConversion: boolean;
+}
+
+const STAGE_ICONS: Record<FunnelStage, React.ComponentType<{ className?: string }>> = {
+  impression: Eye,
+  click: MousePointerClick,
+  pricing_visit: Tag,
+  whatsapp: MessageCircle,
+  register_intent: CreditCard,
+  signup: UserPlus,
+  password: KeyRound,
+  trial: FlaskConical,
+  subscription: Banknote,
+};
+
+const STAGE_COLORS: Record<FunnelStage, string> = {
+  impression: "var(--brand-violet)",
+  click: "var(--brand-cyan)",
+  pricing_visit: "var(--info)",
+  whatsapp: "var(--brand-lime)",
+  register_intent: "var(--brand-cyan)",
+  signup: "var(--brand-lime)",
+  password: "var(--success)",
+  trial: "var(--brand-ember)",
+  subscription: "var(--brand-violet)",
+};
+
+function SaasJourneyFunnel() {
+  const { campaigns } = useDashboard();
+  const { events: ga4Events, configured: ga4Configured, loading: ga4Loading } =
+    useFunnelEvents(28);
+
+  // Totales Meta agregados sobre todas las campañas del rango activo.
+  const metaTotals = React.useMemo(() => {
+    let impressions = 0;
+    let clicks = 0;
+    let lead = 0;
+    let initiateCheckout = 0;
+    let completeReg = 0;
+    let startTrial = 0;
+    let subscribe = 0;
+    for (const c of campaigns) {
+      impressions += c.impressions;
+      clicks += c.clicks;
+      lead += c.evContact;
+      initiateCheckout += c.evInitCheckout;
+      completeReg += c.evCompleteReg;
+      startTrial += c.evStartTrial;
+      subscribe += c.evSubscribe;
+    }
+    return { impressions, clicks, lead, initiateCheckout, completeReg, startTrial, subscribe };
+  }, [campaigns]);
+
+  // Construir cada step del journey · prioriza Meta sobre GA4 para CAPI events
+  const steps = React.useMemo<JourneyStepData[]>(() => {
+    function resolve(stage: FunnelStage): { value: number | null; source: JourneyStepData["source"] } {
+      const mapping = FUNNEL_EVENTS.find((e) => e.stage === stage);
+      if (!mapping) return { value: null, source: "none" };
+
+      let metaValue: number | null = null;
+      if (stage === "impression") metaValue = metaTotals.impressions;
+      else if (stage === "click") metaValue = metaTotals.clicks;
+      else if (stage === "whatsapp") metaValue = metaTotals.lead;
+      else if (stage === "register_intent") metaValue = metaTotals.initiateCheckout;
+      else if (stage === "signup") metaValue = metaTotals.completeReg;
+      else if (stage === "trial") metaValue = metaTotals.startTrial;
+      else if (stage === "subscription") metaValue = metaTotals.subscribe;
+
+      const ga4Value =
+        mapping.ga4Event && ga4Configured === true
+          ? (ga4Events[mapping.ga4Event] ?? 0)
+          : null;
+
+      const metaActive = metaValue !== null && metaValue > 0;
+      const ga4Active = ga4Value !== null && ga4Value > 0;
+
+      if (metaActive && ga4Active) {
+        return { value: Math.max(metaValue ?? 0, ga4Value ?? 0), source: "both" };
+      }
+      if (metaActive) return { value: metaValue, source: "meta" };
+      if (ga4Active) return { value: ga4Value, source: "ga4" };
+
+      // Sin data positiva · si la etapa solo es GA4 y GA4 está config con 0 eventos · mostrar 0
+      if (metaValue !== null) return { value: metaValue, source: "meta" };
+      if (mapping.ga4Event && ga4Configured === true) return { value: 0, source: "ga4" };
+      return { value: null, source: "none" };
+    }
+
+    return FUNNEL_EVENTS.map((mapping) => {
+      const { value, source } = resolve(mapping.stage);
+      return {
+        stage: mapping.stage,
+        label: mapping.label,
+        value,
+        source,
+        Icon: STAGE_ICONS[mapping.stage],
+        color: STAGE_COLORS[mapping.stage],
+        isConversion: mapping.isConversion,
+      };
+    });
+  }, [metaTotals, ga4Events, ga4Configured]);
+
+  const maxValue = Math.max(
+    ...steps.map((s) => (s.value !== null ? s.value : 0)),
+    1,
+  );
+
+  return (
+    <TextureCard className="p-6">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            Journey completo · {FUNNEL_EVENTS.length} etapas
+          </div>
+          <div className="font-mono font-bold text-2xl tabular text-foreground leading-tight mt-1">
+            <span className="text-aurora">{fmt.int(metaTotals.impressions)}</span>{" "}
+            <span className="text-muted-foreground font-normal text-base">impresiones</span>
+            {" → "}
+            <span className="text-[hsl(var(--brand-lime))]">
+              {fmt.int(metaTotals.completeReg)}
+            </span>{" "}
+            <span className="text-muted-foreground font-normal text-base">registros</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {ga4Loading ? (
+            <Badge variant="outline">GA4 cargando…</Badge>
+          ) : ga4Configured ? (
+            <Badge variant="success">GA4 conectado</Badge>
+          ) : (
+            <Badge variant="warning">GA4 pendiente</Badge>
+          )}
+          <Badge variant="violet">Meta CAPI</Badge>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {steps.map((step, i) => {
+          const prev = i > 0 ? steps[i - 1] : null;
+          const conv =
+            prev && prev.value !== null && prev.value > 0 && step.value !== null
+              ? (step.value / prev.value) * 100
+              : null;
+          const widthPct =
+            step.value !== null ? Math.max(2, (step.value / maxValue) * 100) : 0;
+          const isPending = step.value === null;
+
+          return (
+            <motion.div
+              key={step.stage}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.04, duration: 0.4 }}
+              className={cn(
+                "relative rounded-xl border px-4 py-3 transition-colors",
+                isPending
+                  ? "border-border/30 bg-card/10 opacity-70"
+                  : "border-border/60 bg-card/30 hover:bg-card/50",
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="size-9 shrink-0 grid place-items-center rounded-lg border"
+                  style={{
+                    background: isPending
+                      ? "hsl(var(--muted) / 0.2)"
+                      : `hsl(${step.color} / 0.12)`,
+                    borderColor: isPending
+                      ? "hsl(var(--muted) / 0.3)"
+                      : `hsl(${step.color} / 0.35)`,
+                    color: isPending ? "hsl(var(--muted-foreground))" : `hsl(${step.color})`,
+                  }}
+                >
+                  <step.Icon className="size-4" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-[12px] font-semibold leading-tight">
+                      {step.label}
+                    </span>
+                    {step.isConversion && !isPending && (
+                      <Badge variant="lime" className="text-[9px] py-0">
+                        conversión
+                      </Badge>
+                    )}
+                    <SourceBadge source={step.source} />
+                  </div>
+
+                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${widthPct}%` }}
+                      transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
+                      className="h-full"
+                      style={{
+                        background: isPending
+                          ? "hsl(var(--muted) / 0.3)"
+                          : `linear-gradient(90deg, hsl(${step.color}), hsl(${step.color} / 0.4))`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0 min-w-[110px]">
+                  {isPending ? (
+                    <div className="text-[11px] italic text-muted-foreground/60">
+                      Analytics pendiente
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        className="font-mono font-bold text-[18px] tabular leading-none"
+                        style={{ color: `hsl(${step.color})` }}
+                      >
+                        <AnimatedNumber value={step.value ?? 0} format={fmt.int} />
+                      </div>
+                      {conv !== null && (
+                        <div className="text-[9px] text-muted-foreground font-mono mt-1">
+                          {conv.toFixed(1)}% vs anterior
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </TextureCard>
+  );
+}
+
+function SourceBadge({ source }: { source: JourneyStepData["source"] }) {
+  if (source === "none") {
+    return (
+      <span className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground/50">
+        sin fuente
+      </span>
+    );
+  }
+  if (source === "both") {
+    return (
+      <span className="text-[9px] uppercase tracking-[0.1em] text-[hsl(var(--brand-violet))] font-semibold">
+        Meta + GA4
+      </span>
+    );
+  }
+  if (source === "meta") {
+    return (
+      <span className="text-[9px] uppercase tracking-[0.1em] text-[hsl(var(--brand-violet))]/80">
+        Meta CAPI
+      </span>
+    );
+  }
+  return (
+    <span className="text-[9px] uppercase tracking-[0.1em] text-[hsl(var(--brand-cyan))]/80">
+      GA4
+    </span>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  TrialSubscriptionKpis · KPIs costo por trial / subscription
+ *  Combina datos de Meta CAPI (start_trial, subscribe) con GA4
+ *  (trial_started, subscription_converted). Muestra estado si no hay data.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+function TrialSubscriptionKpis() {
+  const { campaigns } = useDashboard();
+  const { events: ga4Events, configured: ga4Configured } = useFunnelEvents(28);
+
+  const totals = React.useMemo(() => {
+    let spend = 0;
+    let metaTrials = 0;
+    let metaSubs = 0;
+    for (const c of campaigns) {
+      spend += c.spend;
+      metaTrials += c.evStartTrial;
+      metaSubs += c.evSubscribe;
+    }
+    const ga4Trials =
+      ga4Configured === true ? (ga4Events["trial_started"] ?? 0) : 0;
+    const ga4Subs =
+      ga4Configured === true
+        ? (ga4Events["subscription_converted"] ?? 0)
+        : 0;
+    const trials = Math.max(metaTrials, ga4Trials);
+    const subs = Math.max(metaSubs, ga4Subs);
+    return {
+      spend,
+      trials,
+      subs,
+      cpTrial: trials > 0 ? spend / trials : null,
+      cpSub: subs > 0 ? spend / subs : null,
+      trialSource:
+        metaTrials > 0 && ga4Trials > 0
+          ? "Meta + GA4"
+          : metaTrials > 0
+            ? "Meta CAPI"
+            : ga4Trials > 0
+              ? "GA4"
+              : "sin data",
+      subSource:
+        metaSubs > 0 && ga4Subs > 0
+          ? "Meta + GA4"
+          : metaSubs > 0
+            ? "Meta CAPI"
+            : ga4Subs > 0
+              ? "GA4"
+              : "sin data",
+    };
+  }, [campaigns, ga4Events, ga4Configured]);
+
+  return (
+    <div className="grid sm:grid-cols-2 gap-3">
+      <ConversionKpi
+        label="Costo por Trial"
+        Icon={FlaskConical}
+        color="var(--brand-ember)"
+        value={totals.cpTrial}
+        count={totals.trials}
+        countLabel="trials"
+        source={totals.trialSource}
+        empty="Sin trials registrados aún · necesita evento start_trial (Meta) o trial_started (GA4)"
+      />
+      <ConversionKpi
+        label="Costo por Subscription"
+        Icon={Banknote}
+        color="var(--brand-violet)"
+        value={totals.cpSub}
+        count={totals.subs}
+        countLabel="suscripciones"
+        source={totals.subSource}
+        empty="Sin subscriptions registradas aún · necesita evento subscribe (Meta) o subscription_converted (GA4)"
+      />
+    </div>
+  );
+}
+
+function ConversionKpi({
+  label,
+  Icon,
+  color,
+  value,
+  count,
+  countLabel,
+  source,
+  empty,
+}: {
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  value: number | null;
+  count: number;
+  countLabel: string;
+  source: string;
+  empty: string;
+}) {
+  const hasData = value !== null && count > 0;
+  return (
+    <TextureCard className="p-5">
+      <div className="flex items-start gap-3 mb-3">
+        <div
+          className="size-10 shrink-0 grid place-items-center rounded-lg border"
+          style={{
+            background: hasData ? `hsl(${color} / 0.12)` : "hsl(var(--muted) / 0.2)",
+            borderColor: hasData ? `hsl(${color} / 0.4)` : "hsl(var(--muted) / 0.3)",
+            color: hasData ? `hsl(${color})` : "hsl(var(--muted-foreground))",
+          }}
+        >
+          <Icon className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            {label}
+          </div>
+          {hasData ? (
+            <>
+              <div
+                className="font-mono font-bold text-3xl tabular leading-none mt-1"
+                style={{ color: `hsl(${color})` }}
+              >
+                {fmt.eur(value ?? 0)}
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-2">
+                {fmt.int(count)} {countLabel} ·{" "}
+                <span className="text-foreground/80">{source}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="font-mono font-bold text-xl tabular leading-tight mt-1 text-muted-foreground/80">
+                —
+              </div>
+              <p className="text-[11px] text-muted-foreground/70 mt-1.5 leading-relaxed">
+                {empty}
+              </p>
+            </>
+          )}
+        </div>
       </div>
     </TextureCard>
   );

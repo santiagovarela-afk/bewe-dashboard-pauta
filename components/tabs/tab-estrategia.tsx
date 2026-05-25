@@ -43,6 +43,7 @@ import { CampaignExpandableCard } from "@/components/estrategia/campaign-expanda
 import { CountryPerformance } from "@/components/estrategia/country-performance";
 import { JunioPlan } from "@/components/estrategia/junio-plan";
 import { PeriodToggle } from "@/components/shared/period-toggle";
+import { EventsTrackingTable } from "@/components/shared/events-tracking-table";
 import type { Campaign, DailyRow } from "@/lib/types";
 
 type ProjBase = "3d" | "7d" | "all";
@@ -382,6 +383,17 @@ function ActualStrategy({
         />
         <Reveal>
           <ProjectionCard />
+        </Reveal>
+      </section>
+
+      {/* Eventos rastreados · mapeo del funnel SaaS */}
+      <section>
+        <SectionHeader
+          title="Eventos rastreados"
+          sub="Mapeo del funnel SaaS · GA4 + Meta CAPI · sin Posthog"
+        />
+        <Reveal>
+          <EventsTrackingTable />
         </Reveal>
       </section>
     </div>

@@ -41,6 +41,8 @@ export const SEED_CAMPAIGNS: Campaign[] = Object.values(CAMPAIGN_MAP).map((c) =>
   evContact: 0,
   evInitCheckout: 0,
   evCompleteReg: 0,
+  evStartTrial: 0,
+  evSubscribe: 0,
 }));
 
 /** Adsets · vacío en repo público · se enriquece con API. */

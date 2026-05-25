@@ -21,6 +21,9 @@ export interface Campaign {
   evContact: number;
   evInitCheckout: number;
   evCompleteReg: number;
+  /** Eventos Meta CAPI extra del funnel SaaS · vienen del action_type de Meta API */
+  evStartTrial: number;
+  evSubscribe: number;
   /** Daily budget REAL desde Meta API en EUROS. Suma de adsets si la campaña no usa CBO. */
   liveDailyBudget?: number;
   /** Lifetime budget REAL desde Meta API en EUROS. null si la campaña usa daily_budget. */
@@ -78,6 +81,8 @@ export interface DailyRow {
   evContact: number;
   evInitCheckout: number;
   evCompleteReg: number;
+  evStartTrial: number;
+  evSubscribe: number;
 }
 
 export type ThemeMode = "dark" | "light";

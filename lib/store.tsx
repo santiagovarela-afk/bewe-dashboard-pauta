@@ -75,9 +75,12 @@ const Ctx = React.createContext<DashboardState | null>(null);
  */
 const ACTION_KEYS = {
   link_click: "link_click",
-  contact: "lead",
+  contact: "lead", // se mantiene compatible con el legacy "Contact"
+  contactWhatsapp: "contact_whatsapp", // GA4 + Meta Contact alternativo
   initCheckout: "initiate_checkout",
   completeReg: "complete_registration",
+  startTrial: "start_trial",
+  subscribe: "subscribe",
 } as const;
 
 function getAction(actions: Array<{ action_type: string; value: string }> | undefined, type: string) {
@@ -142,6 +145,8 @@ function inferCampaignMetadata(campaignName: string, cid: string): Campaign {
     evContact: 0,
     evInitCheckout: 0,
     evCompleteReg: 0,
+    evStartTrial: 0,
+    evSubscribe: 0,
   };
 }
 
@@ -190,7 +195,7 @@ function aggregateCampaigns(
     if (!rows.length) {
       // si no hay rows en el rango, dejamos las métricas en 0 PERO
       // preservamos status (PAUSED/ACTIVE) y meta del seed/API
-      return { ...c, spend: 0, impressions: 0, clicks: 0, reach: 0, ctr: 0, cpm: 0, freq: 0, evContact: 0, evInitCheckout: 0, evCompleteReg: 0, conversions: 0, cpt: null };
+      return { ...c, spend: 0, impressions: 0, clicks: 0, reach: 0, ctr: 0, cpm: 0, freq: 0, evContact: 0, evInitCheckout: 0, evCompleteReg: 0, evStartTrial: 0, evSubscribe: 0, conversions: 0, cpt: null };
     }
     const spend = rows.reduce((s, r) => s + r.spend, 0);
     const impressions = rows.reduce((s, r) => s + r.impressions, 0);
@@ -199,6 +204,8 @@ function aggregateCampaigns(
     const evCR = rows.reduce((s, r) => s + r.evCompleteReg, 0);
     const evIC = rows.reduce((s, r) => s + r.evInitCheckout, 0);
     const evCT = rows.reduce((s, r) => s + r.evContact, 0);
+    const evST = rows.reduce((s, r) => s + r.evStartTrial, 0);
+    const evSB = rows.reduce((s, r) => s + r.evSubscribe, 0);
     const conv = c.event === "CompleteRegistration" ? evCR : evIC;
     const cpt = conv > 0 ? +(spend / conv).toFixed(2) : null;
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
@@ -225,6 +232,8 @@ function aggregateCampaigns(
       evContact: evCT,
       evInitCheckout: evIC,
       evCompleteReg: evCR,
+      evStartTrial: evST,
+      evSubscribe: evSB,
       conversions: conv,
       cpt,
       flag,
@@ -548,6 +557,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         const evCR = getAction(row.actions, ACTION_KEYS.completeReg);
         const evIC = getAction(row.actions, ACTION_KEYS.initCheckout);
         const evCT = getAction(row.actions, ACTION_KEYS.contact);
+        const evStartTrial = getAction(row.actions, ACTION_KEYS.startTrial);
+        const evSubscribe = getAction(row.actions, ACTION_KEYS.subscribe);
         const conv = inferred.event === "CompleteRegistration" ? evCR : evIC;
         const spend = parseFloat(row.spend) || 0;
         const cpt = conv > 0 ? +(spend / conv).toFixed(2) : null;
@@ -589,6 +600,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           evCompleteReg: evCR,
           evInitCheckout: evIC,
           evContact: evCT,
+          evStartTrial,
+          evSubscribe,
           conversions: conv,
           cpt,
           flag,
@@ -624,6 +637,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             evCompleteReg: 0,
             evInitCheckout: 0,
             evContact: 0,
+            evStartTrial: 0,
+            evSubscribe: 0,
             conversions: 0,
             cpt: null,
             flag: null,
@@ -707,6 +722,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             evContact: getAction(row.actions, ACTION_KEYS.contact),
             evInitCheckout: getAction(row.actions, ACTION_KEYS.initCheckout),
             evCompleteReg: getAction(row.actions, ACTION_KEYS.completeReg),
+            evStartTrial: getAction(row.actions, ACTION_KEYS.startTrial),
+            evSubscribe: getAction(row.actions, ACTION_KEYS.subscribe),
           });
         }
       }
@@ -738,6 +755,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             evContact: getAction(row.actions, ACTION_KEYS.contact),
             evInitCheckout: getAction(row.actions, ACTION_KEYS.initCheckout),
             evCompleteReg: getAction(row.actions, ACTION_KEYS.completeReg),
+            evStartTrial: getAction(row.actions, ACTION_KEYS.startTrial),
+            evSubscribe: getAction(row.actions, ACTION_KEYS.subscribe),
           });
         }
       }

@@ -18,7 +18,9 @@ import { useDashboard } from "@/lib/store";
 import { cn, fmt } from "@/lib/utils";
 import {
   closingLevers,
+  hasLiveBudgets,
   projectMonthEndScenarios,
+  sumActiveDailyBudgets,
   TARGET_GOAL,
   type ActiveProjectionResult,
   type ClosingLever,
@@ -48,10 +50,43 @@ export function ProjectionCard({ className }: { className?: string }) {
   });
   const levers = closingLevers();
   const base = result.scenarios.base;
+  const liveBudgetsLoaded = hasLiveBudgets(campaigns);
+  const aggregatedDaily = sumActiveDailyBudgets(campaigns);
 
   return (
     <TextureCard className={cn("p-5", className)}>
       <Header result={result} />
+
+      {/* Nota sobre fuente de budgets · live (Meta API) vs plan original */}
+      <Reveal>
+        <div
+          className="mb-3 rounded-md border px-3 py-2 text-[10.5px] leading-relaxed"
+          style={{
+            background: liveBudgetsLoaded
+              ? "hsl(var(--success) / 0.06)"
+              : "hsl(var(--warning) / 0.06)",
+            borderColor: liveBudgetsLoaded
+              ? "hsl(var(--success) / 0.3)"
+              : "hsl(var(--warning) / 0.3)",
+            color: "hsl(var(--muted-foreground))",
+          }}
+        >
+          {liveBudgetsLoaded ? (
+            <>
+              Proyección basada en <b>budgets actuales de Meta</b> ·{" "}
+              <span className="font-mono">
+                {fmt.eur(aggregatedDaily, { decimals: 0 })}/día
+              </span>{" "}
+              agregado de las {result.activeCount} activas.
+            </>
+          ) : (
+            <>
+              Proyección basada en <b>plan original</b> · cargá los budgets reales en
+              Meta para sincronizar.
+            </>
+          )}
+        </div>
+      </Reveal>
 
       {/* Próximos N días (responde "cuántos leads esperar en próximos 5 días") */}
       <Reveal>

@@ -395,18 +395,43 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return u.toString();
       })();
 
-      const [cAgg, aAgg, cDaily, aDaily, statusResp] = await Promise.all([
+      // Endpoint para STATUS + BUDGET real de adsets (no viene en /insights)
+      // Necesario para campañas sin CBO donde el budget vive en el adset.
+      const adsetsStatusUrl = (() => {
+        const u = new URL("/api/meta", window.location.origin);
+        u.searchParams.set("endpoint", `${PLAN.meta.accountId}/adsets`);
+        u.searchParams.set(
+          "fields",
+          "id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget",
+        );
+        u.searchParams.set("limit", "200");
+        return u.toString();
+      })();
+
+      const [cAgg, aAgg, cDaily, aDaily, statusResp, adsetsStatusResp] = await Promise.all([
         fetch(buildUrl({ level: "campaign", fields, limit: "30" })).then((r) => r.json()),
         fetch(buildUrl({ level: "adset", fields: adsetFields, limit: "200" })).then((r) => r.json()),
         fetch(buildUrl({ level: "campaign", fields, limit: "1000", time_increment: "1" })).then((r) => r.json()),
         fetch(buildUrl({ level: "adset", fields: adsetFields, limit: "1000", time_increment: "1" })).then((r) => r.json()),
         fetch(statusUrl).then((r) => r.json()),
+        fetch(adsetsStatusUrl).then((r) => r.json()),
       ]);
 
       // Mapa de campaign_id → status real (ACTIVE / PAUSED / DELETED)
       const statusByCid = new Map<string, string>();
+      // Mapa de campaign_id → budget real (daily/lifetime en EUR) + flag CBO
+      const campaignBudgetByCid = new Map<
+        string,
+        { dailyBudgetEur: number; lifetimeBudgetEur: number | null; isCBO: boolean }
+      >();
       if (Array.isArray(statusResp?.data)) {
-        for (const c of statusResp.data as Array<{ id: string; effective_status?: string; status?: string }>) {
+        for (const c of statusResp.data as Array<{
+          id: string;
+          effective_status?: string;
+          status?: string;
+          daily_budget?: string;
+          lifetime_budget?: string;
+        }>) {
           // effective_status es lo que Meta realmente reporta (ej. CAMPAIGN_PAUSED).
           // Normalizamos a ACTIVE/PAUSED/DELETED.
           const raw = c.effective_status || c.status || "";
@@ -416,6 +441,59 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               ? "DELETED"
               : "PAUSED";
           statusByCid.set(c.id, norm);
+
+          // Budgets vienen en CENTAVOS desde Meta API · dividir por 100.
+          const dailyCents = parseFloat(c.daily_budget ?? "0") || 0;
+          const lifetimeCents = parseFloat(c.lifetime_budget ?? "0") || 0;
+          const dailyEur = dailyCents / 100;
+          const lifetimeEur = lifetimeCents > 0 ? lifetimeCents / 100 : null;
+          campaignBudgetByCid.set(c.id, {
+            dailyBudgetEur: dailyEur,
+            lifetimeBudgetEur: lifetimeEur,
+            // Si campaña tiene daily_budget > 0 entonces usa CBO
+            isCBO: dailyEur > 0,
+          });
+        }
+      }
+
+      // Procesar adsets · status + budget por adset y agregado por campaña.
+      const adsetBudgetByCampaign = new Map<
+        string,
+        { dailyTotal: number; lifetimeTotal: number | null }
+      >();
+      const adsetStatusByAid = new Map<string, string>();
+      const adsetDailyByAid = new Map<string, number>();
+      if (Array.isArray(adsetsStatusResp?.data)) {
+        for (const ad of adsetsStatusResp.data as Array<{
+          id: string;
+          campaign_id: string;
+          status?: string;
+          effective_status?: string;
+          daily_budget?: string;
+          lifetime_budget?: string;
+        }>) {
+          const raw = ad.effective_status || ad.status || "";
+          const norm = /ACTIVE/i.test(raw)
+            ? "ACTIVE"
+            : /DELETED|ARCHIVED/i.test(raw)
+              ? "DELETED"
+              : "PAUSED";
+          adsetStatusByAid.set(ad.id, norm);
+
+          const dailyEur = (parseFloat(ad.daily_budget ?? "0") || 0) / 100;
+          adsetDailyByAid.set(ad.id, dailyEur);
+
+          // Sólo sumar adsets ACTIVE al agregado de budget por campaña.
+          if (norm !== "ACTIVE") continue;
+
+          const lifetimeEur = (parseFloat(ad.lifetime_budget ?? "0") || 0) / 100;
+          const current =
+            adsetBudgetByCampaign.get(ad.campaign_id) ?? { dailyTotal: 0, lifetimeTotal: null };
+          current.dailyTotal += dailyEur;
+          if (lifetimeEur > 0) {
+            current.lifetimeTotal = (current.lifetimeTotal ?? 0) + lifetimeEur;
+          }
+          adsetBudgetByCampaign.set(ad.campaign_id, current);
         }
       }
 
@@ -485,6 +563,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                   ? "warn"
                   : null;
 
+        // Live budgets: si la campaña usa CBO → daily de la campaña.
+        // Si NO usa CBO → suma de daily de adsets ACTIVE.
+        const campBudget = campaignBudgetByCid.get(row.campaign_id);
+        const adsetBudget = adsetBudgetByCampaign.get(row.campaign_id);
+        const isCBO = (campBudget?.dailyBudgetEur ?? 0) > 0;
+        const liveDailyBudget = isCBO
+          ? (campBudget?.dailyBudgetEur ?? 0)
+          : (adsetBudget?.dailyTotal ?? 0);
+        const liveLifetimeBudget =
+          campBudget?.lifetimeBudgetEur ?? adsetBudget?.lifetimeTotal ?? null;
+
         nextCampaigns.push({
           ...inferred,
           cid: row.campaign_id,
@@ -503,6 +592,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           conversions: conv,
           cpt,
           flag,
+          liveDailyBudget,
+          liveLifetimeBudget,
+          isCBO,
         });
       }
 
@@ -511,6 +603,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       // siga listándolas con métricas en 0.
       for (const seed of rawCampaigns) {
         if (!nextCampaigns.find((c) => c.cid === seed.cid)) {
+          const campBudget = campaignBudgetByCid.get(seed.cid);
+          const adsetBudget = adsetBudgetByCampaign.get(seed.cid);
+          const isCBO = (campBudget?.dailyBudgetEur ?? 0) > 0;
+          const liveDailyBudget = isCBO
+            ? (campBudget?.dailyBudgetEur ?? 0)
+            : (adsetBudget?.dailyTotal ?? 0);
+          const liveLifetimeBudget =
+            campBudget?.lifetimeBudgetEur ?? adsetBudget?.lifetimeTotal ?? null;
           nextCampaigns.push({
             ...seed,
             status: statusByCid.get(seed.cid) || seed.status,
@@ -527,6 +627,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             conversions: 0,
             cpt: null,
             flag: null,
+            liveDailyBudget,
+            liveLifetimeBudget,
+            isCBO,
           });
         }
       }
@@ -555,6 +658,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         const campEvent: Campaign["event"] = camp?.event ?? "CompleteRegistration";
         const conv = campEvent === "CompleteRegistration" ? evCR : evIC;
         const spend = parseFloat(row.spend) || 0;
+        const liveDailyBudget = adsetDailyByAid.get(row.adset_id);
+        const adsetStatus = adsetStatusByAid.get(row.adset_id);
         return {
           cid: row.campaign_id,
           adsetId: row.adset_id,
@@ -568,6 +673,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           freq: parseFloat(row.frequency) || 0,
           conversions: conv,
           cpt: conv > 0 ? +(spend / conv).toFixed(2) : null,
+          liveDailyBudget,
+          status: adsetStatus,
         };
       });
       setRawAdsets(newAdsets);

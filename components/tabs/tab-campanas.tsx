@@ -1008,7 +1008,9 @@ function CampaignRow({
           {fmt.eur(c.spend, { decimals: 0 })}
         </div>
         <div className="text-[9px] text-muted-foreground/70 font-mono">
-          €{c.daily}/d · €{c.total} plan
+          {(c.liveDailyBudget ?? 0) > 0
+            ? `€${(c.liveDailyBudget ?? 0).toFixed(0)}/d ${c.isCBO ? "CBO" : "ABO"}`
+            : `€${c.daily}/d · €${c.total} plan`}
         </div>
       </td>
       <td className="px-3 py-2.5 text-right">
@@ -1167,7 +1169,15 @@ function DetailPanel({
         {/* Métricas + acción */}
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <DetailMetric label="Gasto" value={fmt.eur(campaign.spend, { decimals: 0 })} sub={`€${campaign.daily}/día`} />
+            <DetailMetric
+              label="Gasto"
+              value={fmt.eur(campaign.spend, { decimals: 0 })}
+              sub={
+                (campaign.liveDailyBudget ?? 0) > 0
+                  ? `€${(campaign.liveDailyBudget ?? 0).toFixed(0)}/día ${campaign.isCBO ? "CBO" : "ABO"}`
+                  : `€${campaign.daily}/día`
+              }
+            />
             <DetailMetric
               label={campaign.event === "CompleteRegistration" ? "CompleteReg" : "InitCheckout"}
               value={fmt.int(campaign.conversions)}
@@ -1748,8 +1758,25 @@ function ActiveCampaignCard({
         </div>
 
         <div className="px-4 py-2.5 flex items-center justify-between gap-2 bg-background/30">
-          <div className="text-[10px] text-muted-foreground/80 truncate">
-            {lifecycle?.reason ?? `€${c.daily}/d · €${c.total} plan`}
+          <div className="text-[10px] text-muted-foreground/80 truncate flex items-center gap-1.5">
+            {(c.liveDailyBudget ?? 0) > 0 ? (
+              <>
+                <span className="font-mono">
+                  Budget: €{(c.liveDailyBudget ?? 0).toFixed(0)}/día
+                </span>
+                <Badge
+                  variant="outline"
+                  className="!text-[8px] !py-0 !px-1.5 shrink-0"
+                  title={c.isCBO ? "Campaign Budget Optimization" : "Budget a nivel adset"}
+                >
+                  {c.isCBO ? "CBO" : "Adset budget"}
+                </Badge>
+              </>
+            ) : c.status === "ACTIVE" ? (
+              <span className="text-muted-foreground/60">Sin budget configurado</span>
+            ) : (
+              lifecycle?.reason ?? `€${c.daily}/d · €${c.total} plan`
+            )}
           </div>
           <div
             className="size-6 grid place-items-center rounded-md border shrink-0 text-muted-foreground/60"

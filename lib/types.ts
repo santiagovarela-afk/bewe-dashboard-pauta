@@ -21,6 +21,12 @@ export interface Campaign {
   evContact: number;
   evInitCheckout: number;
   evCompleteReg: number;
+  /** Daily budget REAL desde Meta API en EUROS. Suma de adsets si la campaña no usa CBO. */
+  liveDailyBudget?: number;
+  /** Lifetime budget REAL desde Meta API en EUROS. null si la campaña usa daily_budget. */
+  liveLifetimeBudget?: number | null;
+  /** Indica si la campaña usa Campaign Budget Optimization (CBO) */
+  isCBO?: boolean;
 }
 
 export interface Adset {
@@ -37,6 +43,10 @@ export interface Adset {
   conversions: number;
   cpt: number | null;
   warn?: boolean;
+  /** Daily budget real del adset en EUROS (si la campaña no usa CBO) */
+  liveDailyBudget?: number;
+  /** Estado real del adset · ACTIVE/PAUSED */
+  status?: string;
 }
 
 export interface SessionUser {

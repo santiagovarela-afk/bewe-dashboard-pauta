@@ -199,9 +199,12 @@ export const SEVERITY_WEIGHT: Record<Severity, number> = {
   ok: 0,
 };
 
-/** Pacing % vs ritmo esperado del plan (daily × días transcurridos). */
+/** Pacing % vs ritmo esperado del plan (daily × días transcurridos).
+ *  Prefiere `liveDailyBudget` (Meta API) si existe · sino cae al daily del plan original.
+ */
 export function pacingPct(c: Campaign, daysElapsed: number): number {
-  const expected = c.daily * Math.max(1, daysElapsed);
+  const dailyBudget = c.liveDailyBudget ?? c.daily;
+  const expected = dailyBudget * Math.max(1, daysElapsed);
   return expected > 0 ? (c.spend / expected) * 100 : 0;
 }
 
@@ -535,8 +538,9 @@ export function dynamicAlerts(
   }
 
   // Pacing del período (esperado vs gastado)
+  // Si hay live budgets desde Meta API, prevalecen sobre el plan original.
   const totalSpend = active.reduce((s, c) => s + c.spend, 0);
-  const totalDaily = active.reduce((s, c) => s + c.daily, 0);
+  const totalDaily = active.reduce((s, c) => s + getEffectiveDailyBudget(c), 0);
   const expected = totalDaily * Math.max(1, ctx.scope === "today" ? 1 : ctx.days);
   if (expected > 0) {
     const pacing = (totalSpend / expected) * 100;
@@ -998,7 +1002,11 @@ export function projectMonthEndScenarios(
   let usedFallback = false;
   if (windowDaysUsed === 0) {
     usedFallback = true;
-    const configDaily = activeOnly.reduce((s, c) => s + (c.daily || 0), 0);
+    // Si tenemos live budgets desde Meta API, los usamos · sino fallback al plan original.
+    const configDaily = activeOnly.reduce(
+      (s, c) => s + getEffectiveDailyBudget(c),
+      0,
+    );
     usedDailyAvg = configDaily;
     const crPerEur =
       spendToDate > 0 && crToDate > 0 ? crToDate / spendToDate : 1 / 2.2;
@@ -1076,6 +1084,10 @@ export interface PacingState {
   dailyAvg: number;
   /** Ritmo requerido para gastar exactamente budget en los días restantes. */
   requiredDailyToFinish: number;
+  /** Ritmo esperado (€/día) basado en live budgets si están disponibles · sino budget/totalDays. */
+  expectedDaily: number;
+  /** True si el ritmo esperado proviene de los live budgets de Meta API. */
+  usingLiveBudgets: boolean;
 }
 
 /** Calcula pacing real vs esperado del plan completo. */
@@ -1095,6 +1107,13 @@ export function computePacing(
   const dailyAvg = spendTotal / safeDays;
   const daysLeft = Math.max(1, totalDays - daysElapsed);
   const requiredDailyToFinish = Math.max(0, (budget - spendTotal) / daysLeft);
+  // Ritmo esperado · si hay live budgets, suma de daily de activas · sino budget/totalDays
+  const usingLiveBudgets = hasLiveBudgets(campaigns);
+  const expectedDaily = usingLiveBudgets
+    ? sumActiveDailyBudgets(campaigns)
+    : totalDays > 0
+      ? budget / totalDays
+      : 0;
   return {
     spendTotal,
     budget,
@@ -1106,6 +1125,8 @@ export function computePacing(
     status,
     dailyAvg,
     requiredDailyToFinish,
+    expectedDaily,
+    usingLiveBudgets,
   };
 }
 
@@ -1245,4 +1266,26 @@ export function evaluateLiveRules(
   });
 
   return rules;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Live budgets · helpers para usar daily budgets reales (Meta API)
+ *  Si `liveDailyBudget` está disponible, prevalece sobre el plan original.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/** Devuelve el daily budget LIVE de una campaña. Fallback al daily del seed si no hay live. */
+export function getEffectiveDailyBudget(c: Campaign): number {
+  return c.liveDailyBudget ?? c.daily ?? 0;
+}
+
+/** Suma de daily budgets LIVE de las campañas activas. */
+export function sumActiveDailyBudgets(campaigns: Campaign[]): number {
+  return campaigns
+    .filter((c) => c.status === "ACTIVE")
+    .reduce((sum, c) => sum + getEffectiveDailyBudget(c), 0);
+}
+
+/** Indica si tenemos live budgets cargados (al menos 1 campaña con liveDailyBudget > 0) */
+export function hasLiveBudgets(campaigns: Campaign[]): boolean {
+  return campaigns.some((c) => (c.liveDailyBudget ?? 0) > 0);
 }

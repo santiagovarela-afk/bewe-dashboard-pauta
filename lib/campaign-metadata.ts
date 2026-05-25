@@ -40,6 +40,11 @@ export const CAMPAIGN_LIFECYCLE: Record<string, CampaignLifecycleEntry> = {
     state: "active",
     activatedAt: "2026-05-12",
   },
+  "52568234737886": {
+    state: "active",
+    reason: "Remarketing LATAM · audiencia onboarding · sin gasto inicial",
+    activatedAt: "2026-05-23",
+  },
   // ── Pausadas esta semana ───────────────────────────────────────────────
   "52551556733086": {
     state: "paused",
@@ -179,14 +184,74 @@ export function campaignTypeBadgeVariant(type: CampaignType): "violet" | "cyan" 
  * Devuelve true si una campaña debe considerarse "activa" para mostrarse
  * en la sección activa del tab, incluso si no tuvo gasto en el rango.
  *
- * Regla:
+ * Regla (en orden de prioridad):
  *   1. Si está en CAMPAIGN_LIFECYCLE como "active" → activa
- *   2. Si no está en lifecycle PERO tuvo gasto > 0 → activa (live fallback)
- *   3. Caso contrario → no activa
+ *   2. Si Meta API dice status === "ACTIVE" → activa (data viva)
+ *   3. Si tuvo gasto > 0 Y status !== "PAUSED" → activa (fallback)
+ *   4. Caso contrario → no activa
  */
 export function shouldShowAsActive(campaign: { cid: string; spend: number; status?: string }): boolean {
   const entry = CAMPAIGN_LIFECYCLE[campaign.cid];
   if (entry) return entry.state === "active";
+  if (campaign.status === "ACTIVE") return true;
   if (campaign.spend > 0 && campaign.status !== "PAUSED") return true;
   return false;
+}
+
+/**
+ * Severidad gradual de una campaña basada en su CPT vs thresholds.
+ *
+ * - "healthy": CPT <= warn (verde · todo OK)
+ * - "monitor": CPT entre warn y critical (amarillo · monitorear)
+ * - "attention": CPT entre critical y 1.5× critical (naranja · acción cercana)
+ * - "critical": CPT > 1.5× critical (rojo · crítico real)
+ * - "neutral": sin data o flag anomaly (gris)
+ *
+ * Esto reemplaza el binario "crítico/no crítico" que pintaba TODAS las cards
+ * en rojo cuando el CPT estaba por encima del target.
+ */
+export type CampaignSeverity = "healthy" | "monitor" | "attention" | "critical" | "neutral";
+
+export function getSeverity(
+  campaign: { cpt: number | null; flag: string | null },
+  thresholds: { warn: number; critical: number },
+): CampaignSeverity {
+  if (campaign.flag === "anomaly") return "neutral";
+  if (campaign.cpt === null) return "neutral";
+  if (campaign.cpt > thresholds.critical * 1.5) return "critical";
+  if (campaign.cpt > thresholds.critical) return "attention";
+  if (campaign.cpt > thresholds.warn) return "monitor";
+  return "healthy";
+}
+
+/** Label legible para el badge. */
+export function severityLabel(s: CampaignSeverity): string {
+  switch (s) {
+    case "healthy":
+      return "OK";
+    case "monitor":
+      return "Monitorear";
+    case "attention":
+      return "Atención";
+    case "critical":
+      return "Crítico";
+    case "neutral":
+      return "—";
+  }
+}
+
+/** Tone HSL var name para el styling. */
+export function severityTone(s: CampaignSeverity): "success" | "warning" | "ember" | "destructive" | "muted-foreground" {
+  switch (s) {
+    case "healthy":
+      return "success";
+    case "monitor":
+      return "warning";
+    case "attention":
+      return "ember";
+    case "critical":
+      return "destructive";
+    case "neutral":
+      return "muted-foreground";
+  }
 }

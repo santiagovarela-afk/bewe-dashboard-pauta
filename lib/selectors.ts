@@ -273,17 +273,19 @@ export function icCampaignIds(campaigns: Campaign[]): string[] {
  *  Estos exports son ADITIVOS — no rompen computeMetrics ni fakeTrend.
  * ─────────────────────────────────────────────────────────────────────── */
 
-export type Severity = "critical" | "warn" | "anomaly" | "ok";
+export type Severity = "critical" | "attention" | "warn" | "anomaly" | "ok";
 
 export function severityOf(c: Campaign): Severity {
   if (c.flag === "critical") return "critical";
+  if (c.flag === "attention") return "attention";
   if (c.flag === "warn") return "warn";
   if (c.flag === "anomaly") return "anomaly";
   return "ok";
 }
 
 export const SEVERITY_WEIGHT: Record<Severity, number> = {
-  critical: 3,
+  critical: 4,
+  attention: 3,
   warn: 2,
   anomaly: 1,
   ok: 0,

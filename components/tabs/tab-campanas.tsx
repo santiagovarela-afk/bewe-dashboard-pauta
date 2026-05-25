@@ -66,7 +66,8 @@ const VERT_COLOR = {
 
 const SEV_BADGE: Record<Severity, { label: string; tone: "danger" | "warning" | "ember" | "success" }> = {
   critical: { label: "Crítico", tone: "danger" },
-  warn: { label: "Atención", tone: "warning" },
+  attention: { label: "Revisar", tone: "ember" },
+  warn: { label: "Monitorear", tone: "warning" },
   anomaly: { label: "Anomalía", tone: "ember" },
   ok: { label: "OK", tone: "success" },
 };

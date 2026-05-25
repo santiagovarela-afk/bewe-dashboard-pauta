@@ -5,13 +5,15 @@ import type { Severity } from "@/lib/selectors";
 
 const SEV_LABEL: Record<Severity, string> = {
   critical: "Crítico",
-  warn: "Atención",
+  attention: "Revisar",
+  warn: "Monitorear",
   anomaly: "Anomalía",
   ok: "OK",
 };
 
 const SEV_COLOR: Record<Severity, string> = {
   critical: "var(--destructive)",
+  attention: "var(--brand-ember)",
   warn: "var(--warning)",
   anomaly: "var(--brand-ember)",
   ok: "var(--success)",

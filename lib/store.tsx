@@ -264,16 +264,20 @@ function aggregateCampaigns(
     const cpt = conv > 0 ? +(spend / conv).toFixed(2) : null;
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
     const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
+    // Severidad gradual: critical solo si CPT > 1.5× critical_threshold (no
+    // ponemos en rojo todo lo que pasa el target · debería tener niveles).
     const flag: Campaign["flag"] =
       c.cid === "52551556895286"
         ? "anomaly"
         : cpt === null
           ? null
-          : cpt > CPT_THRESHOLDS.critical
+          : cpt > CPT_THRESHOLDS.critical * 1.5
             ? "critical"
-            : cpt > CPT_THRESHOLDS.warn
-              ? "warn"
-              : null;
+            : cpt > CPT_THRESHOLDS.critical
+              ? "attention"
+              : cpt > CPT_THRESHOLDS.warn
+                ? "warn"
+                : null;
     return {
       ...c,
       spend,
@@ -626,16 +630,19 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         const spend = parseFloat(row.spend) || 0;
         const cpt = conv > 0 ? +(spend / conv).toFixed(2) : null;
 
+        // Severidad gradual: critical solo si CPT > 1.5× critical_threshold
         const flag: Campaign["flag"] =
           row.campaign_id === "52551556895286"
             ? "anomaly"
             : cpt === null
               ? null
-              : cpt > CPT_THRESHOLDS.critical
+              : cpt > CPT_THRESHOLDS.critical * 1.5
                 ? "critical"
-                : cpt > CPT_THRESHOLDS.warn
-                  ? "warn"
-                  : null;
+                : cpt > CPT_THRESHOLDS.critical
+                  ? "attention"
+                  : cpt > CPT_THRESHOLDS.warn
+                    ? "warn"
+                    : null;
 
         // Live budgets: si la campaña usa CBO → daily de la campaña.
         // Si NO usa CBO → suma de daily de adsets ACTIVE.

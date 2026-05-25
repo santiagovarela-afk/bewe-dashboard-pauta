@@ -17,7 +17,15 @@ export interface Campaign {
   freq: number;
   conversions: number;
   cpt: number | null;
-  flag: "critical" | "warn" | "anomaly" | null;
+  /**
+   * Severidad gradual basada en CPT vs thresholds:
+   * - "warn":     CPT entre warn y critical (amarillo · monitorear)
+   * - "attention": CPT entre critical y 1.5× critical (naranja · acción cercana)
+   * - "critical": CPT > 1.5× critical (rojo · acción inmediata)
+   * - "anomaly": pixel/CAPI roto, no calcular CPT
+   * - null:      OK (verde)
+   */
+  flag: "critical" | "attention" | "warn" | "anomaly" | null;
   evContact: number;
   evInitCheckout: number;
   evCompleteReg: number;

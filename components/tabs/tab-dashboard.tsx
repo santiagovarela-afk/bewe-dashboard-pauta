@@ -31,11 +31,14 @@ import {
 } from "@/lib/utils";
 import {
   computeMetrics,
-  fakeTrend,
   funnelCR,
   funnelIC,
   describeRange,
   dynamicAlerts,
+  realDailySeries,
+  crCampaignIds,
+  icCampaignIds,
+  planBStatus,
   type AlertKind,
 } from "@/lib/selectors";
 import { GLOSSARY } from "@/lib/glossary";
@@ -59,7 +62,7 @@ const ALERT_VARIANTS: Record<
 };
 
 export function TabDashboard() {
-  const { campaigns, daysElapsed, dateRange } = useDashboard();
+  const { campaigns, daysElapsed, dateRange, daily } = useDashboard();
   const m = computeMetrics(campaigns);
   const ctx = React.useMemo(
     () => describeRange(dateRange.from, dateRange.to),
@@ -69,6 +72,46 @@ export function TabDashboard() {
   const alerts = React.useMemo(
     () => dynamicAlerts(campaigns, ctx, daysElapsed),
     [campaigns, ctx, daysElapsed],
+  );
+
+  // Plan B C2 · derivado en vivo (sin frase hardcoded "Plan B activado")
+  const planB = React.useMemo(() => planBStatus(campaigns, daysElapsed), [campaigns, daysElapsed]);
+  const c2 = campaigns.find((c) => c.code === "C2");
+  const c2CR = c2?.evCompleteReg ?? 0;
+  const planBHeroLabel =
+    planB.status === "n/a"
+      ? "Plan B C2 · sin datos"
+      : c2CR >= 20
+        ? `Plan B descartado · C2 CR ${c2CR} > 20`
+        : daysElapsed >= 7
+          ? `Plan B candidato · evaluar switch IC (${c2CR} CR)`
+          : `Plan B en watch · día ${daysElapsed}/7 · C2 ${c2CR} CR`;
+
+  // Campañas activas reales (no asumir 6)
+  const activeCount = campaigns.filter((c) => c.status === "ACTIVE").length;
+
+  // Series reales por día para los 5 KPIs · vacío = sparkline no se renderiza
+  const crIds = React.useMemo(() => crCampaignIds(campaigns), [campaigns]);
+  const icIds = React.useMemo(() => icCampaignIds(campaigns), [campaigns]);
+  const spendSeries = React.useMemo(
+    () => realDailySeries(daily, dateRange, "spend"),
+    [daily, dateRange],
+  );
+  const cplSeries = React.useMemo(
+    () => realDailySeries(daily, dateRange, "cpl", crIds),
+    [daily, dateRange, crIds],
+  );
+  const cpicSeries = React.useMemo(
+    () => realDailySeries(daily, dateRange, "cpic", icIds),
+    [daily, dateRange, icIds],
+  );
+  const ctrSeries = React.useMemo(
+    () => realDailySeries(daily, dateRange, "ctr"),
+    [daily, dateRange],
+  );
+  const cpmSeries = React.useMemo(
+    () => realDailySeries(daily, dateRange, "cpm"),
+    [daily, dateRange],
   );
 
   const critCount = alerts.filter((a) => a.kind === "critical").length;
@@ -121,7 +164,7 @@ export function TabDashboard() {
                 <span className="text-aurora">mayo 2026.</span>
               </h1>
               <p className="text-sm md:text-base text-muted-foreground max-w-[560px] leading-relaxed">
-                6 campañas · €{PLAN.budget.toLocaleString("es")} de budget · Plan B activado en C2.
+                {campaigns.length} campañas · €{PLAN.budget.toLocaleString("es")} de budget · {planBHeroLabel}.
                 Decisiones operativas, alertas y proyección al 31 de mayo.
               </p>
             </div>
@@ -218,7 +261,7 @@ export function TabDashboard() {
             format={(v) => fmt.eur(v, { decimals: 0 })}
             sub={`${Math.round(m.budgetPct)}% · ${fmt.eur(m.remaining, { decimals: 0 })} restante`}
             tone="default"
-            trend={fakeTrend(1, m.spend)}
+            trend={spendSeries}
             badge={<Badge variant="outline" className="font-mono">€{PLAN.budget.toLocaleString("es")}</Badge>}
             delay={0.02}
           />
@@ -240,7 +283,7 @@ export function TabDashboard() {
               </ExplainedMetric>
             }
             tone={cptTone(m.cptReg) === "success" ? "success" : cptTone(m.cptReg) === "warning" ? "warning" : "danger"}
-            trend={fakeTrend(2, m.cptReg ?? 0, 12, 0.12)}
+            trend={cplSeries}
             delay={0.06}
           />
           <KpiCard
@@ -261,7 +304,7 @@ export function TabDashboard() {
               </ExplainedMetric>
             }
             tone={cptTone(m.cptIco) === "success" ? "lime" : "warning"}
-            trend={fakeTrend(3, m.cptIco ?? 0)}
+            trend={cpicSeries}
             delay={0.1}
           />
           <KpiCard
@@ -290,7 +333,7 @@ export function TabDashboard() {
             format={(v) => fmt.pct(v)}
             sub="objetivo 1.5 – 2.5 %"
             tone={ctrTone(m.ctr) === "success" ? "success" : ctrTone(m.ctr) === "warning" ? "warning" : "danger"}
-            trend={fakeTrend(4, m.ctr)}
+            trend={ctrSeries}
             delay={0.18}
           />
           <KpiCard
@@ -299,7 +342,7 @@ export function TabDashboard() {
             format={(v) => fmt.eur(v)}
             sub="objetivo < €9"
             tone={cpmTone(m.cpm) === "success" ? "cyan" : cpmTone(m.cpm) === "warning" ? "warning" : "danger"}
-            trend={fakeTrend(5, m.cpm)}
+            trend={cpmSeries}
             delay={0.22}
           />
         </div>
@@ -327,7 +370,7 @@ export function TabDashboard() {
 
       {/* TIMELINE */}
       <section>
-        <TimelineCard daysElapsed={daysElapsed} />
+        <TimelineCard daysElapsed={daysElapsed} activeCount={activeCount} planB={planB} />
       </section>
     </div>
   );
@@ -410,7 +453,7 @@ function HeroStat({
 }
 
 function FunnelCard({ kind }: { kind: "CR" | "IC" }) {
-  const { campaigns } = useDashboard();
+  const { campaigns, snapshot } = useDashboard();
   const data = kind === "CR" ? funnelCR(campaigns) : funnelIC(campaigns);
   const isCR = kind === "CR";
 
@@ -429,6 +472,21 @@ function FunnelCard({ kind }: { kind: "CR" | "IC" }) {
     { label: eventLabel, value: data.events, Icon: Target, color: accent },
   ];
 
+  // Fecha del snapshot (live) para mostrar en lugar de "22-may" hardcoded
+  const allPaused = data.pausedCount === data.campaigns.length && data.campaigns.length > 0;
+  const pausedLabel = (() => {
+    if (!allPaused) return null;
+    if (!snapshot.fetchedAt) return "Pausado";
+    try {
+      return `Pausado · snapshot ${new Date(snapshot.fetchedAt).toLocaleDateString("es", {
+        day: "numeric",
+        month: "short",
+      })}`;
+    } catch {
+      return "Pausado";
+    }
+  })();
+
   return (
     <TextureCard className="p-5">
       <div className="flex items-center justify-between mb-4 gap-2">
@@ -438,10 +496,10 @@ function FunnelCard({ kind }: { kind: "CR" | "IC" }) {
           </h3>
           <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>
         </div>
-        {data.pausedCount === data.campaigns.length && data.campaigns.length > 0 ? (
+        {pausedLabel ? (
           <Badge variant="warning" className="shrink-0 gap-1">
             <PauseCircle className="size-3" />
-            Pausado 22-may
+            {pausedLabel}
           </Badge>
         ) : (
           <Badge variant="outline" className="shrink-0 font-mono">
@@ -560,24 +618,50 @@ function TrialPlaceholderCard() {
   );
 }
 
-function TimelineCard({ daysElapsed }: { daysElapsed: number }) {
+function TimelineCard({
+  daysElapsed,
+  activeCount,
+  planB,
+}: {
+  daysElapsed: number;
+  activeCount: number;
+  planB: { status: "activated" | "pending" | "watch" | "n/a"; detail: string };
+}) {
   const d7 = daysUntil(PLAN.day7ISO);
   const d14 = daysUntil(PLAN.day14ISO);
-  const items = [
+  const launchDesc =
+    activeCount === 0
+      ? "Sin campañas activas (todas pausadas)"
+      : `${activeCount} ${activeCount === 1 ? "campaña activa" : "campañas activas"}`;
+  // Plan B regla "switch evento" descartada: la regla obsoleta ya no se muestra.
+  // Mostramos el estado real desde planBStatus + watchpoint CO.
+  const planBDesc =
+    planB.status === "n/a"
+      ? "Watchpoint CO · revisar geo-leakage"
+      : `${planB.detail} · Watchpoint CO`;
+  const items: Array<{
+    Icon: React.ComponentType<{ className?: string }>;
+    date: string;
+    title: string;
+    desc: string;
+    descSub?: string;
+    status: "done" | "now" | "past" | "future";
+    sub: string;
+  }> = [
     {
       Icon: Rocket,
       date: "12 may",
       title: "Lanzamiento",
-      desc: "6 campañas activas",
-      status: "done" as const,
+      desc: launchDesc,
+      status: "done",
       sub: `✓ Día ${daysElapsed}`,
     },
     {
       Icon: Search,
       date: "19 may · día 7",
       title: "Plan B + Watchpoint CO",
-      desc: "Switch evento si <20 CR",
-      status: d7 < 0 ? "past" : d7 <= 1 ? "now" : "future" as const,
+      desc: planBDesc,
+      status: d7 < 0 ? "past" : d7 <= 1 ? "now" : "future",
       sub: d7 < 0 ? `Hace ${Math.abs(d7)}d` : d7 === 0 ? "¡HOY!" : `En ${d7}d`,
     },
     {
@@ -585,7 +669,8 @@ function TimelineCard({ daysElapsed }: { daysElapsed: number }) {
       date: "26 may · día 14",
       title: "C7 + contingencia",
       desc: "Activar si ≥1k visits + 30 trials",
-      status: d14 < 0 ? "past" : d14 <= 1 ? "now" : "future" as const,
+      descSub: "(visits/trials requieren PostHog · pendiente)",
+      status: d14 < 0 ? "past" : d14 <= 1 ? "now" : "future",
       sub: d14 < 0 ? `Hace ${Math.abs(d14)}d` : d14 === 0 ? "¡HOY!" : `En ${d14}d`,
     },
     {
@@ -593,7 +678,7 @@ function TimelineCard({ daysElapsed }: { daysElapsed: number }) {
       date: "31 may",
       title: "Cierre mes 1",
       desc: "Reporte + brief junio",
-      status: "future" as const,
+      status: "future",
       sub: `En ${daysUntil(PLAN.endISO)}d`,
     },
   ];
@@ -640,6 +725,11 @@ function TimelineCard({ daysElapsed }: { daysElapsed: number }) {
                 </div>
                 <div className="text-[13px] font-semibold leading-tight">{it.title}</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">{it.desc}</div>
+                {it.descSub && (
+                  <div className="text-[10px] text-muted-foreground/60 mt-0.5 italic">
+                    {it.descSub}
+                  </div>
+                )}
               </div>
               <div
                 className="text-[11px] font-bold font-mono shrink-0 tabular"

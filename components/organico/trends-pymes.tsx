@@ -10,6 +10,7 @@ import {
   Users,
   Music2,
   HeartHandshake,
+  Library,
 } from "lucide-react";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
@@ -112,11 +113,26 @@ export function TrendsPymes() {
       <div className="flex items-center gap-2">
         <Flame className="size-3.5 text-[hsl(var(--brand-ember))]" />
         <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          Tendencias para PyMEs · servicios profesionales
+          Playbook editorial · benchmarks LATAM
         </h3>
         <Badge variant="outline" className="!text-[9px] ml-auto">
           Bewe playbook 2026
         </Badge>
+      </div>
+
+      {/* Banner de honestidad · estos benchmarks NO son análisis de la cuenta */}
+      <div className="rounded-lg border border-[hsl(var(--brand-violet)/0.35)] bg-[hsl(var(--brand-violet)/0.10)] p-3 flex items-start gap-2.5">
+        <Library className="size-4 shrink-0 text-[hsl(var(--brand-violet))] mt-0.5" />
+        <div className="min-w-0 text-[10.5px] leading-snug">
+          <div className="font-bold text-foreground mb-0.5">
+            Playbook editorial Bewe · benchmarks de industria, NO analizados sobre tu cuenta.
+          </div>
+          <div className="text-foreground/80">
+            Estos son patrones observados en PyMEs LATAM 2025-2026 que recomendamos
+            probar. No reemplazan el análisis de tu histórico (lo ves arriba en
+            heatmap, formato y top/bottom).
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -130,9 +146,15 @@ export function TrendsPymes() {
               transition={{ delay: i * 0.05, duration: 0.35 }}
               className={`rounded-lg border ${tone.border} ${tone.bg} p-3`}
             >
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className={tone.fg}>{t.icon}</span>
                 <span className="text-[11px] font-semibold">{t.title}</span>
+                <Badge
+                  variant="outline"
+                  className="!text-[8.5px] ml-auto !border-[hsl(var(--brand-violet)/0.45)] !text-[hsl(var(--brand-violet))] !bg-[hsl(var(--brand-violet)/0.08)] font-semibold"
+                >
+                  Playbook 2026
+                </Badge>
               </div>
               <div className="text-[10px] text-foreground/80 leading-snug mb-1.5">
                 {t.desc}

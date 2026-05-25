@@ -14,6 +14,9 @@ import {
   TrendingUp,
   Sparkles,
   AlertTriangle,
+  Flame,
+  BookOpen,
+  CalendarRange,
 } from "lucide-react";
 import { fmt } from "@/lib/utils";
 import { SectionHeader } from "@/components/shared/section-header";
@@ -40,7 +43,15 @@ import { VideoAnalytics } from "@/components/organico/video-analytics";
 import { TopBottomAnalysis } from "@/components/organico/top-bottom-analysis";
 import { RecommendationsAI } from "@/components/organico/recommendations-ai";
 import { TrendsPymes } from "@/components/organico/trends-pymes";
-import type { AnalyticsPost } from "@/lib/organic-analytics";
+import { Insights24h } from "@/components/parrilla/insights-24h";
+import { RULES_2026 } from "@/components/parrilla/best-time";
+import { ExplainedMetric } from "@/components/shared/explained-metric";
+import { useDashboard } from "@/lib/store";
+import {
+  filterPostsByDateRange,
+  rangeDays,
+  type AnalyticsPost,
+} from "@/lib/organic-analytics";
 
 type SortKey = "date" | "likes" | "comments" | "engagement";
 
@@ -104,6 +115,9 @@ export function TabOrganico() {
   const [sortKey, setSortKey] = React.useState<SortKey>("date");
   const [selected, setSelected] = React.useState<NormalizedPost | null>(null);
 
+  // Date range global del topbar · filtra TODO el tab Orgánico
+  const { dateRange } = useDashboard();
+
   // Trae IG + FB en paralelo, ambos con cache local + revalidación
   const { ig, fb, loading, error, refresh } = useOrganic({ limit: 50 });
 
@@ -111,9 +125,34 @@ export function TabOrganico() {
   const fbPosts = fb.posts;
   const insightsMissing = tab === "ig" ? ig.insightsMissing : fb.insightsMissing;
 
-  const normalized = React.useMemo<NormalizedPost[]>(() => {
+  /**
+   * Normalizamos primero TODO el feed (sin filtrar), después aplicamos el
+   * dateRange global. Así también podemos saber si el usuario filtró tan
+   * estrecho que se queda sin posts (queja #2: "respetar fecha" + queja #4
+   * "si filtro hoy debería ver solo hoy").
+   */
+  const allNormalized = React.useMemo<NormalizedPost[]>(() => {
     return tab === "ig" ? igPosts.map(normalizeIG) : fbPosts.map(normalizeFB);
   }, [tab, igPosts, fbPosts]);
+
+  const normalized = React.useMemo<NormalizedPost[]>(() => {
+    return filterPostsByDateRange(
+      allNormalized as unknown as AnalyticsPost[],
+      dateRange,
+    ) as unknown as NormalizedPost[];
+  }, [allNormalized, dateRange]);
+
+  const rangeNarrow = rangeDays(dateRange) < 3;
+  const filteredOut = allNormalized.length - normalized.length;
+  const rangeLabel = React.useMemo(() => {
+    const fmtES = (iso: string) => {
+      const d = new Date(`${iso}T00:00:00`);
+      return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
+    };
+    return dateRange.from === dateRange.to
+      ? fmtES(dateRange.from)
+      : `${fmtES(dateRange.from)} → ${fmtES(dateRange.to)}`;
+  }, [dateRange]);
 
   const sorted = React.useMemo(() => {
     const sortFn: Record<SortKey, (a: NormalizedPost, b: NormalizedPost) => number> = {
@@ -182,13 +221,28 @@ export function TabOrganico() {
       />
 
       <SectionHeader
-        title="Contenido orgánico · mayo 2026"
+        title={`Contenidos orgánicos · ${rangeLabel}`}
         sub={
           normalized.length
-            ? `${kpis.totalPosts} posts · ${fmt.int(kpis.totalLikes)} likes · ${fmt.int(kpis.totalComments)} comentarios`
+            ? (
+                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                  <CalendarRange className="size-3 text-[hsl(var(--brand-cyan))]" />
+                  <span>
+                    {kpis.totalPosts} posts · {fmt.int(kpis.totalLikes)} likes ·{" "}
+                    {fmt.int(kpis.totalComments)} comentarios
+                  </span>
+                  {filteredOut > 0 && (
+                    <span className="text-[hsl(var(--brand-cyan))]">
+                      · {filteredOut} fuera del rango
+                    </span>
+                  )}
+                </span>
+              )
             : loading
               ? "Cargando posts…"
-              : "Sin posts (o sin permisos del token)"
+              : allNormalized.length > 0
+                ? `Sin posts en el rango ${rangeLabel} · expandí el filtro de fechas del topbar`
+                : "Sin posts (o sin permisos del token)"
         }
         right={
           <>
@@ -227,40 +281,97 @@ export function TabOrganico() {
         }
       />
 
-      {/* KPIs */}
+      {/* Warning · filtro muy estrecho */}
+      {rangeNarrow && allNormalized.length > 0 && (
+        <TextureCard className="p-3 border-[hsl(var(--brand-cyan)/0.4)] bg-[hsl(var(--brand-cyan)/0.05)]">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="size-3.5 text-[hsl(var(--brand-cyan))] mt-0.5 shrink-0" />
+            <div className="text-[11px] text-muted-foreground">
+              <strong className="text-[hsl(var(--brand-cyan))]">Filtro de fechas chico</strong>{" "}
+              ({rangeDays(dateRange)} día{rangeDays(dateRange) === 1 ? "" : "s"}). Para ver
+              tendencias confiables expandí el rango en el topbar.
+            </div>
+          </div>
+        </TextureCard>
+      )}
+
+      {/* KPIs · cada uno con ExplainedMetric "?" */}
       {normalized.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard
-            label="Posts del período"
-            value={kpis.totalPosts}
-            sub={tab === "ig" ? "Instagram" : "Facebook"}
-            tone={tab === "ig" ? "violet" : "info"}
-            format={(v) => fmt.int(v)}
-          />
-          <KpiCard
-            label="Total likes"
-            value={kpis.totalLikes}
-            sub={`media ${(kpis.totalPosts > 0 ? kpis.totalLikes / kpis.totalPosts : 0).toFixed(1)} por post`}
-            tone="ember"
-            delay={0.05}
-            format={(v) => fmt.int(v)}
-          />
-          <KpiCard
-            label="Comentarios"
-            value={kpis.totalComments}
-            sub={`media ${(kpis.totalPosts > 0 ? kpis.totalComments / kpis.totalPosts : 0).toFixed(1)} por post`}
-            tone="cyan"
-            delay={0.1}
-            format={(v) => fmt.int(v)}
-          />
-          <KpiCard
-            label="Engagement / post"
-            value={kpis.avgEng}
-            sub="likes + comentarios"
-            tone="lime"
-            delay={0.15}
-            format={(v) => v.toFixed(1)}
-          />
+          <ExplainedMetric
+            explanation={
+              <>
+                <strong>Posts del período</strong> · cuenta total de publicaciones de{" "}
+                {tab === "ig" ? "Instagram" : "Facebook"} dentro del rango filtrado en el
+                topbar. Cambia el rango para ver más o menos posts.
+              </>
+            }
+            className="block w-full"
+          >
+            <KpiCard
+              label="Posts del período"
+              value={kpis.totalPosts}
+              sub={tab === "ig" ? "Instagram" : "Facebook"}
+              tone={tab === "ig" ? "violet" : "info"}
+              format={(v) => fmt.int(v)}
+            />
+          </ExplainedMetric>
+          <ExplainedMetric
+            explanation={
+              <>
+                <strong>Total likes</strong> · suma de likes (IG) o reacciones (FB) en los
+                posts del rango. La media se calcula dividiendo entre posts del período.
+              </>
+            }
+            className="block w-full"
+          >
+            <KpiCard
+              label="Total likes"
+              value={kpis.totalLikes}
+              sub={`media ${(kpis.totalPosts > 0 ? kpis.totalLikes / kpis.totalPosts : 0).toFixed(1)} por post`}
+              tone="ember"
+              delay={0.05}
+              format={(v) => fmt.int(v)}
+            />
+          </ExplainedMetric>
+          <ExplainedMetric
+            explanation={
+              <>
+                <strong>Comentarios</strong> · total de comments recibidos en los posts del
+                rango. El comentario pesa más que el like para el algoritmo: indica
+                conversación activa.
+              </>
+            }
+            className="block w-full"
+          >
+            <KpiCard
+              label="Comentarios"
+              value={kpis.totalComments}
+              sub={`media ${(kpis.totalPosts > 0 ? kpis.totalComments / kpis.totalPosts : 0).toFixed(1)} por post`}
+              tone="cyan"
+              delay={0.1}
+              format={(v) => fmt.int(v)}
+            />
+          </ExplainedMetric>
+          <ExplainedMetric
+            explanation={
+              <>
+                <strong>Engagement / post</strong> · (likes + comentarios) ÷ posts del
+                rango. Es el proxy más robusto cuando no hay insights de reach disponibles.
+                Compará vs benchmark de tu cuenta.
+              </>
+            }
+            className="block w-full"
+          >
+            <KpiCard
+              label="Engagement / post"
+              value={kpis.avgEng}
+              sub="likes + comentarios"
+              tone="lime"
+              delay={0.15}
+              format={(v) => v.toFixed(1)}
+            />
+          </ExplainedMetric>
         </div>
       )}
 
@@ -417,6 +528,46 @@ export function TabOrganico() {
           platformLabel={tab === "ig" ? "Instagram" : "Facebook"}
         />
       )}
+
+      {/* Insights 24h (movido desde Parrilla · queja #6) + Reglas 2026 (queja #7) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <TextureCard className="p-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Flame className="size-3 text-[hsl(var(--brand-ember))]" />
+            Insights primeras 24h
+          </div>
+          <Insights24h />
+        </TextureCard>
+
+        <TextureCard className="p-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-1 flex items-center gap-1.5">
+            <BookOpen className="size-3 text-[hsl(var(--brand-lime))]" />
+            Reglas editoriales · best-practices que validamos
+          </div>
+          <div className="text-[10px] text-muted-foreground/80 leading-snug mb-2.5">
+            Patrones generales de engagement IG/FB · ajustá según resultados de tu cuenta.
+          </div>
+          <div className="grid grid-cols-1 gap-1.5">
+            {RULES_2026.map((r, i) => (
+              <motion.div
+                key={r.title}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.04 }}
+                className="flex items-start gap-2 p-1.5 rounded hover:bg-secondary/40"
+              >
+                <span className="text-base leading-none mt-0.5">{r.icon}</span>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold">{r.title}</div>
+                  <div className="text-[10px] text-muted-foreground leading-snug">
+                    {r.detail}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </TextureCard>
+      </div>
 
       {/* Tendencias estáticas curadas para PyMEs */}
       <TrendsPymes />

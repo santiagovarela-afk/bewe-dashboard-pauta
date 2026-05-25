@@ -9,11 +9,12 @@
  * Flujo al entrar:
  *   1. POST /api/aeo/seed-prompts  → garantiza que existan ≥20 prompts.
  *      Si .data/aeo-prompts.json ya existe los devuelve.
- *      Si no, los autogenera con Gemini (fallback hardcoded si Gemini falla).
+ *      Si no, los autogenera con Groq Llama 3.3 70B (fallback Gemini, luego
+ *      hardcoded si ambos fallan).
  *   2. GET /api/aeo/results        → último run + stats.
  *
- * NO depende de María Paula · es 100% automático con Gemini que ya está
- * conectado vía GEMINI_API_KEY.
+ * NO depende de María Paula · es 100% automático. Motor primario Groq
+ * (GROQ_API_KEY); fallback Gemini (GEMINI_API_KEY) si Groq falla.
  */
 import * as React from "react";
 import { motion } from "motion/react";
@@ -31,6 +32,10 @@ import {
   ChevronRight,
   MessageSquareCode,
   RotateCcw,
+  HelpCircle,
+  ArrowUp,
+  ArrowDown,
+  Minus,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -279,43 +284,47 @@ export function TabAeo() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <HeroStat
-                  label="Visibility"
-                  value={stats ? `${stats.visibilityPct}%` : "—"}
-                  sub={stats ? `Bewe en ${Math.round((stats.visibilityPct / 100) * stats.totalPrompts)}/${stats.totalPrompts}` : "sin runs"}
-                  accent="var(--brand-violet)"
-                />
-                <HeroStat
-                  label="Pos. media"
-                  value={stats?.avgPosition !== null && stats?.avgPosition !== undefined ? stats.avgPosition.toFixed(1) : "—"}
-                  sub="en listas numeradas"
-                  accent="var(--brand-cyan)"
-                />
-                <HeroStat
-                  label="Prompts run"
-                  value={
-                    running
-                      ? `${runProgress}/${promptsTotal || 30}`
-                      : `${promptsRun}/${promptsTotal || 30}`
-                  }
-                  sub={
-                    running
-                      ? "Evaluando con Groq…"
-                      : lastRun
-                        ? `último: ${lastRun}`
-                        : seeding
-                          ? "Cargando…"
-                          : "Auto-run al entrar"
-                  }
-                  accent="var(--brand-lime)"
-                />
-                <HeroStat
-                  label="Competidores"
-                  value={String(stats?.topCompetitors.length ?? 0)}
-                  sub={stats?.topCompetitors[0] ? `top: ${stats.topCompetitors[0].name}` : "—"}
-                  accent="var(--brand-ember)"
-                />
+              <div className="grid grid-cols-[auto_1fr] gap-4 items-center">
+                {/* Donut visibility */}
+                <VisibilityDonut pct={stats?.visibilityPct ?? null} />
+                <div className="grid grid-cols-2 gap-2.5">
+                  <HeroStat
+                    label="Pos. media"
+                    value={stats?.avgPosition !== null && stats?.avgPosition !== undefined ? stats.avgPosition.toFixed(1) : "—"}
+                    sub="en listas numeradas"
+                    accent="var(--brand-cyan)"
+                  />
+                  <HeroStat
+                    label="Prompts run"
+                    value={
+                      running
+                        ? `${runProgress}/${promptsTotal || 30}`
+                        : `${promptsRun}/${promptsTotal || 30}`
+                    }
+                    sub={
+                      running
+                        ? "Evaluando con Groq…"
+                        : lastRun
+                          ? `último: ${lastRun}`
+                          : seeding
+                            ? "Cargando…"
+                            : "Auto-run al entrar"
+                    }
+                    accent="var(--brand-lime)"
+                  />
+                  <HeroStat
+                    label="Competidores"
+                    value={String(stats?.topCompetitors.length ?? 0)}
+                    sub={stats?.topCompetitors[0] ? `top: ${stats.topCompetitors[0].name}` : "—"}
+                    accent="var(--brand-ember)"
+                  />
+                  <HeroStat
+                    label="Categorías"
+                    value={String(stats?.byCategory.length ?? 0)}
+                    sub="medidas"
+                    accent="var(--brand-violet)"
+                  />
+                </div>
               </div>
             </div>
 
@@ -345,7 +354,7 @@ export function TabAeo() {
           <div className="flex items-center gap-3 mb-2">
             <Loader2 className="size-4 animate-spin text-[hsl(var(--brand-violet))]" />
             <div className="text-[12px] font-semibold">
-              Evaluando {runProgress}/{promptsTotal || 30} prompts con Gemini…
+              Evaluando {runProgress}/{promptsTotal || 30} prompts con Groq Llama 3.3 70B (fallback Gemini si falla)…
             </div>
           </div>
           <div className="h-1.5 w-full bg-secondary/40 rounded-full overflow-hidden">
@@ -497,25 +506,64 @@ export function TabAeo() {
       {/* ─────── COMPARATIVA MULTI-MODELO ─────── */}
       <AeoModelComparison />
 
-      {/* ─────── BY CATEGORY ─────── */}
+      {/* ─────── BY CATEGORY + BENCHMARK + HISTORY ─────── */}
       {stats && stats.byCategory.length > 0 && (
-        <TextureCard className="p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <ChartLine className="size-4 text-[hsl(var(--brand-cyan))]" />
-            <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              Visibility por categoría
-            </h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {stats.byCategory.map((c) => (
-              <div key={c.category} className="px-3 py-2.5 rounded-lg bg-secondary/30 border border-border/60">
-                <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">{c.category}</div>
-                <div className="font-mono font-bold text-lg tabular leading-none mt-1">{c.visibilityPct}%</div>
-                <div className="text-[10px] text-muted-foreground mt-1">{c.n} prompts</div>
+        <section className="grid lg:grid-cols-[1.4fr_1fr] gap-3">
+          <TextureCard className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <ChartLine className="size-4 text-[hsl(var(--brand-cyan))]" />
+                <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  Visibility por categoría
+                </h3>
               </div>
-            ))}
-          </div>
-        </TextureCard>
+              <Badge variant="outline" className="font-mono">{stats.byCategory.length} categorías</Badge>
+            </div>
+            <div className="space-y-3">
+              {stats.byCategory
+                .slice()
+                .sort((a, b) => b.visibilityPct - a.visibilityPct)
+                .map((c, i) => {
+                  const accent =
+                    c.visibilityPct >= 30 ? "var(--success)" :
+                    c.visibilityPct >= 10 ? "var(--brand-ember)" :
+                    "var(--destructive)";
+                  return (
+                    <motion.div
+                      key={c.category}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 * i, duration: 0.4 }}
+                    >
+                      <div className="flex items-center justify-between mb-1 text-[11px]">
+                        <span className="font-semibold capitalize">{c.category}</span>
+                        <span className="font-mono tabular text-muted-foreground">
+                          <strong className="text-foreground/90">{c.visibilityPct}%</strong> · {c.n} prompts
+                        </span>
+                      </div>
+                      <div className="h-2.5 bg-secondary/40 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.max(c.visibilityPct, 2)}%` }}
+                          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1], delay: 0.08 * i + 0.15 }}
+                          className="h-full rounded-full"
+                          style={{
+                            background: `linear-gradient(90deg, hsl(${accent}), hsl(${accent} / 0.45))`,
+                          }}
+                        />
+                      </div>
+                    </motion.div>
+                  );
+                })}
+            </div>
+          </TextureCard>
+
+          {/* Benchmark vs industria */}
+          <BenchmarkPanel
+            visibilityPct={stats.visibilityPct}
+            history={results?.history ?? []}
+          />
+        </section>
       )}
 
       {/* ─────── LISTA DE PROMPTS POR CATEGORÍA ─────── */}
@@ -718,6 +766,250 @@ function HeroStat({
         {value}
       </div>
       <div className="text-[10px] text-muted-foreground mt-1">{sub}</div>
+    </TextureCard>
+  );
+}
+
+/* ─── Donut visibility (SVG, animado) ───────────────────────────────── */
+function VisibilityDonut({ pct }: { pct: number | null }) {
+  const value = pct ?? 0;
+  const color =
+    value >= 30 ? "var(--success)" :
+    value >= 10 ? "var(--brand-ember)" :
+    value > 0 ? "var(--destructive)" :
+    "var(--muted-foreground)";
+  const size = 132;
+  const stroke = 11;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (value / 100) * c;
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90" aria-hidden>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="hsl(var(--border))"
+          strokeWidth={stroke}
+          opacity={0.5}
+        />
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={`hsl(${color})`}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          initial={{ strokeDashoffset: c }}
+          animate={{ strokeDashoffset: pct === null ? c : offset }}
+          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground">Visibility</div>
+        <div
+          className="font-mono font-bold text-2xl tabular leading-none mt-0.5"
+          style={{ color: `hsl(${color})` }}
+        >
+          {pct === null ? "—" : `${value}%`}
+        </div>
+        <div className="text-[9px] text-muted-foreground mt-0.5">en LLMs</div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Benchmark vs industria + sparkline histórico ──────────────────── */
+/**
+ * Heurística interna basada en observación de tools similares · NO es un
+ * estudio publicado. Ajustar según data propia.
+ *
+ * Se puede sobrescribir vía env:
+ *   NEXT_PUBLIC_AEO_BENCH_LOW   (default 5)
+ *   NEXT_PUBLIC_AEO_BENCH_MID   (default 15)
+ *   NEXT_PUBLIC_AEO_BENCH_HIGH  (default 30)
+ */
+function parseEnvBench(v: string | undefined, fallback: number): number {
+  if (!v) return fallback;
+  const n = Number.parseFloat(v);
+  return Number.isFinite(n) && n > 0 && n < 100 ? n : fallback;
+}
+const BENCH_HEURISTIC = {
+  low: parseEnvBench(process.env.NEXT_PUBLIC_AEO_BENCH_LOW, 5),
+  mid: parseEnvBench(process.env.NEXT_PUBLIC_AEO_BENCH_MID, 15),
+  high: parseEnvBench(process.env.NEXT_PUBLIC_AEO_BENCH_HIGH, 30),
+} as const;
+
+function BenchmarkPanel({
+  visibilityPct,
+  history,
+}: {
+  visibilityPct: number;
+  history: Array<{ runAt: string; visibilityPct: number; avgPosition: number | null; totalPrompts: number }>;
+}) {
+  const [showInfo, setShowInfo] = React.useState(false);
+  const inRange =
+    visibilityPct < BENCH_HEURISTIC.low ? "bajo" :
+    visibilityPct <= BENCH_HEURISTIC.mid ? "rango promedio" :
+    visibilityPct <= BENCH_HEURISTIC.high ? "por encima" :
+    "top tier";
+  const inRangeTone =
+    visibilityPct < BENCH_HEURISTIC.low ? "var(--destructive)" :
+    visibilityPct <= BENCH_HEURISTIC.mid ? "var(--brand-ember)" :
+    visibilityPct <= BENCH_HEURISTIC.high ? "var(--success)" :
+    "var(--brand-lime)";
+
+  const last5 = history.slice(-5);
+  const trendValues = last5.map((h) => h.visibilityPct);
+  const hasTrend = trendValues.length >= 2;
+  const W = 220;
+  const H = 50;
+  const PAD = 4;
+  const max = Math.max(...trendValues, 1);
+  const xs = (i: number) =>
+    PAD + (trendValues.length <= 1 ? W / 2 : (i / (trendValues.length - 1)) * (W - PAD * 2));
+  const ys = (v: number) => H - PAD - (v / Math.max(max, 1)) * (H - PAD * 2);
+  const linePath = trendValues
+    .map((v, i) => `${i === 0 ? "M" : "L"} ${xs(i).toFixed(1)} ${ys(v).toFixed(1)}`)
+    .join(" ");
+
+  let trendArrow: "up" | "down" | "flat" | null = null;
+  let trendDesc: string | null = null;
+  if (hasTrend) {
+    const first = trendValues[0];
+    const last = trendValues[trendValues.length - 1];
+    const delta = last - first;
+    trendArrow = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+    const arrowLabel = trendArrow === "up" ? "Subiendo" : trendArrow === "down" ? "Bajando" : "Estable";
+    trendDesc = `${arrowLabel} · ${trendValues.join("% → ")}% en últimos ${trendValues.length} runs`;
+  }
+  const TrendIcon = trendArrow === "up" ? ArrowUp : trendArrow === "down" ? ArrowDown : Minus;
+  const trendIconColor =
+    trendArrow === "up"
+      ? "hsl(var(--success))"
+      : trendArrow === "down"
+        ? "hsl(var(--destructive))"
+        : "hsl(var(--muted-foreground))";
+
+  return (
+    <TextureCard className="p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingUp className="size-4 text-[hsl(var(--brand-lime))]" />
+        <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+          Benchmark
+        </h3>
+        <button
+          type="button"
+          onClick={() => setShowInfo((v) => !v)}
+          aria-label="Info sobre el benchmark"
+          aria-expanded={showInfo}
+          className="grid place-items-center size-4 rounded-full text-muted-foreground/80 hover:text-foreground hover:bg-secondary/50 transition-colors"
+        >
+          <HelpCircle className="size-3" />
+        </button>
+      </div>
+
+      {showInfo && (
+        <div className="rounded-lg border border-border/60 bg-secondary/40 p-3 mb-3 text-[10.5px] leading-relaxed text-muted-foreground">
+          Estimación basada en observación, no en estudio publicado. Cliente puede mover
+          los rangos en Config (o vía las env vars{" "}
+          <span className="font-mono text-foreground/80">NEXT_PUBLIC_AEO_BENCH_LOW/MID/HIGH</span>).
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border/60 bg-secondary/30 p-3 mb-3">
+        <div className="text-[11px] leading-relaxed">
+          <strong className="font-mono" style={{ color: `hsl(${inRangeTone})` }}>
+            {visibilityPct}%
+          </strong>{" "}
+          visibility en LLMs. Estás en{" "}
+          <strong style={{ color: `hsl(${inRangeTone})` }}>{inRange}</strong>.
+        </div>
+        <div className="text-[10px] text-muted-foreground mt-2 leading-snug">
+          <strong className="text-foreground/80">Heurística interna</strong> (no estudio publicado)
+          {" · "}observación de tools similares: low {BENCH_HEURISTIC.low}% / mid {BENCH_HEURISTIC.mid}% / high {BENCH_HEURISTIC.high}%.
+        </div>
+      </div>
+
+      <div className="relative h-2 rounded-full bg-secondary/40 overflow-hidden mb-1">
+        <div
+          className="absolute inset-y-0 left-0 rounded-l-full"
+          style={{ width: `${BENCH_HEURISTIC.low}%`, background: `hsl(var(--destructive) / 0.35)` }}
+        />
+        <div
+          className="absolute inset-y-0"
+          style={{
+            left: `${BENCH_HEURISTIC.low}%`,
+            width: `${BENCH_HEURISTIC.mid - BENCH_HEURISTIC.low}%`,
+            background: `hsl(var(--brand-ember) / 0.35)`,
+          }}
+        />
+        <div
+          className="absolute inset-y-0"
+          style={{
+            left: `${BENCH_HEURISTIC.mid}%`,
+            width: `${BENCH_HEURISTIC.high - BENCH_HEURISTIC.mid}%`,
+            background: `hsl(var(--success) / 0.35)`,
+          }}
+        />
+        <div
+          className="absolute inset-y-0 rounded-r-full"
+          style={{
+            left: `${BENCH_HEURISTIC.high}%`,
+            width: `${100 - BENCH_HEURISTIC.high}%`,
+            background: `hsl(var(--brand-lime) / 0.35)`,
+          }}
+        />
+        <motion.div
+          className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-foreground rounded-full"
+          initial={{ left: 0 }}
+          animate={{ left: `${Math.min(visibilityPct, 100)}%` }}
+          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </div>
+      <div className="flex justify-between text-[8px] font-mono text-muted-foreground mb-4">
+        <span>0%</span>
+        <span>{BENCH_HEURISTIC.low}%</span>
+        <span>{BENCH_HEURISTIC.mid}%</span>
+        <span>{BENCH_HEURISTIC.high}%</span>
+        <span>100%</span>
+      </div>
+
+      {hasTrend ? (
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-1">
+            Evolución · {trendValues.length} runs
+          </div>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[60px]" aria-hidden>
+            <path
+              d={linePath}
+              fill="none"
+              stroke="hsl(var(--brand-violet))"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {trendValues.map((v, i) => (
+              <circle key={i} cx={xs(i)} cy={ys(v)} r={2.5} fill="hsl(var(--brand-violet))" />
+            ))}
+          </svg>
+          {trendDesc && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-1 leading-snug">
+              <TrendIcon className="size-3 shrink-0" style={{ color: trendIconColor }} />
+              <span>{trendDesc}</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-[10px] text-muted-foreground leading-snug">
+          Corré más análisis para ver evolución · necesitamos ≥2 runs.
+        </div>
+      )}
     </TextureCard>
   );
 }

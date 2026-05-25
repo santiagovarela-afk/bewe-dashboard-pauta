@@ -61,6 +61,38 @@ export function TabSeo() {
 
   return (
     <div className="space-y-7 max-w-[1500px]">
+      {/* ─────── DEMO DATA BANNER ─────── */}
+      <Reveal>
+        <div
+          className="rounded-xl border px-4 py-3 flex items-start gap-3"
+          style={{
+            background: `hsl(var(--warning) / 0.15)`,
+            borderColor: `hsl(var(--brand-ember) / 0.45)`,
+          }}
+        >
+          <div
+            className="size-9 grid place-items-center rounded-lg shrink-0"
+            style={{
+              background: `hsl(var(--brand-ember) / 0.18)`,
+              border: `1px solid hsl(var(--brand-ember) / 0.45)`,
+              color: `hsl(var(--brand-ember))`,
+            }}
+          >
+            <AlertTriangle className="size-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--brand-ember))] mb-0.5">
+              Datos demostrativos
+            </div>
+            <p className="text-[12px] leading-relaxed text-foreground/85">
+              Este tab muestra la <strong>estructura de SEO</strong> con datos falsos mientras se conectan las herramientas adecuadas.
+              Para conectar tu cuenta real necesitamos{" "}
+              <strong>Google Search Console + GA4</strong> (gratis). Pedile a Santi que active la integración.
+            </p>
+          </div>
+        </div>
+      </Reveal>
+
       {/* ─────── HERO + DEMO BANNER ─────── */}
       <Reveal>
         <div className="relative overflow-hidden rounded-2xl border border-border bg-card/30 backdrop-blur-sm">
@@ -103,7 +135,8 @@ export function TabSeo() {
       {/* ─────── KPI ROW ─────── */}
       <section>
         <SectionHeader title="KPIs orgánicos" sub="Snapshot · últimos 30 días (placeholder)" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* sparkline demo · matches banner — QA selector: [data-demo="1"] */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-demo="1">
           <KpiCard
             label="Tráfico orgánico"
             value={SEO_SUMMARY.organicVisits}
@@ -439,8 +472,9 @@ export function TabSeo() {
       </StaggerGroup>
 
       {/* Trend strip · fun visual */}
+      {/* sparkline demo · matches banner — QA selector: [data-demo="1"] */}
       <Reveal>
-        <TextureCard className="p-4 flex items-center gap-4">
+        <TextureCard className="p-4 flex items-center gap-4" data-demo="1">
           <div className="shrink-0">
             <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground">Visitas org. · 14d</div>
             <div className="font-mono font-bold text-lg tabular leading-none mt-0.5">

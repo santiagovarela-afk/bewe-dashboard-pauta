@@ -75,7 +75,7 @@ export function DateRangePicker() {
   const label = dateRange.from === dateRange.to ? formatES(dateRange.from) : `${formatES(dateRange.from)} → ${formatES(dateRange.to)}`;
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative" data-tour="date-range">
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(

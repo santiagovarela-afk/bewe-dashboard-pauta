@@ -16,7 +16,7 @@ export function TopBar() {
   const pageTitle = TABS.find((t) => t.id === tab)?.label ?? "Dashboard";
 
   return (
-    <header className="sticky top-0 z-30 h-14 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+    <header data-tour="topbar" className="sticky top-0 z-30 h-14 border-b border-border/60 bg-background/70 backdrop-blur-xl">
       <div className="h-full flex items-center justify-between gap-4 px-6">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[12px] text-muted-foreground">Bewe</span>
@@ -58,6 +58,7 @@ export function TopBar() {
           </div>
 
           <Button
+            data-tour="refresh"
             variant={loading ? "ghost" : "outline"}
             size="sm"
             onClick={refresh}

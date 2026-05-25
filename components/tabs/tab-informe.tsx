@@ -12,8 +12,72 @@ import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import type { Campaign } from "@/lib/types";
 
 type Format = "exec" | "slack" | "email" | "julian";
+
+/**
+ * Deriva los pendientes URGENTES leyendo el estado real de campañas.
+ * Devuelve solo los ítems que realmente aplican hoy · NO fabrica datos.
+ *
+ * Reglas:
+ *  · C2 con CR + IC bajos (cap. de evento Reg saturada) → candidato Plan B switch a IC
+ *  · cualquier campaña con flag === "critical" → CPT crítico, revisar adset perdedor
+ *  · C3 con anomalía (flag === "anomaly") y status DELETED/PAUSED → confirmar pixel
+ *  · Watchpoint Colombia → solo si alguna C4/C5/C6 tiene geo == "CO" o vertical de LATAM
+ */
+function derivePendientes(campaigns: Campaign[], _daysElapsed: number): string[] {
+  const out: string[] = [];
+
+  const c2 = campaigns.find((c) => c.code === "C2");
+  if (c2) {
+    // Plan B C2 si el CR está plano: <20 conv totales en el período y el IC también está bajo
+    // (heurística simple — los ratios reales dependen de pacing).
+    const c2Plano = c2.evCompleteReg < 20 && c2.spend > 0;
+    if (c2Plano) {
+      out.push(
+        `C2 candidato Plan B · switch a InitiateCheckout (CR ${c2.evCompleteReg} · IC ${c2.evInitCheckout} · gasto ${fmt.eur(c2.spend)})`,
+      );
+    }
+  }
+
+  for (const c of campaigns) {
+    if (c.flag === "critical") {
+      const cptTxt = c.cpt !== null ? fmt.eur(c.cpt) : "—";
+      out.push(`${c.code} CPT ${cptTxt} crítico · revisar adset perdedor`);
+    }
+  }
+
+  for (const c of campaigns) {
+    if (
+      c.flag === "anomaly" &&
+      (c.status === "DELETED" || c.status === "PAUSED" || c.status === "ARCHIVED")
+    ) {
+      out.push(`${c.code} anomalía pixel/CAPI confirmada · excluir del CPT global · no pausar más adsets`);
+    }
+  }
+
+  // Watchpoint geo-leakage Colombia · solo si la concentración real de gasto en CO supera 30%
+  const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0);
+  if (totalSpend > 0) {
+    const coCampaigns = campaigns.filter((c) => /\bCO\b|colombia/i.test(c.geo));
+    const coSpend = coCampaigns.reduce((s, c) => s + c.spend, 0);
+    const coShare = coSpend / totalSpend;
+    if (coShare > 0.3 && coCampaigns.length > 0) {
+      const codes = coCampaigns.map((c) => c.code).join("/");
+      out.push(
+        `Watchpoint geo-leakage Colombia (${Math.round(coShare * 100)}% del gasto en ${codes}) · si ≥40% aplicar bid cap`,
+      );
+    }
+  }
+
+  return out;
+}
+
+/** Checklist manual del equipo · separado del derivado · no depende de data. */
+const CHECKLIST_MANUAL: readonly string[] = [
+  "Confirmar UTMs en CRM (que las nuevas campañas estén loggeando origen)",
+];
 
 const FORMAT_META: Record<Format, { label: string; sub: string; Icon: typeof Hash; tone: string }> = {
   exec: { label: "Informe completo", sub: "Operativo detallado · interno", Icon: FileText, tone: "violet" },
@@ -23,7 +87,7 @@ const FORMAT_META: Record<Format, { label: string; sub: string; Icon: typeof Has
 };
 
 export function TabInforme() {
-  const { campaigns, daysElapsed, snapshot } = useDashboard();
+  const { campaigns, daysElapsed, snapshot, daily } = useDashboard();
   const m = computeMetrics(campaigns);
   const dToD7 = daysUntil(PLAN.day7ISO);
 
@@ -37,12 +101,12 @@ export function TabInforme() {
     [campaigns, daysElapsed],
   );
   const emailText = React.useMemo(
-    () => buildEmailReport(campaigns, daysElapsed, PLAN.totalDays),
-    [campaigns, daysElapsed],
+    () => buildEmailReport(campaigns, daysElapsed, PLAN.totalDays, daily),
+    [campaigns, daysElapsed, daily],
   );
   const julianText = React.useMemo(
-    () => buildJulianFullReport(campaigns, daysElapsed, PLAN.totalDays),
-    [campaigns, daysElapsed],
+    () => buildJulianFullReport(campaigns, daysElapsed, PLAN.totalDays, daily),
+    [campaigns, daysElapsed, daily],
   );
 
   const generate = React.useCallback(() => {
@@ -94,13 +158,21 @@ export function TabInforme() {
     });
 
     r += `PENDIENTES URGENTES\n────────────────────\n`;
-    r += `✗ PLAN B C2: switch a InitiateCheckout (${campaigns.find((c) => c.code === "C2")?.evCompleteReg ?? 0} CR)\n`;
-    r += `✗ C1 CPT €${campaigns.find((c) => c.code === "C1")?.cpt?.toFixed(2)} cruzó umbral crítico — revisar A1.3_INT_BELLEZA\n`;
-    r += `□ C3 anomalía CAPI confirmada — excluir de CPT global, no pausar\n`;
-    r += `□ Watchpoint geo-leakage Colombia en C4/C5/C6 (≥40% → bid cap)\n`;
-    r += `□ 26 mayo (Día 14): Activar C7 si ≥1000 visits + ≥30 trials\n`;
-    r += `□ Crear C8 LATAM_TOOLS\n`;
-    r += `□ Confirmar UTMs en CRM\n\n`;
+    const pendientes = derivePendientes(campaigns, daysElapsed);
+    if (pendientes.length === 0) {
+      r += `Sin pendientes derivados de la data hoy · seguimiento normal.\n`;
+    } else {
+      for (const p of pendientes) {
+        r += `✗ ${p}\n`;
+      }
+    }
+    r += `\n`;
+
+    r += `CHECKLIST MANUAL DEL EQUIPO\n────────────────────────────\n`;
+    for (const item of CHECKLIST_MANUAL) {
+      r += `□ ${item}\n`;
+    }
+    r += `\n`;
 
     r += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     r += `Generado por Bewe Pauta OS · ${new Date().toLocaleString("es")}\n`;

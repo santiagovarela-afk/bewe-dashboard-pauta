@@ -17,6 +17,7 @@ export function RestartTourButton() {
       onMouseLeave={() => setHover(false)}
     >
       <button
+        data-tour="restart-tour"
         type="button"
         onClick={triggerWelcomeAgain}
         title="Ver tour de bienvenida"

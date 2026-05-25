@@ -25,7 +25,7 @@ export function TopBottomAnalysis({ posts, onPostClick }: TopBottomAnalysisProps
     <div className="space-y-4">
       {/* TOP */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-1.5">
           <Trophy className="size-3.5 text-[hsl(var(--brand-ember))]" />
           <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
             Top 3 · qué funcionó y por qué
@@ -33,6 +33,9 @@ export function TopBottomAnalysis({ posts, onPostClick }: TopBottomAnalysisProps
           <span className="text-[9px] text-muted-foreground/70 font-mono ml-auto">
             media: {avgEngagement.toFixed(1)} eng/post
           </span>
+        </div>
+        <div className="text-[9.5px] text-muted-foreground/80 leading-snug mb-3">
+          Hipótesis cualitativa · basada en formato + métricas del post · validar con A/B.
         </div>
         <div className="grid sm:grid-cols-3 gap-3">
           {top.map((p, i) => (

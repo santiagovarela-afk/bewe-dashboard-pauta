@@ -30,11 +30,23 @@ export function Drawer({
   className,
   footer,
 }: DrawerProps) {
-  // Lock body scroll while open
+  // Lock body scroll while open + scroll window to top so the drawer always
+  // appears anchored to viewport (fix: cuadrícula negra cuando el scroll
+  // estaba al fondo del tab). Aside es fixed pero algunos navegadores en
+  // Windows pintaban el backdrop con offset si la página tenía scroll largo.
   React.useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Scroll suave a top antes de bloquear · evita render glitch en Chromium
+    // cuando el body tenía scroll lejano.
+    if (typeof window !== "undefined") {
+      try {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {
+        window.scrollTo(0, 0);
+      }
+    }
     return () => {
       document.body.style.overflow = prev;
     };

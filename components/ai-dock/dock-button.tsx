@@ -22,6 +22,7 @@ export function DockButton({ onClick, unread }: DockButtonProps) {
 
   return (
     <motion.button
+      data-tour="ai-fab"
       type="button"
       onClick={onClick}
       initial={{ scale: 0.6, opacity: 0 }}

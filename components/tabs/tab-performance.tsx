@@ -3,8 +3,6 @@ import * as React from "react";
 import { motion } from "motion/react";
 import {
   Gauge,
-  TrendingUp,
-  TrendingDown,
   Pause,
   PlayCircle,
   Activity,
@@ -12,13 +10,20 @@ import {
   MousePointerClick,
   ShoppingCart,
   UserCheck,
-  Users,
-  Coins,
   Calendar,
   Layers,
+  Info,
+  AlertTriangle,
+  Database,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
-import { computeMetrics, fakeTrend, suggestedAction } from "@/lib/selectors";
+import {
+  computeMetrics,
+  realDailySeries,
+  crCampaignIds,
+  suggestedAction,
+  cptVsGroupAvg,
+} from "@/lib/selectors";
 import { fmt, cptTone } from "@/lib/utils";
 import { PLAN } from "@/lib/config";
 import { SectionHeader } from "@/components/shared/section-header";
@@ -30,23 +35,25 @@ import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import { AnimatedNumber } from "@/components/fx/animated-number";
 import { Badge } from "@/components/ui/badge";
 
-// Constantes de modelo de unit economics (placeholders honestos)
-const TICKET_EST = 60;          // € · ticket promedio estimado
-const LTV_EST = 180;            // € · LTV estimado (3 mes prom)
-const PAYBACK_MONTHS = 4;       // meses · payback period
-const ACTIVATION_RATE = 0.62;   // 62% · trial → activated week1
-const RETENTION_W1 = 0.78;      // 78% · retención semana 1
-const RETENTION_W4 = 0.46;      // 46% · retención mes 1
+// Tooltip "?" compatible con el slot `badge` de KpiCard.
+// Pasa `children` vacíos al ExplainedMetric → solo renderiza el botón Info.
+function KpiHint({ children }: { children: React.ReactNode }) {
+  return (
+    <ExplainedMetric explanation={children}>
+      <span className="sr-only">Información</span>
+    </ExplainedMetric>
+  );
+}
 
 export function TabPerformance() {
-  const { campaigns, daysElapsed } = useDashboard();
+  const { campaigns, daysElapsed, dateRange, daily } = useDashboard();
   const m = computeMetrics(campaigns);
 
-  // ── Funnel completo ───────────────────────────────────────────────────
+  // ── Funnel completo (cross-funnel · mezcla campañas CR e IC) ──────────
   const impressions = m.impressions;
   const clicks = m.clicks;
-  const trials = m.totalConvIC; // Initiate Checkout = trial start
-  const activated = m.totalConvCR; // Complete Registration = activación
+  const trials = m.totalConvIC; // Initiate Checkout
+  const activated = m.totalConvCR; // Complete Registration
 
   const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
   const clickToTrial = clicks > 0 ? (trials / clicks) * 100 : 0;
@@ -56,25 +63,31 @@ export function TabPerformance() {
   const funnel = [
     { label: "Impresiones", value: impressions, color: "var(--brand-cyan)", Icon: Eye, sub: "Alcance total" },
     { label: "Clicks", value: clicks, color: "var(--brand-violet)", Icon: MousePointerClick, sub: `CTR ${fmt.pct(ctr, 2)}` },
-    { label: "Trials", value: trials, color: "var(--brand-ember)", Icon: ShoppingCart, sub: `CVR ${fmt.pct(clickToTrial, 1)}` },
-    { label: "Activados", value: activated, color: "var(--brand-lime)", Icon: UserCheck, sub: `CVR ${fmt.pct(trialToActivated, 1)}` },
+    { label: "IC (campañas IC)", value: trials, color: "var(--brand-ember)", Icon: ShoppingCart, sub: `Conv ${fmt.pct(clickToTrial, 1)}` },
+    { label: "CR (campañas CR)", value: activated, color: "var(--brand-lime)", Icon: UserCheck, sub: `Conv ${fmt.pct(trialToActivated, 1)}` },
   ];
   const maxFunnel = Math.max(...funnel.map((f) => f.value), 1);
 
-  // ── Unit economics ────────────────────────────────────────────────────
+  // ── Unit economics (solo CAC · resto requiere integraciones externas) ─
   const cac = m.cptReg ?? 0;
-  const ltvCacRatio = cac > 0 ? LTV_EST / cac : 0;
-  const ltvCacTone = ltvCacRatio >= 3 ? "success" : ltvCacRatio >= 2 ? "warning" : "danger";
 
-  // ── ROAS por campaña (revenue estimado = activated × LTV/3 ≈ ticket inicial) ─
-  const campaignsWithRoas = campaigns
-    .map((c) => {
-      const conv = c.conversions;
-      const revenue = conv * TICKET_EST;
-      const roas = c.spend > 0 ? revenue / c.spend : 0;
-      return { ...c, revenue, roas };
-    })
-    .sort((a, b) => b.roas - a.roas);
+  // Serie diaria real del CAC (spend CR / convCR) para el sparkline
+  const crIds = React.useMemo(() => crCampaignIds(campaigns), [campaigns]);
+  const cacSeries = React.useMemo(
+    () => realDailySeries(daily, dateRange, "cpl", crIds),
+    [daily, dateRange, crIds],
+  );
+
+  // ── Eficiencia relativa por campaña (CPT vs promedio del grupo · real) ─
+  const campaignsWithEfficiency = React.useMemo(() => {
+    return campaigns
+      .filter((c) => c.cpt !== null && c.flag !== "anomaly")
+      .map((c) => {
+        const { diffPct, groupAvg } = cptVsGroupAvg(c, campaigns);
+        return { ...c, diffPct, groupAvg };
+      })
+      .sort((a, b) => a.diffPct - b.diffPct); // más negativo = mejor (CPT debajo del grupo)
+  }, [campaigns]);
 
   // ── Decisión rápida: pausar/escalar ───────────────────────────────────
   const toPause = campaigns
@@ -86,6 +99,38 @@ export function TabPerformance() {
 
   return (
     <div className="space-y-7 max-w-[1500px]">
+      {/* ─────── INTRO BANNER · qué es Performance ─────── */}
+      <Reveal>
+        <div
+          className="rounded-xl border px-4 py-3.5 flex items-start gap-3"
+          style={{
+            background: `hsl(var(--brand-violet) / 0.10)`,
+            borderColor: `hsl(var(--brand-violet) / 0.40)`,
+          }}
+        >
+          <div
+            className="size-9 grid place-items-center rounded-lg shrink-0"
+            style={{
+              background: `hsl(var(--brand-violet) / 0.16)`,
+              border: `1px solid hsl(var(--brand-violet) / 0.40)`,
+              color: `hsl(var(--brand-violet))`,
+            }}
+          >
+            <Info className="size-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--brand-violet))] mb-0.5">
+              ¿Qué es Performance?
+            </div>
+            <p className="text-[12px] leading-relaxed text-foreground/85">
+              Performance = <strong>vista cross-funnel</strong> · cómo se comporta cada campaña desde
+              impresión hasta conversión. <strong>Pacing real vs presupuestado</strong>.
+              Recomendaciones automáticas por campaña (pausar / escalar) según unit economics.
+            </p>
+          </div>
+        </div>
+      </Reveal>
+
       {/* ─────── HERO ─────── */}
       <Reveal>
         <div className="relative overflow-hidden rounded-2xl border border-border bg-card/30 backdrop-blur-sm">
@@ -100,19 +145,19 @@ export function TabPerformance() {
                 Performance · funnel + unit economics
               </div>
               <h1 className="font-display font-bold tracking-[-0.025em] text-3xl md:text-4xl leading-[1.05] mb-3">
-                Embudo, CAC, LTV y <span className="text-aurora">ROAS.</span>
+                Embudo, CAC y <span className="text-aurora">eficiencia.</span>
               </h1>
               <p className="text-sm text-muted-foreground max-w-[520px] leading-relaxed">
-                Vista para <strong className="text-foreground/90">Performance Lead</strong>: del impression al activated,
-                con economía por canal y decisión rápida pausar/escalar.
+                Vista para <strong className="text-foreground/90">Performance Lead</strong>: del impression al CR,
+                con CAC real desde Meta y decisión rápida pausar/escalar.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <HeroStat label="Activados" value={fmt.int(activated)} sub={`de ${fmt.int(impressions)} impr.`} accent="var(--brand-lime)" />
-              <HeroStat label="CVR overall" value={fmt.pct(overallCvr, 3)} sub="impression → activated" accent="var(--brand-cyan)" />
+              <HeroStat label="CR (activados)" value={fmt.int(activated)} sub={`de ${fmt.int(impressions)} impr.`} accent="var(--brand-lime)" />
+              <HeroStat label="CVR overall" value={fmt.pct(overallCvr, 3)} sub="impression → CR" accent="var(--brand-cyan)" />
               <HeroStat label="CAC" value={fmt.eur(cac)} sub={`obj. ≤ €${PLAN.cpt.target}`} accent={cptTone(cac) === "success" ? "var(--success)" : "var(--warning)"} />
-              <HeroStat label="LTV/CAC" value={`${ltvCacRatio.toFixed(1)}x`} sub="≥3x es sano" accent="var(--brand-violet)" />
+              <HeroStat label="IC trustables" value={fmt.int(trials)} sub="excluye C3 (anomalía pixel)" accent="var(--brand-ember)" />
             </div>
           </div>
         </div>
@@ -121,10 +166,25 @@ export function TabPerformance() {
       {/* ─────── FUNNEL EJECUTIVO ─────── */}
       <section>
         <SectionHeader
-          title="Funnel ejecutivo"
-          sub="Impresiones → Clicks → Trials → Activados · agregado de las 6 campañas"
+          title="Funnel ejecutivo · cross-funnel"
+          sub="Impresiones → Clicks → IC → CR · agregado de las 6 campañas"
           right={<Badge variant="violet" className="font-mono">CVR {fmt.pct(overallCvr, 3)}</Badge>}
         />
+        {/* Nota crítica · este funnel mezcla campañas con objetivos distintos */}
+        <div
+          className="rounded-lg border px-3 py-2 mb-3 flex items-start gap-2"
+          style={{
+            background: `hsl(var(--warning) / 0.08)`,
+            borderColor: `hsl(var(--warning) / 0.30)`,
+          }}
+        >
+          <AlertTriangle className="size-3.5 mt-0.5 shrink-0 text-[hsl(var(--warning))]" />
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <strong className="text-foreground/90">Cross-funnel</strong> mezcla campañas CR (C1·C2·C4) e IC (C3·C5·C6) que tienen objetivos
+            distintos. Útil como vista agregada, pero el análisis real está separado en{" "}
+            <strong className="text-foreground/90">Dashboard → Embudos por tipo de evento</strong>.
+          </p>
+        </div>
         <TextureCard className="p-6">
           <div className="grid md:grid-cols-4 gap-3 mb-6">
             {funnel.map((step, i) => {
@@ -189,134 +249,129 @@ export function TabPerformance() {
         </TextureCard>
       </section>
 
-      {/* ─────── UNIT ECONOMICS ─────── */}
+      {/* ─────── UNIT ECONOMICS · BANNER GRANDE PENDIENTE INTEGRAR ─────── */}
       <section>
         <SectionHeader
           title="Unit economics"
-          sub="CAC real · LTV/Payback estimados (placeholder)"
+          sub="Solo CAC es real · LTV, ticket, payback y retention requieren integración externa"
         />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Reveal>
+          <div
+            className="rounded-xl border-2 px-5 py-5 mb-4 flex items-start gap-4"
+            style={{
+              background: `hsl(var(--warning) / 0.10)`,
+              borderColor: `hsl(var(--warning) / 0.50)`,
+            }}
+          >
+            <div
+              className="size-12 grid place-items-center rounded-lg shrink-0"
+              style={{
+                background: `hsl(var(--warning) / 0.20)`,
+                border: `1px solid hsl(var(--warning) / 0.45)`,
+                color: `hsl(var(--warning))`,
+              }}
+            >
+              <Database className="size-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <div className="text-[13px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--warning))]">
+                  Unit economics · pendiente integrar
+                </div>
+                <Badge variant="warning" className="font-mono">PostHog + Stripe/CRM</Badge>
+              </div>
+              <p className="text-[12px] leading-relaxed text-foreground/90">
+                LTV, ticket promedio, payback period y retention requieren conectar{" "}
+                <strong>PostHog</strong> (para trials y activación) +{" "}
+                <strong>Stripe o CRM</strong> (para ingresos reales y churn). Sin esos datos no es
+                honesto mostrar LTV/CAC ni payback. Aquí solo el <strong>CAC real</strong> calculado
+                desde Meta (spend ÷ registros completos).
+              </p>
+            </div>
+          </div>
+        </Reveal>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
           <KpiCard
             label="CAC (cost / reg)"
             value={cac}
             format={(v) => fmt.eur(v)}
-            sub={`${activated} reg con ${fmt.eur(m.spend, { decimals: 0 })}`}
+            sub={`${activated} reg con ${fmt.eur(m.spend, { decimals: 0 })} · dato real Meta`}
             tone={cptTone(cac) === "success" ? "success" : cptTone(cac) === "warning" ? "warning" : "danger"}
-            trend={fakeTrend(41, cac)}
-            badge={<Badge variant="outline" className="font-mono">obj €{PLAN.cpt.target}</Badge>}
+            trend={cacSeries}
+            badge={
+              <KpiHint>
+                <strong>CAC</strong> · Customer Acquisition Cost. Coste real para conseguir 1
+                registro completo (spend total CR ÷ CR). Objetivo ≤ €{PLAN.cpt.target}.
+              </KpiHint>
+            }
             delay={0.02}
           />
-          <KpiCard
-            label="LTV estimado"
-            value={LTV_EST}
-            format={(v) => fmt.eur(v, { decimals: 0 })}
-            sub="3 meses prom · ticket €60"
-            tone="violet"
-            trend={fakeTrend(42, LTV_EST)}
-            delay={0.06}
-          />
-          <KpiCard
-            label="LTV / CAC"
-            value={ltvCacRatio}
-            format={(v) => `${v.toFixed(1)}x`}
-            sub={ltvCacRatio >= 3 ? "Sano · escalar" : ltvCacRatio >= 2 ? "Aceptable" : "Riesgo unit economic"}
-            tone={ltvCacTone}
-            trend={fakeTrend(43, ltvCacRatio)}
-            delay={0.1}
-          />
-          <KpiCard
-            label="Payback"
-            value={PAYBACK_MONTHS}
-            format={(v) => `${v.toFixed(1)}m`}
-            sub="meses para recuperar CAC"
-            tone="cyan"
-            trend={fakeTrend(44, PAYBACK_MONTHS)}
-            delay={0.14}
-          />
+          <div
+            className="rounded-xl border p-4 flex items-center gap-3"
+            style={{
+              background: `hsl(var(--muted) / 0.20)`,
+              borderColor: `hsl(var(--border))`,
+            }}
+          >
+            <div className="text-[11px] text-muted-foreground leading-relaxed">
+              <strong className="text-foreground/90">LTV · Payback · Ticket · Activation · Retention</strong>{" "}
+              <br />
+              No se muestran porque no se pueden calcular sin PostHog (trials) + Stripe/CRM (ingresos).
+              Cualquier número aquí sería una estimación · ver banner.
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ─────── COHORTS PLACEHOLDER ─────── */}
+      {/* ─────── COHORTS · EMPTY STATE HONESTO ─────── */}
       <section>
         <SectionHeader
           title="Cohortes · trial → activación → retención"
-          sub="Placeholder honesto · pendiente integrar product analytics (Mixpanel/Amplitude)"
-          right={<Badge variant="warning">Demo</Badge>}
+          sub="Sin cohort data · requiere PostHog para ver retention real"
+          right={<Badge variant="outline">Sin datos</Badge>}
         />
-        <TextureCard className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground border-b border-border">
-                <tr>
-                  <th className="text-left px-4 py-3 font-semibold">Cohorte</th>
-                  <th className="text-right px-4 py-3 font-semibold">Trials</th>
-                  <th className="text-right px-4 py-3 font-semibold">
-                    <ExplainedMetric explanation="% que completa registro la primera semana">
-                      <span>Activación W1</span>
-                    </ExplainedMetric>
-                  </th>
-                  <th className="text-right px-4 py-3 font-semibold">Retención W1</th>
-                  <th className="text-right px-4 py-3 font-semibold">Retención W4</th>
-                  <th className="text-right px-4 py-3 font-semibold">Δ vs anterior</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { label: "Sem 18 · 28 abr", trials: 92, act: 0.58, w1: 0.74, w4: 0.41, delta: -2 },
-                  { label: "Sem 19 · 05 may", trials: 124, act: 0.62, w1: 0.78, w4: 0.46, delta: +4 },
-                  { label: "Sem 20 · 12 may", trials: 168, act: 0.65, w1: 0.81, w4: null, delta: +3 },
-                  { label: "Sem 21 · 19 may", trials: 142, act: 0.61, w1: null, w4: null, delta: -4 },
-                  { label: "En curso · 22 may", trials: 38, act: null, w1: null, w4: null, delta: null },
-                ].map((row, i) => (
-                  <motion.tr
-                    key={row.label}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.04 * i }}
-                    className="border-b border-border/40 last:border-0 hover:bg-secondary/30"
-                  >
-                    <td className="px-4 py-3 font-medium">{row.label}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular">{fmt.int(row.trials)}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular">
-                      {row.act !== null ? <span className={row.act >= ACTIVATION_RATE ? "text-[hsl(var(--success))]" : "text-foreground"}>{fmt.pct(row.act * 100, 0)}</span> : <span className="text-muted-foreground/40">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular">
-                      {row.w1 !== null ? fmt.pct(row.w1 * 100, 0) : <span className="text-muted-foreground/40">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular">
-                      {row.w4 !== null ? fmt.pct(row.w4 * 100, 0) : <span className="text-muted-foreground/40">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {row.delta !== null ? (
-                        <span className={`inline-flex items-center gap-0.5 font-mono tabular text-[11px] ${row.delta > 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--destructive))]"}`}>
-                          {row.delta > 0 ? <TrendingUp className="size-2.5" /> : <TrendingDown className="size-2.5" />}
-                          {Math.abs(row.delta)}pp
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
+        <TextureCard className="p-10">
+          <div className="flex flex-col items-center justify-center text-center gap-3 max-w-[460px] mx-auto">
+            <div
+              className="size-14 grid place-items-center rounded-2xl border"
+              style={{
+                background: `hsl(var(--muted) / 0.30)`,
+                borderColor: `hsl(var(--border))`,
+                color: `hsl(var(--muted-foreground))`,
+              }}
+            >
+              <Database className="size-6" />
+            </div>
+            <div>
+              <h3 className="text-[14px] font-semibold mb-1">Sin cohort data</h3>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                Para ver cohortes de retención (semanas 1–4 post-registro) hay que conectar{" "}
+                <strong className="text-foreground/90">PostHog</strong> a la web app.
+                Una vez integrado, esta tabla muestra cohortes reales con activación W1/W4 y delta vs semana anterior.
+              </p>
+            </div>
+            <Badge variant="warning" className="font-mono">PostHog · pendiente integrar</Badge>
           </div>
         </TextureCard>
       </section>
 
-      {/* ─────── ROAS POR CAMPAÑA ─────── */}
+      {/* ─────── EFICIENCIA RELATIVA · solo datos reales ─────── */}
       <section>
         <SectionHeader
-          title="ROAS por campaña"
-          sub={`Revenue estimado = conversiones × ticket €${TICKET_EST} · ROAS = revenue / spend`}
+          title="Eficiencia relativa por campaña"
+          sub="CPT real de cada campaña vs promedio de su grupo (mismo evento) · dato 100% Meta"
         />
         <StaggerGroup className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {campaignsWithRoas.map((c, i) => {
-            const tone = c.roas >= 1.5 ? "success" : c.roas >= 1 ? "warning" : "danger";
+          {campaignsWithEfficiency.map((c) => {
+            // diffPct negativo = CPT debajo del promedio = mejor
+            const isBetter = c.diffPct < -5;
+            const isWorse = c.diffPct > 5;
+            const tone = isBetter ? "success" : isWorse ? "danger" : "warning";
             const accent =
               tone === "success" ? "var(--success)" :
               tone === "warning" ? "var(--warning)" :
               "var(--destructive)";
+            const label = isBetter ? "Debajo del grupo" : isWorse ? "Sobre el grupo" : "En línea";
             return (
               <StaggerItem key={c.cid}>
                 <SpotlightCard spotlightColor={accent} intensity={0.22} className="p-4">
@@ -333,27 +388,37 @@ export function TabPerformance() {
                           {c.code}
                         </span>
                         <Badge variant={tone === "success" ? "success" : tone === "warning" ? "warning" : "danger"}>
-                          {tone === "success" ? "Profitable" : tone === "warning" ? "Break-even" : "Negative"}
+                          {label}
                         </Badge>
                       </div>
                       <div className="text-[11px] font-semibold truncate">{c.name}</div>
-                      <div className="text-[10px] text-muted-foreground">{c.geo} · {c.vertical}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {c.geo} · {c.vertical} · evento {c.event === "CompleteRegistration" ? "CR" : "IC"}
+                      </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">ROAS</div>
+                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">vs grupo</div>
                       <div className="font-mono font-bold text-xl tabular leading-none" style={{ color: `hsl(${accent})` }}>
-                        <AnimatedNumber value={c.roas} format={(v) => `${v.toFixed(2)}x`} duration={1.2} />
+                        <AnimatedNumber
+                          value={c.diffPct}
+                          format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(0)}%`}
+                          duration={1.2}
+                        />
                       </div>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 text-[10px] pt-2 border-t border-border/40 mt-2">
                     <div>
-                      <div className="text-muted-foreground">Spend</div>
-                      <div className="font-mono font-semibold tabular">{fmt.eur(c.spend, { decimals: 0 })}</div>
+                      <div className="text-muted-foreground">CPT</div>
+                      <div className="font-mono font-semibold tabular">
+                        {c.cpt !== null ? fmt.eur(c.cpt) : "—"}
+                      </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Rev. est.</div>
-                      <div className="font-mono font-semibold tabular">{fmt.eur(c.revenue, { decimals: 0 })}</div>
+                      <div className="text-muted-foreground">Grupo avg</div>
+                      <div className="font-mono font-semibold tabular">
+                        {c.groupAvg !== null ? fmt.eur(c.groupAvg) : "—"}
+                      </div>
                     </div>
                     <div>
                       <div className="text-muted-foreground">Conv</div>
@@ -402,20 +467,9 @@ export function TabPerformance() {
             </div>
             <div className="h-8 w-px bg-border" />
             <div className="flex items-center gap-2">
-              <Coins className="size-4 text-[hsl(var(--brand-ember))]" />
+              <Activity className="size-4 text-[hsl(var(--brand-cyan))]" />
               <div className="text-[11px] text-muted-foreground">
-                Modelo: ticket <span className="font-mono text-foreground/90">€{TICKET_EST}</span> ·
-                LTV <span className="font-mono text-foreground/90">€{LTV_EST}</span> ·
-                payback <span className="font-mono text-foreground/90">{PAYBACK_MONTHS}m</span>
-              </div>
-            </div>
-            <div className="h-8 w-px bg-border" />
-            <div className="flex items-center gap-2">
-              <Users className="size-4 text-[hsl(var(--brand-cyan))]" />
-              <div className="text-[11px] text-muted-foreground">
-                Activación W1 <span className="font-mono text-foreground/90">{Math.round(ACTIVATION_RATE * 100)}%</span> ·
-                Ret W1 <span className="font-mono text-foreground/90">{Math.round(RETENTION_W1 * 100)}%</span> ·
-                Ret W4 <span className="font-mono text-foreground/90">{Math.round(RETENTION_W4 * 100)}%</span>
+                Datos 100% Meta · sin estimaciones ocultas. LTV / payback / retention requieren PostHog + Stripe.
               </div>
             </div>
             <div className="ml-auto">

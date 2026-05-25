@@ -20,8 +20,8 @@ import {
   Smartphone,
   ChevronLeft,
   ChevronRight,
-  BookOpen,
-  Flame,
+  Wand2,
+  ExternalLink,
 } from "lucide-react";
 import { SectionHeader } from "@/components/shared/section-header";
 import { TextureCard } from "@/components/fx/texture-card";
@@ -44,10 +44,22 @@ import {
 import { HashtagFinder } from "@/components/parrilla/hashtag-finder";
 import { IdeaGenerator, type PostIdea } from "@/components/parrilla/idea-generator";
 import { PostPreview, type PreviewPlatform } from "@/components/parrilla/post-preview";
-import { Insights24h } from "@/components/parrilla/insights-24h";
-import { bestTimeForPlatform, RULES_2026 } from "@/components/parrilla/best-time";
+import { bestTimeForPlatform } from "@/components/parrilla/best-time";
+import { useOrganic } from "@/lib/hooks/use-organic";
+import { dailyPlan, performanceByFormat, type AnalyticsPost } from "@/lib/organic-analytics";
 
 const DAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+interface PublishedPost {
+  id: string;
+  platform: "ig" | "fb";
+  caption?: string;
+  thumb?: string;
+  likes: number;
+  comments: number;
+  permalink?: string;
+  type?: string;
+}
 
 export function TabParrilla() {
   const [posts, setPosts] = React.useState<ScheduledPost[]>([]);
@@ -60,6 +72,78 @@ export function TabParrilla() {
   const today = React.useMemo(() => new Date(), []);
   const [viewYear, setViewYear] = React.useState(today.getFullYear());
   const [viewMonth, setViewMonth] = React.useState(today.getMonth());
+
+  /**
+   * Histórico real publicado (queja #1 · "voy al día 22 y no me dice qué se
+   * publicó"). Traemos IG + FB de Meta API y los indexamos por fecha ISO para
+   * pintar el calendario.
+   */
+  const { ig, fb } = useOrganic({ limit: 100 });
+  const publishedByDate = React.useMemo(() => {
+    const map = new Map<string, PublishedPost[]>();
+    for (const p of ig.posts) {
+      if (!p.timestamp) continue;
+      const iso = new Date(p.timestamp).toISOString().slice(0, 10);
+      const arr = map.get(iso) ?? [];
+      arr.push({
+        id: p.id,
+        platform: "ig",
+        caption: p.caption,
+        thumb: p.thumbnail_url || p.media_url,
+        likes: p.like_count ?? 0,
+        comments: p.comments_count ?? 0,
+        permalink: p.permalink,
+        type: p.media_type,
+      });
+      map.set(iso, arr);
+    }
+    for (const p of fb.posts) {
+      if (!p.created_time) continue;
+      const iso = new Date(p.created_time).toISOString().slice(0, 10);
+      const arr = map.get(iso) ?? [];
+      arr.push({
+        id: p.id,
+        platform: "fb",
+        caption: p.message,
+        thumb: p.full_picture,
+        likes: p.reactions?.summary?.total_count ?? 0,
+        comments: p.comments?.summary?.total_count ?? 0,
+        permalink: p.permalink_url,
+      });
+      map.set(iso, arr);
+    }
+    return map;
+  }, [ig.posts, fb.posts]);
+
+  /** Posts orgánicos normalizados (para el análisis del plan próxima semana). */
+  const analyticsPosts = React.useMemo<AnalyticsPost[]>(() => {
+    const out: AnalyticsPost[] = [];
+    for (const p of ig.posts) {
+      out.push({
+        id: p.id,
+        source: "ig",
+        thumb: p.thumbnail_url || p.media_url,
+        text: p.caption,
+        likes: p.like_count ?? 0,
+        comments: p.comments_count ?? 0,
+        date: p.timestamp,
+        type: p.media_type,
+        media_product_type: p.media_product_type,
+      });
+    }
+    for (const p of fb.posts) {
+      out.push({
+        id: p.id,
+        source: "fb",
+        thumb: p.full_picture,
+        text: p.message,
+        likes: p.reactions?.summary?.total_count ?? 0,
+        comments: p.comments?.summary?.total_count ?? 0,
+        date: p.created_time,
+      });
+    }
+    return out;
+  }, [ig.posts, fb.posts]);
 
   // Hydrate on mount
   React.useEffect(() => {
@@ -179,24 +263,20 @@ export function TabParrilla() {
         storageKey="parrilla"
         steps={[
           {
-            title: "Parrilla inteligente · piloto automático",
-            body: "Planifica, organiza y optimiza tus redes desde un solo lugar. Calendario + ideas IA + hashtags clasificados + preview real + analítica primeras 24h.",
+            title: "Parrilla · solo planificación",
+            body: "Acá organizás qué publicar. El análisis 24h y las reglas 2026 viven en Orgánico (tab Contenidos Orgánicos).",
           },
           {
-            title: "Composer Metricool-style",
-            body: "Pulsa 'Nuevo post' o clic en un día. El composer tiene 5 pestañas: Compose (caption + imagen), Ideas (Mark/Lúa genera 5 ideas), Hashtags (HIGH/MID/NICHE), Preview (mockup real IG/FB/Reel/Story) y Best time (mejor hora para postear).",
+            title: "Calendario con histórico real",
+            body: "Verde = ya publicado (viene de Meta API) · Azul = hoy · Violeta = programado futuro. Click cualquier día para ver detalle.",
           },
           {
-            title: "Ideas instantáneas con tu tono Bewe",
-            body: "Mark/Lúa conocen el perfil Bewe y generan posts con hook + copy + CTA según objetivo (engagement, leads, awareness, brand).",
+            title: "Composer con sugerencia automática",
+            body: "Al seleccionar un día futuro, te sugerimos formato y mejor hora basado en histórico real. Tab Ideas: Mark/Lúa genera 5 posts con tu tono Bewe.",
           },
           {
-            title: "Hashtags que funcionan",
-            body: "Clasificación automática en HIGH (>1M), MID (100k-1M) y NICHE (<100k alta intención). Mix recomendado 2026: 3 high + 4 mid + 3 niche.",
-          },
-          {
-            title: "Analytics primeras 24h",
-            body: "Detectamos posts que en sus primeras horas ya superan el promedio de tu cuenta · esos son las 'estrellas 24h' que merecen amplificación.",
+            title: "Plan próxima semana",
+            body: "Te decimos qué publicar cada uno de los próximos 7 días, basado en el día de la semana y el formato top de tu cuenta.",
           },
           {
             title: "Persistencia local",
@@ -315,9 +395,13 @@ export function TabParrilla() {
         <div className="grid grid-cols-7 gap-1.5">
           {cells.map((c, i) => {
             const dayPosts = c.iso ? posts.filter((p) => p.date === c.iso) : [];
+            const dayPublished = c.iso ? publishedByDate.get(c.iso) ?? [] : [];
             const isToday = c.iso === todayIso;
             const isPast = c.iso != null && c.iso < todayIso;
-            const density = dayPosts.length / maxDayCount;
+            const isFuture = c.iso != null && c.iso > todayIso;
+            const hasPublished = dayPublished.length > 0;
+            const hasScheduledFuture = isFuture && dayPosts.length > 0;
+            const density = (dayPosts.length + dayPublished.length) / maxDayCount;
             return (
               <motion.button
                 key={i}
@@ -332,17 +416,36 @@ export function TabParrilla() {
                   c.iso
                     ? "border-border bg-card/60 hover:border-foreground/40 cursor-pointer"
                     : "border-transparent cursor-default",
-                  isPast && c.iso && "opacity-55",
+                  // PAST publicado · verde
+                  isPast &&
+                    hasPublished &&
+                    "!border-[hsl(var(--brand-lime)/0.6)] !bg-[hsl(var(--brand-lime)/0.06)]",
+                  // PAST sin publicar · gris desaturado
+                  isPast && !hasPublished && "opacity-55",
+                  // HOY · azul (queja #1)
                   isToday &&
-                    "!border-[hsl(var(--brand-violet))] ring-2 ring-[hsl(var(--brand-violet)/0.45)] bg-[hsl(var(--brand-violet)/0.08)]",
+                    "!border-[hsl(var(--brand-cyan))] ring-2 ring-[hsl(var(--brand-cyan)/0.45)] !bg-[hsl(var(--brand-cyan)/0.08)]",
+                  // FUTURO programado · morado
+                  hasScheduledFuture &&
+                    !isToday &&
+                    "!border-[hsl(var(--brand-violet)/0.5)] !bg-[hsl(var(--brand-violet)/0.06)]",
                   selectedDate === c.iso && !isToday && "ring-2 ring-[hsl(var(--brand-cyan)/0.6)]",
                 )}
                 style={
-                  c.iso && !isToday && dayPosts.length > 0
+                  c.iso && !isToday && !hasPublished && dayPosts.length > 0
                     ? {
                         background: `hsl(var(--brand-violet) / ${0.04 + density * 0.18})`,
                       }
                     : undefined
+                }
+                title={
+                  hasPublished
+                    ? `${dayPublished.length} publicado · click para ver detalle`
+                    : hasScheduledFuture
+                      ? `${dayPosts.length} programado · click para ver detalle`
+                      : isToday
+                        ? "Hoy"
+                        : c.iso ?? ""
                 }
               >
                 {c.day && (
@@ -352,8 +455,12 @@ export function TabParrilla() {
                         className={cn(
                           "text-[11px] font-bold",
                           isToday
-                            ? "text-[hsl(var(--brand-violet))]"
-                            : "text-muted-foreground",
+                            ? "text-[hsl(var(--brand-cyan))]"
+                            : hasPublished
+                              ? "text-[hsl(var(--brand-lime))]"
+                              : hasScheduledFuture
+                                ? "text-[hsl(var(--brand-violet))]"
+                                : "text-muted-foreground",
                         )}
                       >
                         {c.day}
@@ -363,21 +470,43 @@ export function TabParrilla() {
                           </span>
                         )}
                       </div>
-                      {dayPosts.length > 0 && (
-                        <span
-                          className={cn(
-                            "text-[9px] font-mono font-bold rounded-full px-1.5 py-0.5",
-                            dayPosts.length >= 3
-                              ? "bg-[hsl(var(--brand-violet))] text-white"
-                              : "text-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.15)]",
-                          )}
-                        >
-                          {dayPosts.length}
-                        </span>
-                      )}
+                      <div className="inline-flex items-center gap-1">
+                        {hasPublished && (
+                          <span
+                            className="text-[9px] font-mono font-bold rounded-full px-1.5 py-0.5 bg-[hsl(var(--brand-lime)/0.18)] text-[hsl(var(--brand-lime))]"
+                            title={`${dayPublished.length} publicado`}
+                          >
+                            ✓{dayPublished.length}
+                          </span>
+                        )}
+                        {dayPosts.length > 0 && (
+                          <span
+                            className={cn(
+                              "text-[9px] font-mono font-bold rounded-full px-1.5 py-0.5",
+                              dayPosts.length >= 3
+                                ? "bg-[hsl(var(--brand-violet))] text-white"
+                                : "text-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.15)]",
+                            )}
+                            title={`${dayPosts.length} programado`}
+                          >
+                            {dayPosts.length}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-1 space-y-0.5">
-                      {dayPosts.slice(0, 2).map((p) => (
+                      {/* Publicados primero (verde) */}
+                      {dayPublished.slice(0, 2).map((p) => (
+                        <div
+                          key={`pub-${p.id}`}
+                          className="text-[9px] truncate px-1 py-0.5 rounded leading-snug bg-[hsl(var(--brand-lime)/0.18)] text-[hsl(var(--brand-lime))]"
+                          title={p.caption ?? "Publicado"}
+                        >
+                          ✓ {p.caption?.slice(0, 14) || "(sin texto)"}…
+                        </div>
+                      ))}
+                      {/* Programados después (violeta o azul) */}
+                      {dayPosts.slice(0, Math.max(0, 2 - dayPublished.length)).map((p) => (
                         <div
                           key={p.id}
                           className="text-[9px] truncate px-1 py-0.5 rounded leading-snug"
@@ -393,9 +522,9 @@ export function TabParrilla() {
                           {p.caption.slice(0, 16) || "(sin texto)"}…
                         </div>
                       ))}
-                      {dayPosts.length > 2 && (
+                      {dayPosts.length + dayPublished.length > 2 && (
                         <div className="text-[9px] text-muted-foreground">
-                          +{dayPosts.length - 2} más
+                          +{dayPosts.length + dayPublished.length - 2} más
                         </div>
                       )}
                     </div>
@@ -406,62 +535,31 @@ export function TabParrilla() {
           })}
         </div>
 
-        {/* Leyenda */}
+        {/* Leyenda · pasado publicado / hoy / futuro programado */}
         <div className="mt-4 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-[hsl(var(--brand-violet)/0.18)] border border-[hsl(var(--brand-violet)/0.3)]" />
-            Instagram / Reel / Story
+            <span className="size-2.5 rounded-sm bg-[hsl(var(--brand-lime)/0.18)] border border-[hsl(var(--brand-lime)/0.6)]" />
+            Publicado (✓)
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-[hsl(var(--info)/0.18)] border border-[hsl(var(--info)/0.3)]" />
-            Facebook
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm border-2 border-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.08)]" />
+            <span className="size-2.5 rounded-sm bg-[hsl(var(--brand-cyan)/0.18)] border-2 border-[hsl(var(--brand-cyan))]" />
             Hoy
           </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2.5 rounded-sm bg-[hsl(var(--brand-violet)/0.18)] border border-[hsl(var(--brand-violet)/0.5)]" />
+            Programado futuro
+          </span>
           <span className="ml-auto text-[9px] font-mono">
-            Click día → ver detalle · 3+ posts = badge sólido
+            Click día → ver detalle · histórico desde Meta API
           </span>
         </div>
       </TextureCard>
 
-      {/* Analítica + Reglas 2026 lado a lado */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <TextureCard className="p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-3 flex items-center gap-1.5">
-            <Flame className="size-3 text-[hsl(var(--brand-ember))]" />
-            Insights primeras 24h
-          </div>
-          <Insights24h />
-        </TextureCard>
-
-        <TextureCard className="p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground mb-3 flex items-center gap-1.5">
-            <BookOpen className="size-3 text-[hsl(var(--brand-lime))]" />
-            Reglas 2026 · engagement orgánico
-          </div>
-          <div className="grid grid-cols-1 gap-1.5">
-            {RULES_2026.map((r, i) => (
-              <motion.div
-                key={r.title}
-                initial={{ opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className="flex items-start gap-2 p-1.5 rounded hover:bg-secondary/40"
-              >
-                <span className="text-base leading-none mt-0.5">{r.icon}</span>
-                <div className="min-w-0">
-                  <div className="text-[11px] font-semibold">{r.title}</div>
-                  <div className="text-[10px] text-muted-foreground leading-snug">
-                    {r.detail}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </TextureCard>
-      </div>
+      {/* Plan próxima semana · qué publicar (queja Parrilla #9) */}
+      <NextWeekPlan
+        posts={analyticsPosts}
+        onScheduleDay={(iso) => openComposerForDate(iso)}
+      />
 
       {/* Empty state */}
       {hydrated && posts.length === 0 && (
@@ -487,6 +585,8 @@ export function TabParrilla() {
       <DayDrawer
         date={selectedDate}
         posts={selectedDate ? posts.filter((p) => p.date === selectedDate) : []}
+        published={selectedDate ? publishedByDate.get(selectedDate) ?? [] : []}
+        todayIso={todayIso}
         onClose={() => setSelectedDate(null)}
         onDelete={handleDeletePost}
         onAdd={(iso) => openComposerForDate(iso)}
@@ -506,10 +606,21 @@ export function TabParrilla() {
       >
         <Composer
           date={composerDate ?? todayIso}
+          analyticsPosts={analyticsPosts}
           onAdd={handleAddPost}
           onClose={() => setComposerOpen(false)}
         />
       </Drawer>
+
+      {/* Botón flotante · "Nuevo post" siempre visible (queja Parrilla #5) */}
+      <button
+        onClick={() => openComposerForDate(selectedDate)}
+        className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 h-11 px-4 rounded-full bg-[hsl(var(--brand-violet))] text-white shadow-[0_10px_40px_-10px_hsl(var(--brand-violet)/0.6)] hover:scale-105 transition-transform font-semibold text-[12px]"
+        aria-label="Nuevo post"
+      >
+        <Pencil className="size-4" />
+        Nuevo post
+      </button>
     </div>
   );
 }
@@ -545,12 +656,16 @@ function MiniStat({
 function DayDrawer({
   date,
   posts,
+  published,
+  todayIso,
   onClose,
   onDelete,
   onAdd,
 }: {
   date: string | null;
   posts: ScheduledPost[];
+  published: PublishedPost[];
+  todayIso: string;
   onClose: () => void;
   onDelete: (id: string) => void;
   onAdd: (iso: string) => void;
@@ -564,6 +679,14 @@ function DayDrawer({
     month: "long",
     year: "numeric",
   });
+  const isPast = date < todayIso;
+  const isToday = date === todayIso;
+  const isFuture = date > todayIso;
+  const subtitleParts: string[] = [];
+  if (published.length)
+    subtitleParts.push(`${published.length} publicado${published.length === 1 ? "" : "s"}`);
+  if (posts.length)
+    subtitleParts.push(`${posts.length} programado${posts.length === 1 ? "" : "s"}`);
   return (
     <Drawer
       open={!!date}
@@ -573,72 +696,153 @@ function DayDrawer({
           <Calendar className="size-3.5 text-[hsl(var(--brand-cyan))]" /> {longDate}
         </span>
       }
-      subtitle={`${posts.length} post${posts.length === 1 ? "" : "s"} programado${posts.length === 1 ? "" : "s"}`}
+      subtitle={
+        subtitleParts.length
+          ? subtitleParts.join(" · ")
+          : isPast
+            ? "Día pasado · sin publicaciones registradas"
+            : "Sin posts programados"
+      }
       footer={
-        <Button
-          onClick={() => onAdd(date)}
-          variant="glow"
-          size="sm"
-          className="w-full"
-        >
-          <Plus className="size-3.5" /> Agregar post a este día
-        </Button>
+        !isPast && (
+          <Button
+            onClick={() => onAdd(date)}
+            variant="glow"
+            size="sm"
+            className="w-full"
+          >
+            <Plus className="size-3.5" /> {isToday ? "Publicar hoy" : "Programar este día"}
+          </Button>
+        )
       }
     >
       <div className="space-y-3">
-        {posts.length === 0 && (
+        {/* Publicados reales (queja #1) */}
+        {published.length > 0 && (
+          <div>
+            <div className="text-[9px] uppercase tracking-[0.12em] text-[hsl(var(--brand-lime))] font-bold mb-2 inline-flex items-center gap-1.5">
+              <Sparkles className="size-3" /> Publicado este día
+            </div>
+            <div className="space-y-2">
+              {published.map((p) => (
+                <motion.a
+                  key={`pub-${p.id}`}
+                  href={p.permalink}
+                  target="_blank"
+                  rel="noreferrer"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="block rounded-lg border border-[hsl(var(--brand-lime)/0.4)] bg-[hsl(var(--brand-lime)/0.05)] p-3 hover:bg-[hsl(var(--brand-lime)/0.08)] transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge
+                      variant={p.platform === "fb" ? "info" : "violet"}
+                      className="!text-[9px]"
+                    >
+                      {p.platform === "fb" ? (
+                        <Facebook className="size-2.5 mr-0.5" />
+                      ) : (
+                        <Instagram className="size-2.5 mr-0.5" />
+                      )}
+                      {p.platform.toUpperCase()}
+                    </Badge>
+                    {p.type && (
+                      <Badge variant="outline" className="!text-[8px]">
+                        {p.type}
+                      </Badge>
+                    )}
+                    {p.permalink && (
+                      <ExternalLink className="size-3 text-muted-foreground ml-auto" />
+                    )}
+                  </div>
+                  {p.thumb && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.thumb}
+                      alt=""
+                      className="w-full rounded-md mb-2 border border-border/40 max-h-40 object-cover"
+                    />
+                  )}
+                  <div className="text-[11px] text-foreground leading-relaxed line-clamp-4">
+                    {p.caption ?? <span className="italic text-muted-foreground">Sin caption</span>}
+                  </div>
+                  <div className="mt-1.5 text-[9px] font-mono text-muted-foreground inline-flex gap-3">
+                    <span>❤ {p.likes}</span>
+                    <span>💬 {p.comments}</span>
+                  </div>
+                </motion.a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {posts.length === 0 && published.length === 0 && (
           <div className="text-center py-8">
             <div className="size-10 rounded-xl bg-secondary mx-auto mb-3 grid place-items-center">
               <Calendar className="size-4 text-muted-foreground" />
             </div>
             <div className="text-[12px] text-muted-foreground mb-3">
-              No hay posts programados para este día.
+              {isPast
+                ? "No hay publicaciones registradas este día."
+                : isFuture
+                  ? "Sin posts programados para este día · usá el composer."
+                  : "No hay posts programados para hoy."}
             </div>
           </div>
         )}
-        {posts.map((p) => (
-          <motion.div
-            key={p.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="rounded-lg border border-border/60 bg-card/60 p-3"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              {p.platforms.map((pl) => (
-                <Badge
-                  key={pl}
-                  variant={pl === "fb" ? "info" : "violet"}
-                  className="!text-[9px]"
+
+        {posts.length > 0 && (
+          <div>
+            <div className="text-[9px] uppercase tracking-[0.12em] text-[hsl(var(--brand-violet))] font-bold mb-2 inline-flex items-center gap-1.5">
+              <Calendar className="size-3" /> Programados
+            </div>
+            <div className="space-y-2">
+              {posts.map((p) => (
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="rounded-lg border border-border/60 bg-card/60 p-3"
                 >
-                  {platformIcon(pl)}
-                  {pl.toUpperCase()}
-                </Badge>
+                  <div className="flex items-center gap-2 mb-2">
+                    {p.platforms.map((pl) => (
+                      <Badge
+                        key={pl}
+                        variant={pl === "fb" ? "info" : "violet"}
+                        className="!text-[9px]"
+                      >
+                        {platformIcon(pl)}
+                        {pl.toUpperCase()}
+                      </Badge>
+                    ))}
+                    <button
+                      onClick={() => onDelete(p.id)}
+                      className="ml-auto size-6 grid place-items-center rounded-md border border-border/60 text-muted-foreground hover:text-[hsl(var(--destructive))] hover:border-[hsl(var(--destructive)/0.4)]"
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                  {p.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.imageUrl}
+                      alt=""
+                      className="w-full rounded-md mb-2 border border-border/40"
+                    />
+                  )}
+                  <div className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
+                    {p.caption}
+                  </div>
+                  <div className="mt-2 text-[9px] font-mono text-muted-foreground/70">
+                    {p.time && `⏰ ${p.time} · `}Creado {new Date(p.createdAt).toLocaleDateString("es-ES")}
+                  </div>
+                </motion.div>
               ))}
-              <button
-                onClick={() => onDelete(p.id)}
-                className="ml-auto size-6 grid place-items-center rounded-md border border-border/60 text-muted-foreground hover:text-[hsl(var(--destructive))] hover:border-[hsl(var(--destructive)/0.4)]"
-                aria-label="Eliminar"
-              >
-                <Trash2 className="size-3" />
-              </button>
             </div>
-            {p.imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={p.imageUrl}
-                alt=""
-                className="w-full rounded-md mb-2 border border-border/40"
-              />
-            )}
-            <div className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
-              {p.caption}
-            </div>
-            <div className="mt-2 text-[9px] font-mono text-muted-foreground/70">
-              {p.time && `⏰ ${p.time} · `}Creado {new Date(p.createdAt).toLocaleDateString("es-ES")}
-            </div>
-          </motion.div>
-        ))}
+          </div>
+        )}
       </div>
     </Drawer>
   );
@@ -663,10 +867,12 @@ type ComposerTab = "compose" | "ideas" | "hashtags" | "preview" | "besttime";
 
 function Composer({
   date,
+  analyticsPosts,
   onClose,
   onAdd,
 }: {
   date: string;
+  analyticsPosts: AnalyticsPost[];
   onClose: () => void;
   onAdd: (p: Omit<ScheduledPost, "id" | "createdAt">) => void;
 }) {
@@ -679,6 +885,29 @@ function Composer({
   const [dateValue, setDateValue] = React.useState(date);
   const [timeValue, setTimeValue] = React.useState("19:00");
   const [goal, setGoal] = React.useState<ScheduledPost["goal"]>("engagement");
+
+  /**
+   * Sugerencia automática del composer (queja Parrilla #2):
+   * Cuando el user clickea un día futuro, leemos el dailyPlan() para ese
+   * weekday y prefilleamos formato sugerido + hora pico histórica.
+   */
+  const dailySuggestion = React.useMemo(() => {
+    if (!analyticsPosts.length) return null;
+    const plan = dailyPlan(analyticsPosts);
+    const targetWeekday = new Date(`${dateValue}T00:00:00`).getDay();
+    const match = plan.find((p) => p.weekday === targetWeekday);
+    return match ?? null;
+  }, [analyticsPosts, dateValue]);
+
+  // Si la sugerencia trae una hora pico distinta del default, prefill (una vez)
+  const didPrefillRef = React.useRef(false);
+  React.useEffect(() => {
+    if (didPrefillRef.current) return;
+    if (dailySuggestion?.bestHour) {
+      setTimeValue(dailySuggestion.bestHour);
+      didPrefillRef.current = true;
+    }
+  }, [dailySuggestion]);
 
   function toggle(p: ParrillaPlatform) {
     setPlatforms((curr) =>
@@ -756,6 +985,32 @@ function Composer({
 
   return (
     <div className="space-y-4">
+      {/* Sugerencia automática del día (queja Parrilla #2) */}
+      {dailySuggestion && (
+        <div className="rounded-lg border border-[hsl(var(--brand-cyan)/0.4)] bg-[hsl(var(--brand-cyan)/0.05)] p-3">
+          <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-[0.12em] font-bold text-[hsl(var(--brand-cyan))] mb-1.5">
+            <Sparkles className="size-3" /> Sugerencia para{" "}
+            <span className="capitalize">{dailySuggestion.weekdayName}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <Badge variant="outline" className="!text-[9px]">
+              {dailySuggestion.suggestedFormat}
+            </Badge>
+            <Badge variant="cyan" className="!text-[9px]">
+              <Clock4 className="size-2.5 mr-0.5" /> {dailySuggestion.bestHour}
+            </Badge>
+            {dailySuggestion.count > 0 && (
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {dailySuggestion.avgEngagement.toFixed(1)} eng/post histórico
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] text-muted-foreground leading-snug">
+            {dailySuggestion.rationale}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg border border-border/60 bg-card/40">
         {TABS.map((t) => (
@@ -1117,11 +1372,32 @@ function BestTimePanel({ platforms }: { platforms: ParrillaPlatform[] }) {
   }
   if (normalized.length === 0) normalized.push("ig");
 
+  // Por ahora no tenemos hourlyActivity de la audiencia · siempre fallback genérico.
+  // Cuando lleguen insights de audiencia (instagram_business_insights) sacar este flag.
+  const hasAudienceInsights = false;
+
   return (
     <div className="space-y-3">
       <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-bold mb-1">
         Mejor hora para publicar
       </div>
+
+      {/* Banner de honestidad cuando no hay audiencia real */}
+      {!hasAudienceInsights && (
+        <div className="rounded-lg border border-[hsl(var(--brand-violet)/0.35)] bg-[hsl(var(--brand-violet)/0.10)] p-3 flex items-start gap-2.5">
+          <Clock4 className="size-4 shrink-0 text-[hsl(var(--brand-violet))] mt-0.5" />
+          <div className="min-w-0 text-[10.5px] leading-snug">
+            <div className="font-bold text-foreground mb-0.5">
+              Mejor hora para tu audiencia · requiere Instagram Business + permiso
+              {" "}<span className="font-mono">instagram_business_insights</span>.
+            </div>
+            <div className="text-foreground/80">
+              Mientras tanto te mostramos best-practices LATAM:
+            </div>
+          </div>
+        </div>
+      )}
+
       {normalized.map((pl) => {
         const rec = bestTimeForPlatform(pl);
         const platformLabel = pl === "ig" ? "Instagram (feed/reel/story)" : "Facebook";
@@ -1130,7 +1406,7 @@ function BestTimePanel({ platforms }: { platforms: ParrillaPlatform[] }) {
             key={pl}
             className="rounded-lg border border-border/60 bg-card/60 p-3"
           >
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
               <div className="text-[12px] font-semibold inline-flex items-center gap-1.5">
                 {pl === "ig" ? (
                   <Instagram className="size-3.5 text-[hsl(var(--brand-violet))]" />
@@ -1139,6 +1415,14 @@ function BestTimePanel({ platforms }: { platforms: ParrillaPlatform[] }) {
                 )}
                 {platformLabel}
               </div>
+              {!hasAudienceInsights && (
+                <Badge
+                  variant="outline"
+                  className="!text-[8.5px] !border-[hsl(var(--brand-violet)/0.45)] !text-[hsl(var(--brand-violet))] !bg-[hsl(var(--brand-violet)/0.08)] font-semibold"
+                >
+                  Genérico LATAM · no de tu cuenta
+                </Badge>
+              )}
               <Badge variant="outline" className="!text-[8px]">
                 {rec.confidence}% confianza
               </Badge>
@@ -1151,8 +1435,16 @@ function BestTimePanel({ platforms }: { platforms: ParrillaPlatform[] }) {
               {rec.rationale}
             </div>
             <div className="mt-2 pt-2 border-t border-border/40">
-              <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-bold mb-1">
-                Alternativas
+              <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground font-bold mb-1 flex items-center gap-1.5 flex-wrap">
+                <span>Alternativas</span>
+                {!hasAudienceInsights && (
+                  <Badge
+                    variant="outline"
+                    className="!text-[8px] !border-[hsl(var(--brand-violet)/0.4)] !text-[hsl(var(--brand-violet))] !bg-[hsl(var(--brand-violet)/0.06)]"
+                  >
+                    Genérico LATAM
+                  </Badge>
+                )}
               </div>
               <div className="space-y-1">
                 {rec.alternatives.map((a) => (
@@ -1171,5 +1463,145 @@ function BestTimePanel({ platforms }: { platforms: ParrillaPlatform[] }) {
         Cuando Meta API entregue actividad horaria de tus seguidores, el cálculo será personalizado.
       </div>
     </div>
+  );
+}
+
+// ===== PLAN PRÓXIMA SEMANA (queja Parrilla #9) =====
+
+/**
+ * Sugiere qué publicar cada día de los próximos 7 días basado en:
+ *  - dailyPlan() · histórico de qué día performó mejor
+ *  - performanceByFormat() · formato top de la cuenta
+ *  - lista corta de topics (carrusel, reel, behind-the-scenes…)
+ *
+ * Render como tabla compacta · click en un día → abre composer con esa fecha.
+ */
+function NextWeekPlan({
+  posts,
+  onScheduleDay,
+}: {
+  posts: AnalyticsPost[];
+  onScheduleDay: (iso: string) => void;
+}) {
+  const plan = React.useMemo(() => dailyPlan(posts), [posts]);
+  const formatStats = React.useMemo(() => performanceByFormat(posts), [posts]);
+
+  const TOPICS = [
+    "Tip rápido del rubro",
+    "Behind the scenes",
+    "Caso de éxito de cliente",
+    "Promo o descuento",
+    "Reel educativo",
+    "Pregunta a la audiencia",
+    "Comparativa antes/después",
+  ];
+
+  const nextDays = React.useMemo(() => {
+    const out: Array<{
+      iso: string;
+      weekday: number;
+      label: string;
+      topic: string;
+      planEntry: (typeof plan)[number] | null;
+    }> = [];
+    const today = new Date();
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const weekday = d.getDay();
+      const planEntry = plan.find((p) => p.weekday === weekday) ?? null;
+      const label = d.toLocaleDateString("es-ES", {
+        weekday: "long",
+        day: "numeric",
+        month: "short",
+      });
+      out.push({
+        iso,
+        weekday,
+        label,
+        topic: TOPICS[i - 1] ?? "Contenido",
+        planEntry,
+      });
+    }
+    return out;
+  }, [plan]);
+
+  const topFormat = formatStats[0]?.label ?? null;
+
+  return (
+    <TextureCard className="p-4 space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Wand2 className="size-3.5 text-[hsl(var(--brand-violet))]" />
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+          Sugerencia editorial · próxima semana
+        </h3>
+        {topFormat && (
+          <Badge variant="violet" className="!text-[9px]">
+            Formato top: {topFormat}
+          </Badge>
+        )}
+        <span className="text-[9px] text-muted-foreground/70 ml-auto">
+          Click día → abrir composer
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        {nextDays.map((d, i) => {
+          const fmtSugg = d.planEntry?.suggestedFormat ?? "Mix";
+          const bestHour = d.planEntry?.bestHour ?? "19:00";
+          const hasHistory = (d.planEntry?.count ?? 0) > 0;
+          return (
+            <motion.button
+              key={d.iso}
+              onClick={() => onScheduleDay(d.iso)}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className="text-left rounded-lg border border-border/60 bg-card/60 p-2.5 hover:border-[hsl(var(--brand-violet)/0.5)] hover:bg-[hsl(var(--brand-violet)/0.04)] transition-colors"
+            >
+              <div className="text-[11px] font-bold capitalize mb-1">
+                {d.label}
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                <Badge variant="outline" className="!text-[9px]">
+                  {fmtSugg}
+                </Badge>
+                <Badge variant="cyan" className="!text-[9px]">
+                  <Clock4 className="size-2.5 mr-0.5" />
+                  {bestHour}
+                </Badge>
+              </div>
+              <div
+                className="text-[10px] text-foreground/90 leading-snug font-medium mb-1"
+                title="Rotación editorial sugerida · ajustá según calendario propio"
+              >
+                {d.topic}
+              </div>
+              <div className="text-[9px] text-muted-foreground/70 leading-tight">
+                {hasHistory ? (
+                  `${d.planEntry?.avgEngagement.toFixed(1)} eng/post histórico`
+                ) : (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block px-1 py-[1px] rounded-sm border border-[hsl(var(--brand-violet)/0.45)] bg-[hsl(var(--brand-violet)/0.08)] text-[hsl(var(--brand-violet))] font-semibold uppercase tracking-wide text-[8px]">
+                      Sin histórico · default LATAM
+                    </span>
+                  </span>
+                )}
+              </div>
+            </motion.button>
+          );
+        })}
+      </div>
+
+      <div className="text-[9px] text-muted-foreground/70 leading-snug border-t border-border/40 pt-2 space-y-0.5">
+        <div>
+          Topics: rotación recomendada Bewe · formato y hora derivados de tu histórico IG/FB.
+        </div>
+        <div>
+          Combiná con Mark/Lúa (tab Ideas del composer) para copy listo para publicar.
+        </div>
+      </div>
+    </TextureCard>
   );
 }

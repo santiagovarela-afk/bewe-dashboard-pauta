@@ -117,7 +117,7 @@ export const TABS = [
   { id: "estrategia",  label: "Estrategia",  icon: "Target", badge: true, group: "pauta" },
   { id: "paid",        label: "Paid Media",  icon: "TrendingUp",       group: "pauta" },
   { id: "anuncios",    label: "Anuncios",    icon: "Image",            group: "pauta" },
-  { id: "organico",    label: "Orgánico",    icon: "Sparkles",         group: "contenido" },
+  { id: "organico",    label: "Contenidos Orgánicos",    icon: "Sparkles",         group: "contenido" },
   { id: "parrilla",    label: "Parrilla",    icon: "CalendarDays",     group: "contenido" },
   { id: "open-bui",    label: "Open Design",  icon: "Palette",          group: "contenido" },
   { id: "performance", label: "Performance", icon: "Gauge",            group: "analítica" },

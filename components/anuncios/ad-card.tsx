@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { ImageOff, Play, Image as ImageIcon, Trophy, AlertTriangle } from "lucide-react";
+import { ImageOff, Play, Image as ImageIcon, Trophy, AlertTriangle, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SpotlightCard } from "@/components/fx/spotlight-card";
 import { fmt } from "@/lib/utils";
@@ -17,11 +17,16 @@ import {
 interface AdCardProps {
   ad: MetaAd;
   campaignCode?: string;
+  campaignName?: string;
+  /** Si se pasa, muestra pin TOP #N en el thumb. */
+  topRank?: number;
+  /** Si true, muestra pin LOSS (CPR > 4× target). */
+  loss?: boolean;
   index?: number;
   onOpen: (ad: MetaAd) => void;
 }
 
-export function AdCard({ ad, campaignCode, index = 0, onOpen }: AdCardProps) {
+export function AdCard({ ad, campaignCode, campaignName, topRank, loss, index = 0, onOpen }: AdCardProps) {
   const thumb = getBestThumb(ad);
   const m = deriveAdMetrics(ad.ins);
   const alerts = getAdAlerts(ad);
@@ -88,9 +93,19 @@ export function AdCard({ ad, campaignCode, index = 0, onOpen }: AdCardProps) {
             <MediaPill type={mediaType} />
           </div>
 
-          {/* Top-right: alert icons + winner */}
+          {/* Top-right: pins (TOP rank, LOSS) + winner + alerts */}
           <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-            {isWinner && (
+            {typeof topRank === "number" && topRank > 0 && (
+              <Badge variant="lime" className="!text-[9px] !px-1.5 backdrop-blur bg-background/70">
+                <Trophy className="size-2.5 mr-0.5" /> TOP #{topRank}
+              </Badge>
+            )}
+            {loss && (
+              <Badge variant="danger" className="!text-[9px] !px-1.5 backdrop-blur bg-background/70">
+                <TrendingDown className="size-2.5 mr-0.5" /> LOSS
+              </Badge>
+            )}
+            {!topRank && isWinner && (
               <Badge variant="lime" className="!text-[9px] !px-1.5 backdrop-blur bg-background/70">
                 <Trophy className="size-2.5 mr-0.5" /> Top
               </Badge>
@@ -111,6 +126,16 @@ export function AdCard({ ad, campaignCode, index = 0, onOpen }: AdCardProps) {
         </div>
 
         <div className="p-3">
+          {(campaignCode || campaignName) && (
+            <div
+              className="text-[9px] font-bold uppercase tracking-[0.1em] text-[hsl(var(--brand-violet))] mb-1 truncate"
+              title={campaignName ?? campaignCode}
+            >
+              {campaignCode ? `[${campaignCode}]` : ""}
+              {campaignCode && campaignName ? " · " : ""}
+              {campaignName ?? ""}
+            </div>
+          )}
           <div
             className="text-[11px] font-mono font-semibold truncate"
             title={ad.name}

@@ -2,12 +2,15 @@
  * lib/diary.ts
  * Diario de pauta · snapshots día a día para comparar "ayer vs hoy"
  *
- * Almacena en localStorage bajo la key `bw_diary_v1` un array de entradas.
- * Mientras no hay histórico real, generamos una entrada "ayer" sintética
- * derivada del snapshot actual con ~5–8% menos de volumen — el objetivo es
- * mostrar deltas creíbles, no telemetría real.
+ * Dos fuentes posibles de "ayer":
+ *  1. `daily[]` (DailyRow) del store: día anterior real agregado desde la API.
+ *  2. `bw_diary_v1` en localStorage: snapshots manuales guardados por el user.
+ *
+ * Si NINGUNA de las dos tiene data del día anterior, se devuelve `null` para
+ * que la UI muestre "sin comparación · falta data del día anterior" en lugar
+ * de fabricar deltas sintéticos.
  */
-import type { Campaign } from "./types";
+import type { Campaign, DailyRow } from "./types";
 import { computeMetrics, severityOf, suggestedAction, attentionCampaigns } from "./selectors";
 
 export interface DiaryEntry {
@@ -58,9 +61,14 @@ export function snapshotEntry(campaigns: Campaign[], daysElapsed: number): Diary
   };
 }
 
-/** Genera una entrada sintética para "ayer" (día -1) sin tocar localStorage. */
+/**
+ * @deprecated NO usar para deltas reales · solo conservada por compat.
+ * Multiplicaba × 0.93 para fabricar "ayer", lo cual generaba deltas
+ * sintéticos indistinguibles de telemetría real. Sustituido por
+ * `actualYesterday(daily, today)`; si no hay data del día previo,
+ * preferimos no mostrar comparación en lugar de inventarla.
+ */
 export function syntheticYesterday(campaigns: Campaign[], daysElapsed: number): DiaryEntry {
-  // factor de "ayer" — ayer teníamos menos volumen porque hoy se sumaron las últimas 24h
   const factor = 0.93;
   const yest = campaigns.map((c) => ({
     ...c,
@@ -76,6 +84,89 @@ export function syntheticYesterday(campaigns: Campaign[], daysElapsed: number): 
   const e = snapshotEntry(yest as Campaign[], Math.max(0, daysElapsed - 1));
   e.dateISO = new Date(Date.now() - 864e5).toISOString();
   return e;
+}
+
+/**
+ * Deriva "ayer REAL" del array `daily` del store agrupando filas del día
+ * inmediato anterior al `todayISO` (formato YYYY-MM-DD).
+ *
+ * Devuelve `null` si:
+ *   · `daily` está vacío,
+ *   · no hay filas del día previo (gap o solo 1 día disponible).
+ *
+ * Solo cuenta filas campaign-level (sin `adsetId`) para no duplicar spend.
+ */
+export function actualYesterday(
+  daily: DailyRow[],
+  todayISO: string,
+  daysElapsed: number,
+): DiaryEntry | null {
+  if (!daily || daily.length === 0) return null;
+
+  // Calcular fecha de ayer (YYYY-MM-DD) sin TZ shenanigans.
+  const ms = Date.parse(todayISO);
+  if (!Number.isFinite(ms)) return null;
+  const yISO = new Date(ms - 864e5).toISOString().slice(0, 10);
+
+  // Solo filas a nivel campaña (sin adsetId) para evitar doble conteo.
+  const rows = daily.filter((r) => r.date === yISO && !r.adsetId);
+  if (rows.length === 0) return null;
+
+  let spend = 0;
+  let impressions = 0;
+  let clicks = 0;
+  let evContact = 0;
+  let evInitCheckout = 0;
+  let evCompleteReg = 0;
+
+  const byCid = new Map<string, {
+    spend: number;
+    cr: number;
+    ic: number;
+    contact: number;
+  }>();
+
+  for (const r of rows) {
+    spend += r.spend;
+    impressions += r.impressions;
+    clicks += r.clicks;
+    evContact += r.evContact;
+    evInitCheckout += r.evInitCheckout;
+    evCompleteReg += r.evCompleteReg;
+
+    const cur = byCid.get(r.campaignId) ?? { spend: 0, cr: 0, ic: 0, contact: 0 };
+    cur.spend += r.spend;
+    cur.cr += r.evCompleteReg;
+    cur.ic += r.evInitCheckout;
+    cur.contact += r.evContact;
+    byCid.set(r.campaignId, cur);
+  }
+
+  const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+  const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
+  const cptReg = evCompleteReg > 0 ? spend / evCompleteReg : null;
+  const cptIco = evInitCheckout > 0 ? spend / evInitCheckout : null;
+
+  return {
+    dateISO: new Date(ms - 864e5).toISOString(),
+    daysElapsed: Math.max(0, daysElapsed - 1),
+    spend,
+    cr: evCompleteReg,
+    ic: evInitCheckout,
+    contact: evContact,
+    cptReg,
+    cptIco,
+    ctr,
+    cpm,
+    perCampaign: Array.from(byCid.entries()).map(([cid, agg]) => ({
+      code: cid,
+      spend: agg.spend,
+      cr: agg.cr,
+      ic: agg.ic,
+      cpt: agg.cr > 0 ? agg.spend / agg.cr : null,
+      flag: null,
+    })),
+  };
 }
 
 /** Lee el diario completo de localStorage (vacío en SSR). */
@@ -105,15 +196,33 @@ export function writeEntry(entry: DiaryEntry): DiaryEntry[] {
   return next;
 }
 
-/** Devuelve la entrada de "ayer" (real si existe, sintética si no). */
-export function getYesterday(campaigns: Campaign[], daysElapsed: number): DiaryEntry {
-  const diary = readDiary();
-  if (diary.length >= 2) return diary[diary.length - 2];
-  if (diary.length === 1) {
-    const today = new Date().toISOString().slice(0, 10);
-    if (diary[0].dateISO.slice(0, 10) !== today) return diary[0];
+/**
+ * Devuelve la entrada de "ayer" REAL (de `daily[]` del store si está, o del
+ * diario manual) o `null` si no hay data del día previo · NO fabrica.
+ *
+ * Orden de preferencia:
+ *   1. `daily[]` con fila del día anterior · breakdown agregado de la API.
+ *   2. localStorage diary con snapshot manual del día anterior.
+ *   3. null.
+ */
+export function getYesterday(
+  campaigns: Campaign[],
+  daysElapsed: number,
+  daily?: DailyRow[],
+): DiaryEntry | null {
+  if (daily && daily.length > 0) {
+    const todayISO = new Date().toISOString();
+    const real = actualYesterday(daily, todayISO, daysElapsed);
+    if (real) return real;
   }
-  return syntheticYesterday(campaigns, daysElapsed);
+
+  const diaryEntries = readDiary();
+  if (diaryEntries.length >= 2) return diaryEntries[diaryEntries.length - 2];
+  if (diaryEntries.length === 1) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (diaryEntries[0].dateISO.slice(0, 10) !== today) return diaryEntries[0];
+  }
+  return null;
 }
 
 /** Genera highlights/risks del día comparando today vs yesterday. */
@@ -177,24 +286,31 @@ export function buildJulianMessage(
   campaigns: Campaign[],
   daysElapsed: number,
   totalDays: number,
+  daily?: DailyRow[],
 ): string {
   const m = computeMetrics(campaigns);
-  const yest = syntheticYesterday(campaigns, daysElapsed);
-  const dSpend = delta(m.spend, yest.spend);
-  const dCR = delta(m.totalConvCR, yest.cr);
-  const dIC = delta(m.totalConvIC, yest.ic);
+  const yest = getYesterday(campaigns, daysElapsed, daily);
 
   const crit = campaigns.filter((c) => c.flag === "critical");
   const ok = campaigns.filter((c) => c.flag === null);
 
   const lines: string[] = [];
   lines.push(`*Bewe Pauta · Día ${daysElapsed}/${totalDays}*`);
-  lines.push(
-    `Gasto: €${m.spend.toFixed(0)} (${dSpend.dir === "up" ? "+" : ""}${dSpend.diff.toFixed(0)} vs ayer · ${Math.round(m.budgetPct)}% del budget)`,
-  );
-  lines.push(
-    `CR: ${m.totalConvCR} (${dCR.dir === "up" ? "+" : ""}${dCR.diff} vs ayer) · IC: ${m.totalConvIC} (${dIC.dir === "up" ? "+" : ""}${dIC.diff} vs ayer)`,
-  );
+  if (yest) {
+    const dSpend = delta(m.spend, yest.spend);
+    const dCR = delta(m.totalConvCR, yest.cr);
+    const dIC = delta(m.totalConvIC, yest.ic);
+    lines.push(
+      `Gasto: €${m.spend.toFixed(0)} (${dSpend.dir === "up" ? "+" : ""}${dSpend.diff.toFixed(0)} vs ayer · ${Math.round(m.budgetPct)}% del budget)`,
+    );
+    lines.push(
+      `CR: ${m.totalConvCR} (${dCR.dir === "up" ? "+" : ""}${dCR.diff} vs ayer) · IC: ${m.totalConvIC} (${dIC.dir === "up" ? "+" : ""}${dIC.diff} vs ayer)`,
+    );
+  } else {
+    lines.push(
+      `Hoy: €${m.spend.toFixed(0)} gastado · ${m.totalConvCR} CR · ${m.totalConvIC} IC (sin comparación · falta data del día anterior)`,
+    );
+  }
   lines.push(
     `CPT Reg: €${m.cptReg?.toFixed(2) ?? "—"} · CPT IC: €${m.cptIco?.toFixed(2) ?? "—"}`,
   );
@@ -220,11 +336,12 @@ export function buildEmailReport(
   campaigns: Campaign[],
   daysElapsed: number,
   totalDays: number,
+  daily?: DailyRow[],
 ): string {
   const m = computeMetrics(campaigns);
-  const yest = syntheticYesterday(campaigns, daysElapsed);
-  const dSpend = delta(m.spend, yest.spend);
-  const dCR = delta(m.totalConvCR, yest.cr);
+  const yest = getYesterday(campaigns, daysElapsed, daily);
+  const dSpend = yest ? delta(m.spend, yest.spend) : null;
+  const dCR = yest ? delta(m.totalConvCR, yest.cr) : null;
 
   const crit = campaigns.filter((c) => c.flag === "critical");
   const warn = campaigns.filter((c) => c.flag === "warn" || c.flag === "anomaly");
@@ -258,10 +375,20 @@ export function buildEmailReport(
       `El CPT de registro está ${cptStr} (€${m.cptReg?.toFixed(2) ?? "—"}).`,
   );
   lines.push("");
-  lines.push(
-    `Destacados: ${ok.length > 0 ? `${ok.map((c) => `${c.code} ${c.vertical}`).join(", ")} dentro de target` : "sin campañas plenamente en objetivo todavía"}. ` +
-      `Crecimiento día vs día: ${dSpend.dir === "up" ? "+" : ""}${dSpend.diff.toFixed(0)}€ gasto, ${dCR.dir === "up" ? "+" : ""}${dCR.diff} registros.`,
-  );
+  const destacadosBase = ok.length > 0
+    ? `${ok.map((c) => `${c.code} ${c.vertical}`).join(", ")} dentro de target`
+    : "sin campañas plenamente en objetivo todavía";
+  if (dSpend && dCR) {
+    lines.push(
+      `Destacados: ${destacadosBase}. ` +
+        `Crecimiento día vs día: ${dSpend.dir === "up" ? "+" : ""}${dSpend.diff.toFixed(0)}€ gasto, ${dCR.dir === "up" ? "+" : ""}${dCR.diff} registros.`,
+    );
+  } else {
+    lines.push(
+      `Destacados: ${destacadosBase}. ` +
+        `Sin comparación día vs día · falta data del día anterior.`,
+    );
+  }
   lines.push("");
   if (crit.length > 0 || warn.length > 0) {
     lines.push(
@@ -314,12 +441,13 @@ export function buildJulianFullReport(
   campaigns: Campaign[],
   daysElapsed: number,
   totalDays: number,
+  daily?: DailyRow[],
 ): string {
   const m = computeMetrics(campaigns);
-  const yest = syntheticYesterday(campaigns, daysElapsed);
-  const dSpend = delta(m.spend, yest.spend);
-  const dCR = delta(m.totalConvCR, yest.cr);
-  const dIC = delta(m.totalConvIC, yest.ic);
+  const yest = getYesterday(campaigns, daysElapsed, daily);
+  const dSpend = yest ? delta(m.spend, yest.spend) : null;
+  const dCR = yest ? delta(m.totalConvCR, yest.cr) : null;
+  const dIC = yest ? delta(m.totalConvIC, yest.ic) : null;
 
   const crit = campaigns.filter((c) => c.flag === "critical");
   const warn = campaigns.filter((c) => c.flag === "warn");
@@ -348,7 +476,11 @@ export function buildJulianFullReport(
           : "alineado"
     } al pacing teórico.`,
   );
-  lines.push(`2. Registros: ${m.totalConvCR} (${dCR.dir === "up" ? "+" : ""}${dCR.diff} vs ayer). Inicios pago: ${m.totalConvIC} (${dIC.dir === "up" ? "+" : ""}${dIC.diff}).`);
+  if (dCR && dIC) {
+    lines.push(`2. Registros: ${m.totalConvCR} (${dCR.dir === "up" ? "+" : ""}${dCR.diff} vs ayer). Inicios pago: ${m.totalConvIC} (${dIC.dir === "up" ? "+" : ""}${dIC.diff}).`);
+  } else {
+    lines.push(`2. Registros: ${m.totalConvCR} · Inicios pago: ${m.totalConvIC} (sin comparación · falta data del día anterior).`);
+  }
   lines.push(`3. CPT registro €${m.cptReg?.toFixed(2) ?? "—"} · target €2.20 · ${m.cptReg && m.cptReg <= 2.2 ? "estamos OK" : m.cptReg && m.cptReg <= 3 ? "por encima pero recuperable" : "fuera de rango"}.`);
   lines.push(`4. Campañas: ${ok.length} en objetivo · ${warn.length} en aviso · ${anom.length} con anomalía pixel · ${crit.length} críticas.`);
   lines.push(
@@ -367,7 +499,10 @@ export function buildJulianFullReport(
           : c.flag === "warn"
             ? "[AVISO]"
             : "[OK]";
-    const yc = yest.perCampaign.find((p) => p.code === c.code);
+    // Match yesterday por campaignId (en actualYesterday `code` es el cid)
+    const yc = yest
+      ? yest.perCampaign.find((p) => p.code === c.code || p.code === c.cid)
+      : undefined;
     const dCRc = yc ? delta(c.evCompleteReg, yc.cr) : null;
     lines.push(`${c.code} · ${c.vertical} · ${c.geo} ${sev}`);
     lines.push(
@@ -378,18 +513,25 @@ export function buildJulianFullReport(
     lines.push("");
   });
 
-  lines.push(`▌ Tendencias (día vs día sintético)`);
-  lines.push(`────────────────────────────────`);
-  lines.push(
-    `Gasto: ${dSpend.dir === "up" ? "↑" : dSpend.dir === "down" ? "↓" : "→"} €${Math.abs(dSpend.diff).toFixed(0)} (${dSpend.pct >= 0 ? "+" : ""}${dSpend.pct.toFixed(1)}%)`,
-  );
-  lines.push(
-    `CR: ${dCR.dir === "up" ? "↑" : dCR.dir === "down" ? "↓" : "→"} ${Math.abs(dCR.diff)} (${dCR.pct >= 0 ? "+" : ""}${dCR.pct.toFixed(1)}%)`,
-  );
-  lines.push(
-    `IC: ${dIC.dir === "up" ? "↑" : dIC.dir === "down" ? "↓" : "→"} ${Math.abs(dIC.diff)} (${dIC.pct >= 0 ? "+" : ""}${dIC.pct.toFixed(1)}%)`,
-  );
-  lines.push(`CPM: €${m.cpm.toFixed(2)} · CTR ${m.ctr.toFixed(2)}%`);
+  if (dSpend && dCR && dIC) {
+    lines.push(`▌ Tendencias (día vs día · datos reales)`);
+    lines.push(`────────────────────────────────`);
+    lines.push(
+      `Gasto: ${dSpend.dir === "up" ? "↑" : dSpend.dir === "down" ? "↓" : "→"} €${Math.abs(dSpend.diff).toFixed(0)} (${dSpend.pct >= 0 ? "+" : ""}${dSpend.pct.toFixed(1)}%)`,
+    );
+    lines.push(
+      `CR: ${dCR.dir === "up" ? "↑" : dCR.dir === "down" ? "↓" : "→"} ${Math.abs(dCR.diff)} (${dCR.pct >= 0 ? "+" : ""}${dCR.pct.toFixed(1)}%)`,
+    );
+    lines.push(
+      `IC: ${dIC.dir === "up" ? "↑" : dIC.dir === "down" ? "↓" : "→"} ${Math.abs(dIC.diff)} (${dIC.pct >= 0 ? "+" : ""}${dIC.pct.toFixed(1)}%)`,
+    );
+    lines.push(`CPM: €${m.cpm.toFixed(2)} · CTR ${m.ctr.toFixed(2)}%`);
+  } else {
+    lines.push(`▌ Tendencias (día vs día)`);
+    lines.push(`────────────────────────────────`);
+    lines.push(`Sin comparación · falta data del día anterior en el breakdown diario.`);
+    lines.push(`Hoy: CPM €${m.cpm.toFixed(2)} · CTR ${m.ctr.toFixed(2)}%`);
+  }
   lines.push("");
 
   lines.push(`▌ Decisiones recomendadas`);

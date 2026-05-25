@@ -1,4 +1,4 @@
-import type { Campaign } from "./types";
+import type { Campaign, DailyRow, DateRange } from "./types";
 import { PLAN } from "./config";
 import { CPT_THRESHOLDS } from "./utils";
 
@@ -61,7 +61,10 @@ export function computeMetrics(campaigns: Campaign[]): DashboardMetrics {
   };
 }
 
-/** Fake trend generator using the current value as the peak — looks alive without real history. */
+/** Fake trend generator using the current value as the peak — looks alive without real history.
+ *  DEPRECATED · solo se mantiene en uso para tab-seo (que ya está marcada como demo).
+ *  Para datos reales usar `realDailySeries`.
+ */
 export function fakeTrend(seed: number, value: number, points = 12, volatility = 0.18): number[] {
   const arr: number[] = [];
   let v = value * 0.55;
@@ -72,6 +75,106 @@ export function fakeTrend(seed: number, value: number, points = 12, volatility =
   }
   arr[points - 1] = value;
   return arr;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Series reales por día · sparkline a partir de DailyRow[]
+ *  Filtra campaign-level rows (sin adsetId) y respeta el dateRange activo.
+ *  Si no hay datos en el rango → devuelve [] (el sparkline NO se renderiza).
+ * ─────────────────────────────────────────────────────────────────────── */
+
+export type DailyMetricKey = "spend" | "cpl" | "cpic" | "ctr" | "cpm" | "convCR" | "convIC";
+
+interface DailyAccum {
+  date: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  convCR: number;
+  convIC: number;
+}
+
+/** C3 (cid `52551556895286`) tiene pixel roto · excluida de IC. */
+const ANOMALY_CID = "52551556895286";
+
+/**
+ * Devuelve la serie real por día para una métrica dada, dentro del rango activo.
+ * `campaignFilter` permite restringir a un subset (ej. solo CR o solo IC).
+ *
+ * Si `daily.length === 0` o no hay puntos en el rango → devuelve [].
+ * El consumidor debe verificar `series.length > 1` antes de pintar el sparkline.
+ */
+export function realDailySeries(
+  daily: DailyRow[],
+  range: DateRange,
+  key: DailyMetricKey,
+  campaignFilter?: string[],
+): number[] {
+  if (!daily.length) return [];
+
+  const filterSet = campaignFilter ? new Set(campaignFilter) : null;
+  const byDate = new Map<string, DailyAccum>();
+
+  for (const row of daily) {
+    // Sólo rows campaign-level · evita la duplicación adset + campaign.
+    if (row.adsetId) continue;
+    if (row.date < range.from || row.date > range.to) continue;
+    if (filterSet && !filterSet.has(row.campaignId)) continue;
+
+    const acc = byDate.get(row.date) ?? {
+      date: row.date,
+      spend: 0,
+      impressions: 0,
+      clicks: 0,
+      convCR: 0,
+      convIC: 0,
+    };
+    acc.spend += row.spend;
+    acc.impressions += row.impressions;
+    acc.clicks += row.clicks;
+    acc.convCR += row.evCompleteReg;
+    // Igual que en computeMetrics: C3 fuera del IC global por anomalía pixel.
+    if (row.campaignId !== ANOMALY_CID) {
+      acc.convIC += row.evInitCheckout;
+    }
+    byDate.set(row.date, acc);
+  }
+
+  const sorted = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length === 0) return [];
+
+  return sorted.map((d) => {
+    switch (key) {
+      case "spend":
+        return d.spend;
+      case "convCR":
+        return d.convCR;
+      case "convIC":
+        return d.convIC;
+      case "ctr":
+        return d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0;
+      case "cpm":
+        return d.impressions > 0 ? (d.spend / d.impressions) * 1000 : 0;
+      case "cpl":
+        return d.convCR > 0 ? d.spend / d.convCR : 0;
+      case "cpic":
+        return d.convIC > 0 ? d.spend / d.convIC : 0;
+      default:
+        return 0;
+    }
+  });
+}
+
+/** Devuelve los cids de campañas CR (CompleteRegistration) — útil para realDailySeries('cpl'). */
+export function crCampaignIds(campaigns: Campaign[]): string[] {
+  return campaigns.filter((c) => c.event === "CompleteRegistration").map((c) => c.cid);
+}
+
+/** Devuelve los cids de campañas IC trustables (InitiateCheckout sin C3). */
+export function icCampaignIds(campaigns: Campaign[]): string[] {
+  return campaigns
+    .filter((c) => c.event === "InitiateCheckout" && c.cid !== ANOMALY_CID)
+    .map((c) => c.cid);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -486,6 +589,9 @@ export const TARGET_GOAL = {
   cpa: 2.2,
 } as const;
 
+/** Histórico de cohortes anteriores · NO medido en runtime · fuente: handoff abril 2026. */
+export const HISTORIC_CR_TO_TRIAL_RATE = 0.247;
+
 export interface ProjectionResult {
   /** Días transcurridos del plan (1..20). */
   daysElapsed: number;
@@ -527,8 +633,9 @@ export function projectMonthEnd(campaigns: Campaign[], daysElapsed: number): Pro
   const projectedCR = Math.round((m.totalConvCR / safeDays) * PLAN.totalDays);
   const projectedIC = Math.round((m.totalConvIC / safeDays) * PLAN.totalDays);
   const projectedCPL = projectedCR > 0 ? projectedSpend / projectedCR : null;
-  // Tasa observada CR→trial pauta (~24.7% según ai-memory aprendizaje #2).
-  const expectedTrials = Math.round(projectedCR * 0.247);
+  // Tasa observada CR→trial pauta (~24.7% según ai-memory aprendizaje #2 · handoff abril 2026).
+  // Supuesto histórico · si se conecta PostHog y mide trials reales, preferir esos.
+  const expectedTrials = Math.round(projectedCR * HISTORIC_CR_TO_TRIAL_RATE);
   const gapMultiplier = projectedCPL !== null ? projectedCPL / TARGET_GOAL.cpa : null;
   const registrationsGap = TARGET_GOAL.registrations - projectedCR;
   const goalAchievementPct = (projectedCR / TARGET_GOAL.registrations) * 100;
@@ -662,6 +769,67 @@ export function getCampaignLearning(code: string): CampaignLearning {
         nextStep: "Pendiente de definición.",
       };
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Wrapper de aprendizaje · detección de cifras hardcoded desactualizadas
+ *  El texto base lo escribió el equipo el 23-may con cifras del momento.
+ *  Si los datos vivos cambiaron > ±15% en spend → marcar el bloque como
+ *  "notas del equipo capturadas · pueden estar desactualizadas".
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/** Cifra ancla por campaña tomada del handoff 23-may (spend acumulado a esa fecha). */
+const HANDOFF_SPEND_23MAY: Record<string, number> = {
+  C1: 110,
+  C2: 165,
+  C3: 380,
+  C4: 178,
+  C5: 172,
+  C6: 146,
+};
+
+/** Tolerancia de desviación antes de considerar las notas como "potencialmente desactualizadas". */
+const HANDOFF_TOLERANCE = 0.15;
+
+export interface CampaignLearningResolved {
+  /** Narrativa hardcoded del handoff. */
+  learning: CampaignLearning;
+  /** True si los números actuales coinciden con los del 23-may dentro del ±15%. */
+  fresh: boolean;
+  /** Mensaje de fallback si los datos no coinciden. */
+  staleNote: string | null;
+  /** Cifras vivas resumidas (para mostrar al lado del texto). */
+  live: {
+    spend: number;
+    conversions: number;
+    cpt: number | null;
+  };
+}
+
+/**
+ * Wrapper sobre `getCampaignLearning(code)` que compara las cifras citadas
+ * en el texto del handoff con los datos vivos. Si difieren > tolerancia,
+ * marca `fresh = false` y aporta un mensaje de fallback honesto.
+ */
+export function resolveCampaignLearning(c: Campaign): CampaignLearningResolved {
+  const learning = getCampaignLearning(c.code);
+  const anchor = HANDOFF_SPEND_23MAY[c.code];
+  const live = {
+    spend: c.spend,
+    conversions: c.conversions,
+    cpt: c.cpt,
+  };
+  if (typeof anchor !== "number" || anchor <= 0) {
+    return { learning, fresh: true, staleNote: null, live };
+  }
+  const diff = Math.abs(c.spend - anchor) / anchor;
+  const fresh = diff <= HANDOFF_TOLERANCE;
+  const staleNote = fresh
+    ? null
+    : `Notas del equipo capturadas el 23-may · pueden estar desactualizadas. Estado actual: spend €${c.spend.toFixed(
+        0,
+      )}, conv ${c.conversions}, CPT ${c.cpt === null ? "—" : `€${c.cpt.toFixed(2)}`} (data viva).`;
+  return { learning, fresh, staleNote, live };
 }
 
 /** Palancas explícitas del informe de cierre · alineadas con ai-memory aprendizajes 1-5. */

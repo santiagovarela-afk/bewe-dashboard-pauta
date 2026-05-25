@@ -7,9 +7,12 @@ import {
   bestDayOfWeek,
   bestHourOfDay,
   buildHeatmap,
+  dailyPlan,
   type AnalyticsPost,
+  type DailyPlanEntry,
 } from "@/lib/organic-analytics";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 interface TemporalHeatmapProps {
   posts: AnalyticsPost[];
@@ -25,6 +28,7 @@ export function TemporalHeatmap({ posts }: TemporalHeatmapProps) {
   const bestDay = React.useMemo(() => bestDayOfWeek(posts), [posts]);
   const bestHour = React.useMemo(() => bestHourOfDay(posts), [posts]);
   const heatmap = React.useMemo(() => buildHeatmap(posts), [posts]);
+  const plan = React.useMemo<DailyPlanEntry[]>(() => dailyPlan(posts), [posts]);
 
   if (!posts.length) return null;
 
@@ -182,6 +186,71 @@ export function TemporalHeatmap({ posts }: TemporalHeatmapProps) {
         </div>
         <div className="text-[9px] text-muted-foreground/70 mt-2 leading-snug">
           Hora local · engagement = likes + comentarios · celdas vacías = sin posts en ese rango
+        </div>
+      </div>
+
+      {/* Plan diario · qué postear cada día de la semana (queja #5) */}
+      <div>
+        <div className="text-[9px] uppercase tracking-[0.12em] font-bold text-muted-foreground mb-2 flex items-center gap-1.5">
+          <CalendarDays className="size-3 text-[hsl(var(--brand-violet))]" />
+          Plan diario · qué postear cada día
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {plan.map((d, i) => {
+            const hasHistory = d.count > 0;
+            return (
+              <motion.div
+                key={d.weekday}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.04 * i, duration: 0.3 }}
+                className={cn(
+                  "rounded-lg border p-2.5 flex flex-col gap-1",
+                  hasHistory
+                    ? "border-border/60 bg-card/60"
+                    : "border-dashed border-border/40 bg-secondary/30",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold capitalize">{d.weekdayName}</div>
+                  <span className="text-[9px] font-mono text-muted-foreground">
+                    {d.bestHour}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge variant="outline" className="!text-[9px] self-start">
+                    {d.suggestedFormat}
+                  </Badge>
+                  {!hasHistory && (
+                    <Badge
+                      variant="outline"
+                      className="!text-[8.5px] !border-[hsl(var(--brand-violet)/0.45)] !text-[hsl(var(--brand-violet))] !bg-[hsl(var(--brand-violet)/0.08)] font-semibold"
+                    >
+                      Sin histórico · default LATAM
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-[10px] text-muted-foreground leading-snug">
+                  {hasHistory ? (
+                    <>
+                      <span className="text-[hsl(var(--brand-cyan))] font-mono">
+                        {d.avgEngagement.toFixed(1)} eng/post
+                      </span>{" "}
+                      · {d.count} {d.count === 1 ? "post" : "posts"} histórico
+                    </>
+                  ) : (
+                    <>Sugerencia best-practices LATAM · no de tu cuenta</>
+                  )}
+                </div>
+                <div className="text-[9px] text-muted-foreground/70 leading-tight">
+                  {d.rationale}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+        <div className="text-[9px] text-muted-foreground/70 mt-2 leading-snug">
+          Plan calculado del histórico filtrado · días sin posts caen a sugerencia 2026.
         </div>
       </div>
     </TextureCard>

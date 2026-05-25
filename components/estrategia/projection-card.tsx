@@ -18,6 +18,7 @@ import {
   closingLevers,
   projectMonthEnd,
   TARGET_GOAL,
+  HISTORIC_CR_TO_TRIAL_RATE,
   type ClosingLever,
   type ProjectionResult,
 } from "@/lib/selectors";
@@ -96,9 +97,21 @@ export function ProjectionCard({ className }: { className?: string }) {
           <ProjMetric
             icon={<Sparkles className="size-3.5" />}
             k="Trials esperados"
-            v={<AnimatedNumber value={proj.expectedTrials} format={fmt.int} />}
-            sub="tasa 24.7% CR→trial"
-            help="Trials reales estimados aplicando la tasa observada CR→trial en pauta (24.7%). Orgánico convierte al 45% — palanca pendiente."
+            v={
+              <span className="inline-flex items-center gap-1.5">
+                <AnimatedNumber value={proj.expectedTrials} format={fmt.int} />
+                <Badge variant="outline" className="text-[8px] font-normal normal-case tracking-normal">
+                  supuesto histórico
+                </Badge>
+              </span>
+            }
+            sub={`tasa ${(HISTORIC_CR_TO_TRIAL_RATE * 100).toFixed(1)}% CR→trial · handoff abril 2026`}
+            help={
+              <>
+                Trials reales estimados aplicando la tasa observada CR→trial ({(HISTORIC_CR_TO_TRIAL_RATE * 100).toFixed(1)}%) tomada del handoff de abril 2026 (cohortes anteriores · NO medido en runtime).
+                <br />Orgánico convierte al 45% — palanca pendiente. Si se conecta PostHog y mide trials reales, preferir esos.
+              </>
+            }
           />
         </StaggerItem>
       </StaggerGroup>

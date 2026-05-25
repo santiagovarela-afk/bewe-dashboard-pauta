@@ -1,10 +1,10 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { ArrowRight, Flag, Lightbulb, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, Flag, Lightbulb, NotebookPen, TrendingDown, TrendingUp } from "lucide-react";
 import type { Campaign } from "@/lib/types";
 import { cn, fmt, cptTone } from "@/lib/utils";
-import { getCampaignLearning, type CampaignLearning } from "@/lib/selectors";
+import { resolveCampaignLearning } from "@/lib/selectors";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
 import { ExplainedMetric } from "@/components/shared/explained-metric";
@@ -51,7 +51,8 @@ function flagVariant(c: Campaign): "danger" | "warning" | "ember" | "success" | 
  *  - Próximo paso
  */
 export function CampaignDeepAnalysis({ campaign: c, className }: CampaignDeepAnalysisProps) {
-  const learning: CampaignLearning = getCampaignLearning(c.code);
+  const resolved = resolveCampaignLearning(c);
+  const learning = resolved.learning;
   const accent = flagColor(c.flag);
   const cptToneClass = (() => {
     const t = cptTone(c.cpt);
@@ -94,6 +95,42 @@ export function CampaignDeepAnalysis({ campaign: c, className }: CampaignDeepAna
         <div className="flex items-center gap-2 shrink-0">
           <Badge variant={flagVariant(c)}>{flagLabel(c)}</Badge>
           <Flag className="size-4" style={{ color: `hsl(${accent})` }} aria-hidden />
+        </div>
+      </div>
+
+      {/* Banner · notas del equipo + freshness check */}
+      <div
+        className="mb-4 rounded-lg border px-3 py-2 flex items-start gap-2"
+        style={{
+          background: resolved.fresh
+            ? "hsl(var(--info) / 0.06)"
+            : "hsl(var(--warning) / 0.08)",
+          borderColor: resolved.fresh
+            ? "hsl(var(--info) / 0.3)"
+            : "hsl(var(--warning) / 0.4)",
+        }}
+      >
+        <NotebookPen
+          className="size-3.5 mt-0.5 shrink-0"
+          style={{
+            color: resolved.fresh ? "hsl(var(--info))" : "hsl(var(--warning))",
+          }}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <div
+            className="text-[11px] font-semibold leading-tight"
+            style={{
+              color: resolved.fresh ? "hsl(var(--info))" : "hsl(var(--warning))",
+            }}
+          >
+            Notas del equipo · capturadas 23-may
+          </div>
+          <p className="text-[10.5px] text-muted-foreground leading-relaxed mt-0.5">
+            {resolved.fresh
+              ? "Los datos vivos están arriba (Estado, CPT, freq). Las notas pueden referenciar cifras del momento del análisis."
+              : resolved.staleNote}
+          </p>
         </div>
       </div>
 

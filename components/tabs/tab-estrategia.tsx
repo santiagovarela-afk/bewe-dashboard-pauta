@@ -5,16 +5,18 @@ import {
   AlertOctagon,
   AlertTriangle,
   CheckCircle2,
+  Pause,
+  Sparkles,
   TrendingUp,
   Wallet,
+  XCircle,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { PLAN } from "@/lib/config";
 import { fmt, cn, cptTone, daysUntil, CPT_THRESHOLDS } from "@/lib/utils";
-import { computeMetrics, cptVsGroupAvg } from "@/lib/selectors";
+import { computeMetrics, planBStatus } from "@/lib/selectors";
 import { SectionHeader } from "@/components/shared/section-header";
 import { TextureCard } from "@/components/fx/texture-card";
-import { SpotlightCard } from "@/components/fx/spotlight-card";
 import { Gauge } from "@/components/fx/gauge";
 import { Badge } from "@/components/ui/badge";
 import { ExplainedMetric } from "@/components/shared/explained-metric";
@@ -22,24 +24,38 @@ import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import { AnimatedNumber } from "@/components/fx/animated-number";
 import { CampaignDeepAnalysis } from "@/components/estrategia/campaign-deep-analysis";
 import { ProjectionCard } from "@/components/estrategia/projection-card";
+import { CampaignExpandableCard } from "@/components/estrategia/campaign-expandable";
+import { CountryPerformance } from "@/components/estrategia/country-performance";
+import type { DailyRow } from "@/lib/types";
+
+type ProjBase = "3d" | "7d" | "all";
 
 export function TabEstrategia() {
-  const { campaigns, daysElapsed } = useDashboard();
+  const { campaigns, daysElapsed, daily, hasDailyBreakdown } = useDashboard();
   const m = computeMetrics(campaigns);
+  const [projBase, setProjBase] = React.useState<ProjBase>("3d");
 
   const cptCriticalPct = m.cptReg
     ? Math.min(100, (m.cptReg / PLAN.cpt.critical) * 100)
     : 0;
-  const cptIcoPct = m.cptIco
-    ? Math.min(100, (m.cptIco / PLAN.cpt.critical) * 100)
-    : 0;
   const budgetPct = Math.min(100, m.budgetPct);
 
-  // pacing
+  // ── Pacing actual (ritmo del rango entero) ────────────────────────
   const dailyAvg = daysElapsed > 0 ? m.spend / daysElapsed : 0;
-  const proj = dailyAvg * PLAN.totalDays;
+
+  // ── Ritmo según ventana elegida (últimos 3d / 7d / total) ─────────
+  const recentDailyAvg = React.useMemo(
+    () => computeRecentDailyAvg(daily, projBase, m.spend, daysElapsed),
+    [daily, projBase, m.spend, daysElapsed],
+  );
+  const proj = recentDailyAvg * PLAN.totalDays;
+
   const dRem = PLAN.totalDays - daysElapsed;
   const reqDaily = dRem > 0 ? m.remaining / dRem : 0;
+
+  // ¿Tenemos CPT IC con datos suficientes? Si no, no mostramos la card
+  const showCptIc =
+    m.cptIco !== null && m.totalConvIC >= 5; // pocos eventos · no mostrar
 
   return (
     <div className="space-y-7 max-w-[1500px]">
@@ -49,95 +65,92 @@ export function TabEstrategia() {
       />
 
       {/* Gauges semáforo */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className={cn("grid grid-cols-2 gap-3", showCptIc ? "md:grid-cols-4" : "md:grid-cols-3")}>
         <Reveal delay={0.02}>
-          <TextureCard className="p-5 flex flex-col items-center text-center">
-            <Gauge
-              value={cptCriticalPct}
-              label="CPT Reg"
-              sub={m.cptReg ? `€${m.cptReg.toFixed(2)} · obj €${PLAN.cpt.target}` : "—"}
-              tone="auto"
-            />
-            <div className="mt-3">
-              <ExplainedMetric
-                explanation={
-                  <>
-                    <b>CPT Registro</b> = gasto en C1 + C2 + C4 dividido entre <i>CompleteRegistration</i>.
-                    <br />Objetivo: ≤ €{CPT_THRESHOLDS.target}. Atención: {">"} €{CPT_THRESHOLDS.warn}. Crítico: {">"} €{CPT_THRESHOLDS.critical}.
-                    <br /><br />La barra del gauge muestra el % vs el umbral crítico — al 100% se cruzó la línea roja.
-                  </>
-                }
-              >
-                <span className="text-[10px] text-muted-foreground">qué significa</span>
-              </ExplainedMetric>
-            </div>
-          </TextureCard>
+          <SemaphoreCard
+            title="CPT Registro"
+            subtitle="Costo por registro completado"
+            tone="auto"
+            value={cptCriticalPct}
+            mainSub={m.cptReg ? `€${m.cptReg.toFixed(2)} · obj €${PLAN.cpt.target}` : "—"}
+            explanation={
+              <>
+                <b>CPT Registro</b> = gasto en campañas CR (MX_BELLEZA + MX_COMERCIO + LATAM_BELLEZA) dividido entre eventos <i>CompleteRegistration</i>.
+                <br /><br />
+                <b>Umbrales</b>:
+                <ul className="mt-1 ml-3 list-disc">
+                  <li><span className="text-[hsl(var(--success))]">Verde</span> ≤ €{CPT_THRESHOLDS.target} (objetivo)</li>
+                  <li><span className="text-[hsl(var(--warning))]">Amarillo</span> €{CPT_THRESHOLDS.target}–€{CPT_THRESHOLDS.warn}</li>
+                  <li><span className="text-[hsl(var(--destructive))]">Rojo</span> {">"} €{CPT_THRESHOLDS.critical}</li>
+                </ul>
+                <br />La barra del gauge muestra el % vs el umbral crítico — al 100% se cruzó la línea roja.
+              </>
+            }
+          />
         </Reveal>
-        <Reveal delay={0.07}>
-          <TextureCard className="p-5 flex flex-col items-center text-center">
-            <Gauge
-              value={cptIcoPct}
-              label="CPT IC"
-              sub={m.cptIco ? `€${m.cptIco.toFixed(2)}` : "—"}
+
+        {showCptIc && (
+          <Reveal delay={0.07}>
+            <SemaphoreCard
+              title="CPT Pago"
+              subtitle="Costo por inicio de pago"
               tone="auto"
+              value={
+                m.cptIco
+                  ? Math.min(100, (m.cptIco / PLAN.cpt.critical) * 100)
+                  : 0
+              }
+              mainSub={m.cptIco ? `€${m.cptIco.toFixed(2)}` : "—"}
+              explanation={
+                <>
+                  <b>CPT InitiateCheckout</b> = gasto en C5/C6 dividido entre eventos IC.
+                  <br />C3 se excluye por anomalía de pixel.
+                  <br /><br />Solo se muestra si hay ≥5 eventos IC en el rango.
+                </>
+              }
             />
-            <div className="mt-3">
-              <ExplainedMetric
-                explanation={
-                  <>
-                    <b>CPT Inicio de pago</b> = gasto en C5 + C6 dividido entre <i>InitiateCheckout</i>.
-                    C3 se excluye por anomalía de pixel.
-                    <br />Objetivo informativo ≤ €{CPT_THRESHOLDS.target} — sirve para validar el funnel antes del registro.
-                  </>
-                }
-              >
-                <span className="text-[10px] text-muted-foreground">qué significa</span>
-              </ExplainedMetric>
-            </div>
-          </TextureCard>
-        </Reveal>
+          </Reveal>
+        )}
+
         <Reveal delay={0.12}>
-          <TextureCard className="p-5 flex flex-col items-center text-center">
-            <Gauge value={budgetPct} label="Budget" sub={`${fmt.eur(m.spend, { decimals: 0 })} / €${PLAN.budget.toLocaleString("es")}`} tone="violet" />
-            <div className="mt-3">
-              <ExplainedMetric
-                explanation={
-                  <>
-                    <b>Budget</b> = gasto acumulado / €{PLAN.budget.toLocaleString("es")} del plan mes 1.
-                    <br />Contingencia adicional: €{PLAN.contingency.toLocaleString("es")} liberable día 14 si se cumplen umbrales.
-                  </>
-                }
-              >
-                <span className="text-[10px] text-muted-foreground">qué significa</span>
-              </ExplainedMetric>
-            </div>
-          </TextureCard>
+          <SemaphoreCard
+            title="Budget"
+            subtitle={`${fmt.eur(m.spend, { decimals: 0 })} / €${PLAN.budget.toLocaleString("es")}`}
+            tone="violet"
+            value={budgetPct}
+            mainSub={`${fmt.eur(m.spend, { decimals: 0 })} / €${PLAN.budget.toLocaleString("es")}`}
+            explanation={
+              <>
+                <b>Budget</b> = gasto acumulado / €{PLAN.budget.toLocaleString("es")} del plan mes 1.
+                <br />Contingencia adicional: €{PLAN.contingency.toLocaleString("es")} liberable día 14 si se cumplen umbrales.
+                <br /><br />Comparar contra el gauge <b>Tiempo</b> para detectar bajo/sobre pacing.
+              </>
+            }
+          />
         </Reveal>
+
         <Reveal delay={0.17}>
-          <TextureCard className="p-5 flex flex-col items-center text-center">
-            <Gauge
-              value={Math.round((daysElapsed / PLAN.totalDays) * 100)}
-              label="Tiempo"
-              sub={`día ${daysElapsed} / ${PLAN.totalDays}`}
-              tone="cyan"
-            />
-            <div className="mt-3">
-              <ExplainedMetric
-                explanation={
-                  <>
-                    <b>Tiempo</b> = días transcurridos / {PLAN.totalDays} del periodo del plan (12 – 31 mayo).
-                    Compara contra Budget para detectar bajo/sobre pacing.
-                  </>
-                }
-              >
-                <span className="text-[10px] text-muted-foreground">qué significa</span>
-              </ExplainedMetric>
-            </div>
-          </TextureCard>
+          <SemaphoreCard
+            title="Tiempo transcurrido"
+            subtitle={`día ${daysElapsed} de ${PLAN.totalDays} del plan`}
+            tone="cyan"
+            value={Math.round((daysElapsed / PLAN.totalDays) * 100)}
+            mainSub={`día ${daysElapsed} / ${PLAN.totalDays}`}
+            explanation={
+              <>
+                <b>Tiempo transcurrido</b> = días del plan ya completados (12–31 mayo · {PLAN.totalDays} días totales).
+                <br /><br />Compará contra <b>Budget</b>:
+                <ul className="mt-1 ml-3 list-disc">
+                  <li>Budget {">"} Tiempo → sobre pacing (gastando rápido)</li>
+                  <li>Budget {"<"} Tiempo → bajo pacing (gastando lento)</li>
+                </ul>
+              </>
+            }
+          />
         </Reveal>
       </div>
 
-      {/* Pacing + Proyección */}
+      {/* Pacing + Proyección con selector base */}
       <div className="grid lg:grid-cols-2 gap-4">
         <TextureCard className="p-5">
           <div className="flex items-center justify-between mb-4">
@@ -150,9 +163,10 @@ export function TabEstrategia() {
           </div>
           <div className="space-y-3">
             <Row k="Gastado" v={fmt.eur(m.spend, { decimals: 0 })} sub={`${Math.round(m.budgetPct)}%`} />
-            <Row k="Ritmo actual" v={`${fmt.eur(dailyAvg, { decimals: 0 })}/día`} />
+            <Row k="Ritmo medio (rango)" v={`${fmt.eur(dailyAvg, { decimals: 0 })}/día`} />
+            <Row k="Ritmo reciente" v={`${fmt.eur(recentDailyAvg, { decimals: 0 })}/día`} />
             <Row k="Necesario ahora" v={`${fmt.eur(reqDaily, { decimals: 0 })}/día`} tone={reqDaily > dailyAvg ? "danger" : "success"} />
-            <Row k="Proyección día 20" v={fmt.eur(proj, { decimals: 0 })} tone={proj > PLAN.budget ? "danger" : "success"} />
+            <Row k={`Proyección al 31 may`} v={fmt.eur(proj, { decimals: 0 })} tone={proj > PLAN.budget ? "danger" : "success"} />
           </div>
           <div className="mt-4 h-1.5 rounded-full bg-border/60 overflow-hidden">
             <motion.div
@@ -172,12 +186,39 @@ export function TabEstrategia() {
         </TextureCard>
 
         <TextureCard className="p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-2">
               <TrendingUp className="size-3.5" /> Proyección al 31 mayo
             </h3>
             <Badge variant="violet">objetivo 1.350 CR</Badge>
           </div>
+
+          {/* Selector de base proyección */}
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground mr-1">
+              base:
+            </span>
+            <ProjBaseToggle current={projBase} onChange={setProjBase} hasDaily={hasDailyBreakdown} />
+            <ExplainedMetric
+              explanation={
+                <>
+                  <b>Base de cálculo</b> de la proyección:
+                  <ul className="mt-1 ml-3 list-disc">
+                    <li><b>3d</b> · ritmo de los últimos 3 días · sensible a cambios recientes</li>
+                    <li><b>7d</b> · ritmo de la última semana · más estable</li>
+                    <li><b>Total</b> · promedio del rango entero · referencia histórica</li>
+                  </ul>
+                  <br />Si no hay breakdown diario, se usa el ritmo total automáticamente.
+                </>
+              }
+            >
+              <span className="sr-only">qué base</span>
+            </ExplainedMetric>
+          </div>
+          <p className="text-[10.5px] text-muted-foreground/80 mb-3 leading-relaxed">
+            Calculada con ritmo {projBase === "3d" ? "diario de los últimos 3 días" : projBase === "7d" ? "diario de los últimos 7 días" : "promedio del rango activo"}
+            {" "}× {PLAN.totalDays} días totales del plan.
+          </p>
           <div className="space-y-3">
             <Row
               k="CR proyectados"
@@ -210,113 +251,33 @@ export function TabEstrategia() {
         <RulesGrid />
       </section>
 
-      {/* Análisis por campaña */}
+      {/* Análisis por campaña · DESGLOSABLE con nombres reales */}
       <section>
-        <SectionHeader title="Análisis por campaña" sub="Estado, conversión y desviación frente al promedio del grupo" />
+        <SectionHeader
+          title="Análisis por campaña"
+          sub="Click en cada card para desglose diario · justificación del status con datos"
+        />
         <StaggerGroup className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {campaigns.map((c) => {
-            const fColor =
-              c.flag === "critical"
-                ? "var(--destructive)"
-                : c.flag === "warn"
-                  ? "var(--warning)"
-                  : c.flag === "anomaly"
-                    ? "var(--brand-ember)"
-                    : "var(--success)";
-            const spPct = Math.round((c.spend / PLAN.budget) * 100);
-            const cvr = c.clicks > 0 ? ((c.conversions / c.clicks) * 100).toFixed(1) : "—";
-            const vsAvg = cptVsGroupAvg(c, campaigns);
-            return (
-              <StaggerItem key={c.cid}>
-                <SpotlightCard className="p-4" spotlightColor={fColor} intensity={0.25}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-[11px] text-foreground">
-                        {c.code}
-                      </span>
-                      <span className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                        {c.event === "CompleteRegistration" ? "Completar Reg." : "Iniciar Pago"}
-                      </span>
-                    </div>
-                    <Badge
-                      variant={
-                        c.flag === "critical"
-                          ? "danger"
-                          : c.flag === "warn"
-                            ? "warning"
-                            : c.flag === "anomaly"
-                              ? "ember"
-                              : "success"
-                      }
-                    >
-                      {c.flag === "critical"
-                        ? "Crítico"
-                        : c.flag === "warn"
-                          ? "Atención"
-                          : c.flag === "anomaly"
-                            ? "Anomalía"
-                            : "OK"}
-                    </Badge>
-                  </div>
-                  <Row k="Gasto" v={`${fmt.eur(c.spend, { decimals: 0 })} · ${spPct}%`} />
-                  <Row k="Conversiones" v={`${fmt.int(c.conversions)} ${c.event === "CompleteRegistration" ? "CR" : "IC"}`} />
-                  <Row
-                    k="CPT"
-                    v={c.cpt === null ? "—" : fmt.eur(c.cpt)}
-                    tone={cptTone(c.cpt) as "success" | "warning" | "danger" | "default"}
-                  />
-                  <Row k="CVR (click→conv)" v={`${cvr}%`} />
-                  <Row k="Frecuencia" v={`${c.freq.toFixed(2)}×`} />
-
-                  {/* Mini comparativo CPT vs promedio del grupo */}
-                  {vsAvg.groupAvg !== null && c.cpt !== null && c.flag !== "anomaly" && (
-                    <div className="mt-3 pt-2 border-t border-border/40">
-                      <div className="flex items-center justify-between text-[10px] mb-1">
-                        <span className="text-muted-foreground">CPT vs. promedio grupo</span>
-                        <span
-                          className={cn(
-                            "font-mono font-bold tabular",
-                            vsAvg.diffPct > 30
-                              ? "text-[hsl(var(--destructive))]"
-                              : vsAvg.diffPct > 10
-                                ? "text-[hsl(var(--warning))]"
-                                : vsAvg.diffPct < -10
-                                  ? "text-[hsl(var(--success))]"
-                                  : "text-muted-foreground",
-                          )}
-                        >
-                          {vsAvg.diffPct > 0 ? "+" : ""}
-                          {vsAvg.diffPct.toFixed(0)}% vs €{vsAvg.groupAvg.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="relative h-1 rounded-full bg-border/60 overflow-hidden">
-                        <div
-                          className="absolute top-0 bottom-0 w-[2px] bg-foreground/50 z-10"
-                          style={{ left: "50%" }}
-                        />
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, Math.max(2, 50 + vsAvg.diffPct / 2))}%` }}
-                          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-                          className="h-full"
-                          style={{
-                            background:
-                              vsAvg.diffPct > 0
-                                ? "hsl(var(--destructive))"
-                                : "hsl(var(--success))",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </SpotlightCard>
-              </StaggerItem>
-            );
-          })}
+          {campaigns.map((c) => (
+            <StaggerItem key={c.cid}>
+              <CampaignExpandableCard campaign={c} allCampaigns={campaigns} />
+            </StaggerItem>
+          ))}
         </StaggerGroup>
       </section>
 
-      {/* Análisis profundo por campaña (sección A · handoff 22-may) */}
+      {/* NUEVA · Performance por país */}
+      <section>
+        <SectionHeader
+          title="Performance por país"
+          sub="Breakdown geográfico de toda la cuenta · qué países convierten más y dónde duele el CPT"
+        />
+        <Reveal>
+          <CountryPerformance />
+        </Reveal>
+      </section>
+
+      {/* Análisis profundo por campaña */}
       <section>
         <SectionHeader
           title="Análisis profundo por campaña"
@@ -331,7 +292,7 @@ export function TabEstrategia() {
         </StaggerGroup>
       </section>
 
-      {/* Proyección al 31-may + Realidad vs Objetivo (sección B · handoff 22-may) */}
+      {/* Proyección al 31-may + Realidad vs Objetivo */}
       <section>
         <SectionHeader
           title="Proyección al cierre"
@@ -343,6 +304,104 @@ export function TabEstrategia() {
       </section>
     </div>
   );
+}
+
+/** Card de semáforo unificada con explicación inline + tooltip ?. */
+function SemaphoreCard({
+  title,
+  subtitle,
+  value,
+  mainSub,
+  tone,
+  explanation,
+}: {
+  title: string;
+  subtitle: string;
+  value: number;
+  mainSub: string;
+  tone: "auto" | "violet" | "cyan" | "lime" | "ember";
+  explanation: React.ReactNode;
+}) {
+  return (
+    <TextureCard className="p-5 flex flex-col items-center text-center">
+      <div className="w-full flex items-center justify-center gap-1.5 mb-1">
+        <span className="text-[10px] uppercase tracking-[0.12em] font-bold text-foreground">
+          {title}
+        </span>
+        <ExplainedMetric explanation={explanation}>
+          <span className="sr-only">Info {title}</span>
+        </ExplainedMetric>
+      </div>
+      <p className="text-[10px] text-muted-foreground mb-2 leading-tight">{subtitle}</p>
+      <Gauge value={value} sub={mainSub} tone={tone} />
+    </TextureCard>
+  );
+}
+
+/** Toggle de base proyección. */
+function ProjBaseToggle({
+  current,
+  onChange,
+  hasDaily,
+}: {
+  current: ProjBase;
+  onChange: (b: ProjBase) => void;
+  hasDaily: boolean;
+}) {
+  const opts: Array<{ id: ProjBase; label: string }> = [
+    { id: "3d", label: "3 días" },
+    { id: "7d", label: "7 días" },
+    { id: "all", label: "Total" },
+  ];
+  return (
+    <div className="inline-flex rounded-md border border-border bg-background/40 p-0.5">
+      {opts.map((o) => {
+        const disabled = !hasDaily && o.id !== "all";
+        const active = current === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(o.id)}
+            className={cn(
+              "px-2 py-0.5 text-[10px] uppercase tracking-[0.06em] font-semibold rounded transition-colors",
+              active
+                ? "bg-[hsl(var(--brand-violet)/0.16)] text-[hsl(var(--brand-violet))]"
+                : "text-muted-foreground hover:text-foreground",
+              disabled && "opacity-40 cursor-not-allowed",
+            )}
+            title={disabled ? "Sin breakdown diario disponible" : undefined}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function computeRecentDailyAvg(
+  daily: DailyRow[],
+  base: ProjBase,
+  totalSpend: number,
+  daysElapsed: number,
+): number {
+  if (base === "all" || daily.length === 0) {
+    return daysElapsed > 0 ? totalSpend / daysElapsed : 0;
+  }
+  const n = base === "3d" ? 3 : 7;
+  // sumar gasto por fecha (campaign-level rows · sin adsetId) y tomar últimos N
+  const byDate = new Map<string, number>();
+  for (const r of daily) {
+    if (r.adsetId) continue;
+    byDate.set(r.date, (byDate.get(r.date) ?? 0) + r.spend);
+  }
+  const sorted = Array.from(byDate.entries()).sort((a, b) => (a[0] > b[0] ? -1 : 1));
+  const slice = sorted.slice(0, n);
+  if (slice.length === 0) return daysElapsed > 0 ? totalSpend / daysElapsed : 0;
+  const sum = slice.reduce((s, [, v]) => s + v, 0);
+  return sum / slice.length;
 }
 
 function Row({
@@ -412,144 +471,231 @@ function NextDecisionSub({ daysElapsed }: { daysElapsed: number }) {
   );
 }
 
+type RuleState = "done" | "pending" | "discarded" | "watch" | "active";
+
+interface RuleEntry {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  state: RuleState;
+  /** Etiqueta corta tipo "23-may" o "decidido" */
+  stamp?: string;
+}
+
 function RulesGrid() {
   const { daysElapsed, campaigns } = useDashboard();
-  const c2 = campaigns.find((c) => c.code === "C2");
-  const c4 = campaigns.find((c) => c.code === "C4");
   const c7 = campaigns.find((c) => c.code === "C7");
   const d14 = daysUntil(PLAN.day14ISO);
 
-  // ── Plan B C2 · dinámico ────────────────────────────────────────────
-  // Trigger Julián: si C2 lleva <20 CR al día 7+ → switch a IC.
-  // Estado real:
-  //   · C2 PAUSED  → switch NO ejecutado, regla descartada (IC tampoco convierte · ver C3/C5/C6)
-  //   · C2 ACTIVE + CR<20 + día≥7 → pendiente
-  //   · C2 ACTIVE + CR≥20 → trigger no alcanzado, regla OK
-  const c2CR = c2?.evCompleteReg ?? 0;
-  const c2Paused = c2?.status === "PAUSED";
-  let planBTitle = "Plan B C2 — switch a InitiateCheckout";
-  let planBDesc = "C2 no encontrada en el rango activo.";
-  let planBState: "ok" | "alert" | "watch" = "watch";
-  if (c2) {
-    if (c2Paused) {
-      planBTitle = "Plan B C2 — descartado";
-      planBDesc = `C2 PAUSED · regla NO ejecutada (aprendizaje: IC convierte 8× peor). ${c2CR} CR acumulados antes de pausar.`;
-      planBState = "ok";
-    } else if (daysElapsed >= 7 && c2CR < 20) {
-      planBDesc = `Día ${daysElapsed} · ${c2CR} CR < 20. Trigger alcanzado · revisar con Julián antes del switch.`;
-      planBState = "alert";
-    } else if (c2CR >= 20) {
-      planBTitle = "Plan B C2 — trigger no alcanzado";
-      planBDesc = `${c2CR} CR ≥ 20 · regla OK, mantener objetivo CompleteRegistration.`;
-      planBState = "ok";
-    } else {
-      planBDesc = `Día ${daysElapsed} · ${c2CR} CR · evaluación día 7.`;
+  // ── Plan B C2 · estado real derivado de planBStatus ───────────────
+  const planB = planBStatus(campaigns, daysElapsed);
+  let planBState: RuleState;
+  let planBTitle: string;
+  let planBDesc: string;
+  let planBStamp: string;
+  switch (planB.status) {
+    case "activated":
+      planBState = "discarded";
+      planBTitle = "Plan B C2 · switch a IC · DESCARTADO";
+      planBDesc = `${planB.detail}. Regla obsoleta validada por C5/C6 (IC convierte 8× peor que CR).`;
+      planBStamp = "descartado";
+      break;
+    case "pending":
+      planBState = "pending";
+      planBTitle = "Plan B C2 · revisar con Julián";
+      planBDesc = `${planB.detail}. Regla original alcanzada · ahora descartada (IC no convierte). Confirmar con Julián.`;
+      planBStamp = "pendiente";
+      break;
+    case "watch":
       planBState = "watch";
-    }
+      planBTitle = "Plan B C2 · en watch";
+      planBDesc = `${planB.detail}. Regla original: si C2 <20 CR día 7 → switch evento a IC.`;
+      planBStamp = "vigilar";
+      break;
+    default:
+      planBState = "discarded";
+      planBTitle = "Plan B C2 · sin datos";
+      planBDesc = "C2 no encontrada en el rango activo.";
+      planBStamp = "sin datos";
   }
 
-  // ── Día 14 · evaluar C7 Retargeting · condición ≥1.000 visits + ≥30 trials
-  // Sin breakdown de visitas en client. Si tenemos C7 con conversiones reales,
-  // mostramos lo que sabemos; sino dejamos "pendiente data".
-  let c7Title = "Día 14 (26 may) — evaluar C7 Retargeting";
+  // ── Pausa C3/C5/C6 · spend dinámico desde data viva ───────────────
+  const c3 = campaigns.find((c) => c.code === "C3");
+  const c5 = campaigns.find((c) => c.code === "C5");
+  const c6 = campaigns.find((c) => c.code === "C6");
+  const allICPaused = [c3, c5, c6].every((c) => !c || c.status === "PAUSED");
+  const icPausedSpend = (c5?.spend ?? 0) + (c6?.spend ?? 0);
+  const pauseDesc = allICPaused
+    ? `Pausadas 3 campañas IC tras validar tasa IC→signup <1%. €${icPausedSpend.toFixed(
+        0,
+      )} gastados en C5+C6 sin output convertible. Aprendizaje: IC no convierte en Bewe.`
+    : "Pendiente · revisar status real en Ads Manager.";
+
+  // ── Escalados 23-may · texto narrativo del equipo (queda como nota) ─
+  const c1 = campaigns.find((c) => c.code === "C1");
+  const c4 = campaigns.find((c) => c.code === "C4");
+  const escaladosDesc =
+    c1 && c4
+      ? `C1 ${c1.vertical} freq ${c1.freq.toFixed(2)}× · C4 ${c4.vertical} freq ${c4.freq.toFixed(
+          2,
+        )}×. Notas del equipo 23-may: C1 escalada CBO, A4.1 LOK escalado ABO. Vigilar fatigue.`
+      : "Notas del equipo 23-may: C1 paraguas escalada CBO + A4.1 LOK Belleza escalado ABO.";
+
+  // ── Anti-fatigue · listado dinámico desde data viva ─────────────────
+  const fatigueCampaigns = campaigns.filter((c) => c.freq > 1.9 && c.status !== "PAUSED");
+  const fatigueDesc =
+    fatigueCampaigns.length > 0
+      ? `Con freq >1.9: ${fatigueCampaigns
+          .map((c) => `${c.code} freq ${c.freq.toFixed(2)}x`)
+          .join(" · ")}. Producir concepto nuevo o el escalado pierde rendimiento.`
+      : "Sin datos en el rango actual · ninguna campaña con freq >1.9 activa.";
+
+  // ── C7 Retargeting · día 14 + nota PostHog ──────────────────────────
+  let c7Title = "Día 14 (26 may) · evaluar C7 Retargeting";
   let c7Desc = "";
-  let c7State: "ok" | "alert" | "watch" = "watch";
+  let c7State: RuleState = "watch";
+  let c7Stamp = `en ${Math.max(0, d14)}d`;
   if (d14 > 0) {
-    c7Desc = `En ${d14}d. Condición: ≥1.000 visits + ≥30 trials. Pendiente data de visitas (revisar en Ads Manager).`;
+    c7Desc = `En ${d14}d. Bloqueada por Custom Audiences (Visitantes 30d · IC abandons · IG/FB eng). Condición: ≥1.000 visits + ≥30 trials. Métrica visits/trials requiere PostHog · check manual.`;
     c7State = "watch";
   } else if (c7) {
     const c7Conv = c7.conversions;
     if (c7Conv >= 30) {
-      c7Title = "Día 14 — C7 cumple condición";
-      c7Desc = `${c7Conv} conv ≥ 30 · contingencia €1.000 activable si ≥2 camps CPT<€3.`;
-      c7State = "ok";
+      c7Title = "Día 14 · C7 cumple condición";
+      c7Desc = `${c7Conv} conv ≥ 30 · contingencia €1.000 activable si ≥2 camps CPT<€3. Métrica visits/trials requiere PostHog · check manual.`;
+      c7State = "done";
+      c7Stamp = "validada";
     } else {
-      c7Desc = `Pasado · C7 lleva ${c7Conv} conv (< 30 trials). Visitas pendientes de revisar en Ads Manager.`;
-      c7State = "alert";
+      c7Desc = `Pasado · C7 lleva ${c7Conv} conv (<30 trials). Métrica visits/trials requiere PostHog · check manual.`;
+      c7State = "pending";
+      c7Stamp = "pendiente";
     }
   } else {
-    c7Desc = "Pasado · C7 no creada todavía. Visitas pendientes manual en Ads Manager.";
-    c7State = "alert";
+    c7Desc =
+      "Bloqueada por Custom Audiences · NO creada todavía. Métrica visits/trials requiere PostHog · check manual.";
+    c7State = "pending";
+    c7Stamp = "bloqueada";
   }
 
-  // ── Watchpoint Colombia · pendiente data (no tenemos breakdown por país) ──
-  const c4Spend = c4?.spend ?? 0;
-  const watchCODesc = c4
-    ? `C4 LATAM_BELLEZA lleva ${fmt.eur(c4Spend, { decimals: 0 })} en el rango. Breakdown CO no disponible en client · revisar manual en Ads Manager.`
-    : "Pendiente · revisar % gasto CO en Ads Manager (no tenemos breakdown por país aquí).";
+  // ── Plan junio · redirigido a CR ─────────────────────────────────
+  const junioDesc =
+    "Brief mes 2 · €4.500 redirigidos íntegros a CompleteRegistration (cero IC). Aprendizaje validado por C3/C5/C6.";
 
-  // ── ABO · Reasignación libre hasta 20% · regla estática (límite operativo) ──
-  const aboDesc = "Cualquier movimiento >20% del budget requiere aprobación de Julián. Regla activa.";
+  // ── Watchpoint Colombia · pendiente lectura de country-performance ─
+  const watchCODesc =
+    "C4 LATAM_BELLEZA · pendiente lectura de country-performance. Si CO >40% del gasto → activar bid cap €2. Revisar en card Performance por país.";
 
-  const rules: Array<{
-    icon: React.ReactNode;
-    title: string;
-    desc: string;
-    state: "ok" | "alert" | "watch";
-  }> = [
+  const rules: RuleEntry[] = [
     {
       icon: <CheckCircle2 className="size-4" />,
       title: "ABO · Reasignación libre hasta 20%",
-      desc: aboDesc,
-      state: "ok",
+      desc: "Cualquier movimiento >20% del budget requiere aprobación de Julián. Regla activa desde día 0.",
+      state: "active",
+      stamp: "activa",
     },
     {
-      icon: planBState === "alert" ? <AlertOctagon className="size-4" /> : <CheckCircle2 className="size-4" />,
+      icon: <XCircle className="size-4" />,
       title: planBTitle,
       desc: planBDesc,
       state: planBState,
+      stamp: planBStamp,
     },
     {
-      icon: c7State === "alert" ? <AlertOctagon className="size-4" /> : <AlertTriangle className="size-4" />,
+      icon: <Pause className="size-4" />,
+      title: "Pausa C3 · C5 · C6 (IC LATAM/MX) — ejecutada",
+      desc: pauseDesc,
+      state: allICPaused ? "done" : "pending",
+      stamp: "22-may",
+    },
+    {
+      icon: <TrendingUp className="size-4" />,
+      title: "Escalados · winners 23-may",
+      desc: escaladosDesc,
+      state: "done",
+      stamp: "23-may",
+    },
+    {
+      icon: <AlertOctagon className="size-4" />,
+      title: "Anti-fatigue urgente · creativo paraguas nuevo",
+      desc: fatigueDesc,
+      state: fatigueCampaigns.length > 0 ? "pending" : "watch",
+      stamp: "antes 26-may",
+    },
+    {
+      icon: c7State === "done" ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />,
       title: c7Title,
       desc: c7Desc,
       state: c7State,
+      stamp: c7Stamp,
+    },
+    {
+      icon: <Sparkles className="size-4" />,
+      title: "Plan junio · €4.500 redirigidos a CompleteRegistration",
+      desc: junioDesc,
+      state: "active",
+      stamp: "brief",
     },
     {
       icon: <AlertTriangle className="size-4" />,
-      title: "Watchpoint Colombia — geo leakage",
+      title: "Watchpoint Colombia · geo leakage C4",
       desc: watchCODesc,
       state: "watch",
+      stamp: "vigilar",
     },
     {
       icon: <CheckCircle2 className="size-4" />,
       title: "Atribución 7d clic / 1d view",
-      desc: "Configurada correctamente en todas las campañas desde el lanzamiento (setup decision · no se modifica).",
-      state: "ok",
+      desc: "Configurada correctamente desde lanzamiento (setup decision · no se modifica).",
+      state: "done",
+      stamp: "setup",
     },
     {
       icon: <CheckCircle2 className="size-4" />,
-      title: "Dominio verificado bewe.ai · CAPI activo",
-      desc: "Pixel eliminado · CAPI puro desde 16 mayo. Setup histórico · datos limpios desde esa fecha.",
-      state: "ok",
+      title: "Dominio bewe.ai · CAPI puro desde 16-may",
+      desc: "Pixel eliminado · CAPI sin duplicados. Datos limpios desde esa fecha (pre-16-may inflados).",
+      state: "done",
+      stamp: "16-may",
     },
   ];
 
   return (
     <StaggerGroup className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
       {rules.map((r, i) => {
-        const color =
-          r.state === "ok" ? "var(--success)" : r.state === "alert" ? "var(--destructive)" : "var(--warning)";
+        const meta = ruleStateMeta(r.state);
         return (
           <StaggerItem key={i}>
             <TextureCard
-              className="p-4"
-              style={{ borderLeftWidth: "3px", borderLeftColor: `hsl(${color})` }}
+              className="p-4 h-full"
+              style={{ borderLeftWidth: "3px", borderLeftColor: `hsl(${meta.color})` }}
             >
               <div className="flex items-start gap-3">
                 <div
                   className="size-8 grid place-items-center rounded-lg border shrink-0"
                   style={{
-                    background: `hsl(${color} / 0.12)`,
-                    borderColor: `hsl(${color} / 0.4)`,
-                    color: `hsl(${color})`,
+                    background: `hsl(${meta.color} / 0.12)`,
+                    borderColor: `hsl(${meta.color} / 0.4)`,
+                    color: `hsl(${meta.color})`,
                   }}
                 >
                   {r.icon}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-[12px] font-semibold leading-tight">{r.title}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-[12px] font-semibold leading-tight">{r.title}</div>
+                    <Badge
+                      variant={meta.badge}
+                      className="shrink-0 normal-case tracking-normal"
+                    >
+                      <span className="mr-1">{meta.glyph}</span>
+                      {meta.label}
+                    </Badge>
+                  </div>
                   <div className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{r.desc}</div>
+                  {r.stamp && (
+                    <div className="text-[10px] text-muted-foreground/60 mt-1.5 font-mono">
+                      · {r.stamp}
+                    </div>
+                  )}
                 </div>
               </div>
             </TextureCard>
@@ -558,4 +704,25 @@ function RulesGrid() {
       })}
     </StaggerGroup>
   );
+}
+
+function ruleStateMeta(state: RuleState): {
+  color: string;
+  glyph: string;
+  label: string;
+  badge: "success" | "warning" | "danger" | "info" | "violet";
+} {
+  switch (state) {
+    case "done":
+      return { color: "var(--success)", glyph: "✓", label: "ejecutado", badge: "success" };
+    case "pending":
+      return { color: "var(--warning)", glyph: "⏳", label: "pendiente", badge: "warning" };
+    case "discarded":
+      return { color: "var(--destructive)", glyph: "✗", label: "descartado", badge: "danger" };
+    case "watch":
+      return { color: "var(--warning)", glyph: "👁", label: "vigilar", badge: "warning" };
+    case "active":
+    default:
+      return { color: "var(--info)", glyph: "•", label: "activa", badge: "info" };
+  }
 }

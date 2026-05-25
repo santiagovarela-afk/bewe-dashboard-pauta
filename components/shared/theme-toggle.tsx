@@ -91,6 +91,7 @@ export function ThemeToggle() {
   return (
     <>
       <button
+        data-tour="theme-toggle"
         onClick={handleClick}
         title={isDark ? "Cambiar a claro" : "Cambiar a oscuro"}
         aria-label="Toggle theme"

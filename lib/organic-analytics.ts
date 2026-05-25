@@ -208,7 +208,7 @@ export function whyItWorked(post: AnalyticsPost, avgEngagement: number): string 
     if (post.video_views && post.video_views > 0) {
       reasons.push(`Formato video · ${post.video_views.toLocaleString("es-ES")} views`);
     } else {
-      reasons.push("Formato video · empuja alcance orgánico");
+      reasons.push("Formato video · suele empujar alcance · validamos en tu data");
     }
   }
   if (post.type === "CAROUSEL_ALBUM") {
@@ -334,4 +334,264 @@ export function videoStats(posts: AnalyticsPost[]): {
     avgLikes,
     avgComments,
   };
+}
+
+// ─── Filtrado por rango de fechas ────────────────────────────────────────
+
+/**
+ * Filtra una lista de posts por rango ISO (yyyy-mm-dd inclusive en ambos extremos).
+ * Posts sin `date` válido se descartan. Útil para respetar el dateRange global.
+ */
+export function filterPostsByDateRange(
+  posts: AnalyticsPost[],
+  range: { from: string; to: string },
+): AnalyticsPost[] {
+  if (!posts.length) return posts;
+  const { from, to } = range;
+  return posts.filter((p) => {
+    if (!p.date) return false;
+    const iso = new Date(p.date).toISOString().slice(0, 10);
+    return iso >= from && iso <= to;
+  });
+}
+
+/** Distancia en días entre dos ISO yyyy-mm-dd (inclusivo). */
+export function rangeDays(range: { from: string; to: string }): number {
+  const a = new Date(`${range.from}T00:00:00`).getTime();
+  const b = new Date(`${range.to}T00:00:00`).getTime();
+  return Math.max(1, Math.round((b - a) / 86400000) + 1);
+}
+
+// ─── Plan diario ─────────────────────────────────────────────────────────
+
+const WEEKDAY_NAMES = [
+  "Domingo",
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+];
+
+export interface DailyPlanEntry {
+  /** 0=Domingo .. 6=Sábado · alineado con Date.getDay() */
+  weekday: number;
+  weekdayName: string;
+  /** Mejor hora local (HH:00). null si no hay data ese día. */
+  bestHour: string | null;
+  /** Engagement promedio de los posts publicados ese día. */
+  avgEngagement: number;
+  /** Cantidad de posts históricos. */
+  count: number;
+  /** Formato sugerido para ese día (basado en formato con mejor eng en histórico). */
+  suggestedFormat: "Reel / Video" | "Carrusel" | "Imagen" | "Mix";
+  /** Razón corta y accionable. */
+  rationale: string;
+}
+
+/**
+ * Genera un plan semanal "qué postear cada día" basado en histórico real.
+ * Para cada día de la semana:
+ *  - calcula la mejor hora del día (con más eng/post)
+ *  - sugiere el formato que mejor performó en ese día
+ *  - da un rationale corto y accionable
+ *
+ * Si no hay datos para un día, devuelve fallback con sugerencia genérica
+ * basada en best-practices 2026 (Reels mid-week, carruseles fines).
+ */
+export function dailyPlan(posts: AnalyticsPost[]): DailyPlanEntry[] {
+  const byDay = new Map<number, AnalyticsPost[]>();
+  for (const p of posts) {
+    if (!p.date) continue;
+    const d = new Date(p.date);
+    if (Number.isNaN(d.getTime())) continue;
+    const w = d.getDay();
+    const arr = byDay.get(w) ?? [];
+    arr.push(p);
+    byDay.set(w, arr);
+  }
+
+  const DEFAULT_FORMAT_BY_DAY: Record<number, DailyPlanEntry["suggestedFormat"]> = {
+    0: "Carrusel", // Dom
+    1: "Reel / Video", // Lun
+    2: "Reel / Video", // Mar
+    3: "Carrusel", // Mié
+    4: "Reel / Video", // Jue
+    5: "Imagen", // Vie
+    6: "Carrusel", // Sáb
+  };
+  const DEFAULT_HOUR_BY_DAY: Record<number, string> = {
+    0: "11:00",
+    1: "09:00",
+    2: "19:00",
+    3: "13:00",
+    4: "19:00",
+    5: "12:00",
+    6: "20:00",
+  };
+
+  const out: DailyPlanEntry[] = [];
+  for (let w = 0; w < 7; w++) {
+    const dayPosts = byDay.get(w) ?? [];
+    if (!dayPosts.length) {
+      out.push({
+        weekday: w,
+        weekdayName: WEEKDAY_NAMES[w]!,
+        bestHour: DEFAULT_HOUR_BY_DAY[w] ?? "19:00",
+        avgEngagement: 0,
+        count: 0,
+        suggestedFormat: DEFAULT_FORMAT_BY_DAY[w] ?? "Mix",
+        rationale: "Sin histórico · sugerencia basada en best-practices 2026",
+      });
+      continue;
+    }
+    // Hora con más eng/post
+    const hourBuckets = new Map<number, { sum: number; count: number }>();
+    for (const p of dayPosts) {
+      const d = new Date(p.date!);
+      const h = d.getHours();
+      const b = hourBuckets.get(h) ?? { sum: 0, count: 0 };
+      b.sum += p.likes + p.comments;
+      b.count += 1;
+      hourBuckets.set(h, b);
+    }
+    let bestHour = -1;
+    let bestHourAvg = -1;
+    for (const [h, b] of hourBuckets) {
+      const avg = b.sum / b.count;
+      if (avg > bestHourAvg) {
+        bestHourAvg = avg;
+        bestHour = h;
+      }
+    }
+    const formatBuckets = new Map<string, { sum: number; count: number }>();
+    for (const p of dayPosts) {
+      const t = (p.type ?? "").toUpperCase();
+      const key =
+        t === "VIDEO" || p.media_product_type === "REELS"
+          ? "Reel / Video"
+          : t === "CAROUSEL_ALBUM"
+            ? "Carrusel"
+            : t === "IMAGE"
+              ? "Imagen"
+              : "Mix";
+      const b = formatBuckets.get(key) ?? { sum: 0, count: 0 };
+      b.sum += p.likes + p.comments;
+      b.count += 1;
+      formatBuckets.set(key, b);
+    }
+    let topFormat: DailyPlanEntry["suggestedFormat"] = "Mix";
+    let topFormatAvg = -1;
+    for (const [f, b] of formatBuckets) {
+      const avg = b.sum / b.count;
+      if (avg > topFormatAvg) {
+        topFormatAvg = avg;
+        topFormat = f as DailyPlanEntry["suggestedFormat"];
+      }
+    }
+    const totalEng = dayPosts.reduce((s, p) => s + p.likes + p.comments, 0);
+    const avgEng = totalEng / dayPosts.length;
+    const rationaleParts: string[] = [];
+    rationaleParts.push(`${avgEng.toFixed(1)} eng/post histórico`);
+    if (topFormatAvg > 0) {
+      rationaleParts.push(`${topFormat.toLowerCase()} performó ${topFormatAvg.toFixed(0)} eng`);
+    }
+    out.push({
+      weekday: w,
+      weekdayName: WEEKDAY_NAMES[w]!,
+      bestHour: bestHour >= 0 ? `${String(bestHour).padStart(2, "0")}:00` : DEFAULT_HOUR_BY_DAY[w] ?? "19:00",
+      avgEngagement: avgEng,
+      count: dayPosts.length,
+      suggestedFormat: topFormat,
+      rationale: rationaleParts.join(" · "),
+    });
+  }
+  // Orden Lun→Dom (más natural laboral)
+  return [...out].sort((a, b) => {
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    return order.indexOf(a.weekday) - order.indexOf(b.weekday);
+  });
+}
+
+// ─── Format performance reforzado ────────────────────────────────────────
+
+export interface FormatStatsRich {
+  format: FormatStats["format"];
+  label: string;
+  count: number;
+  avgEngagement: number;
+  totalLikes: number;
+  totalComments: number;
+  best: AnalyticsPost | null;
+  /** Engagement rate sobre views (solo si hay video_views). */
+  engagementRate: number | null;
+  /** Saves + shares por post (cuando hay insights). 0 si no hay datos. */
+  saveShareRate: number;
+  /** Diferencia % vs media global de la cuenta. Negativo = bajo la media. */
+  diffVsAvgPct: number;
+  /** Mini-sparkline de los últimos N posts del formato (cronológico, max 10). */
+  trend: number[];
+}
+
+interface AnalyticsPostWithInsights extends AnalyticsPost {
+  /** Saves del insight (IG) cuando hay permiso. */
+  saves?: number;
+  /** Shares del insight (IG) o shares.count (FB). */
+  shares?: number;
+}
+
+/**
+ * Variante "reforzada" de performanceByFormat que añade engagement rate,
+ * tasa de saves+shares, diff vs media global y mini-sparkline.
+ */
+export function performanceByFormatRich(posts: AnalyticsPost[]): FormatStatsRich[] {
+  const base = performanceByFormat(posts);
+  if (!base.length) return [];
+  const globalAvg =
+    posts.length > 0
+      ? posts.reduce((s, p) => s + p.likes + p.comments, 0) / posts.length
+      : 0;
+
+  return base.map((s) => {
+    const formatPosts = posts.filter((p) => {
+      const t = (p.type ?? "").toUpperCase();
+      if (s.format === "OTHER") {
+        return !(t === "IMAGE" || t === "VIDEO" || t === "CAROUSEL_ALBUM");
+      }
+      return t === s.format;
+    });
+    // Engagement rate (si hay views)
+    const withViews = formatPosts.filter(
+      (p) => typeof p.video_views === "number" && p.video_views! > 0,
+    );
+    const totalViews = withViews.reduce((sum, p) => sum + (p.video_views ?? 0), 0);
+    const avgViews = withViews.length ? totalViews / withViews.length : 0;
+    const engagementRate =
+      avgViews > 0
+        ? ((s.totalLikes + s.totalComments) / formatPosts.length / avgViews) * 100
+        : null;
+    // Saves + shares (si vinieron en insights del post)
+    const totalSaveShare = formatPosts.reduce((sum, p) => {
+      const pi = p as AnalyticsPostWithInsights;
+      return sum + (pi.saves ?? 0) + (pi.shares ?? 0);
+    }, 0);
+    const saveShareRate = formatPosts.length ? totalSaveShare / formatPosts.length : 0;
+    // Diff vs media global
+    const diffVsAvgPct =
+      globalAvg > 0 ? ((s.avgEngagement - globalAvg) / globalAvg) * 100 : 0;
+    // Sparkline · últimos 10 posts cronológicos del formato
+    const sorted = [...formatPosts]
+      .filter((p) => !!p.date)
+      .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
+      .slice(-10)
+      .map((p) => p.likes + p.comments);
+    return {
+      ...s,
+      engagementRate,
+      saveShareRate,
+      diffVsAvgPct,
+      trend: sorted,
+    };
+  });
 }

@@ -92,6 +92,7 @@ export function ConnectorPill() {
   return (
     <div className="relative">
       <button
+        data-tour="connector-pill"
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "inline-flex items-center gap-2 h-8 px-3 rounded-full border text-[11px] whitespace-nowrap transition-colors",

@@ -34,7 +34,6 @@ import {
   ArrowRight,
   Bot,
   CalendarDays,
-  CheckCircle2,
   ChevronLeft,
   FileText,
   Gauge,
@@ -116,6 +115,15 @@ const AREAS = [
 
 /* ──────── Contenido detallado por tab ──────── */
 
+/**
+ * Slides per-tab simplificados · teasers cortos.
+ *
+ * Como ahora el TOUR VISUAL (25+ steps) explica cada tab en vivo navegando
+ * por la plataforma, aquí solo dejamos un mini-mockup + 1 frase + 2 bullets.
+ * El `firstStep` ahora apunta siempre al tour visual.
+ */
+const TOUR_HINT = "El Tour Visual te muestra esto en vivo · ábrelo desde el botón ? del topbar.";
+
 const TAB_DETAIL: Record<string, TabDetailContent> = {
   dashboard: {
     id: "dashboard",
@@ -123,16 +131,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: LayoutDashboard,
     accent: "var(--brand-violet)",
     emoji: "🎯",
-    whatIs:
-      "Tu panel ejecutivo · resumen de todo lo que pasa en pauta.",
+    whatIs: "Tu panel ejecutivo · resumen de pauta.",
     achievements: [
-      "KPIs globales · gasto, CPL, CR, IC, CTR, CPM",
-      "Señales operativas críticas (qué necesita acción)",
-      "Embudo de conversión visual",
-      "Resumen diario · «ayer vs hoy»",
+      "KPIs globales del rango: gasto, CPL, CTR, leads",
+      "Señales críticas + daily summary",
     ],
-    firstStep:
-      "Click el botón «Actualizar» arriba para traer datos vivos de Meta.",
+    firstStep: TOUR_HINT,
     Mockup: MockDashboard,
   },
   campanas: {
@@ -141,15 +145,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: Megaphone,
     accent: "var(--brand-violet)",
     emoji: "📣",
-    whatIs: "Las 6 campañas MAY26 con su estado en tiempo real.",
+    whatIs: "Las 6 campañas con estado en vivo.",
     achievements: [
-      "Estado ACTIVE/PAUSED de cada campaña",
-      "Pacing del presupuesto en barras",
-      "Drill-down a adsets con datos por anuncio",
-      "Comparativos por vertical (Belleza · Comercio · Servicios) y geo (MX · LATAM)",
+      "ACTIVE/PAUSED + pacing en barras",
+      "Drill-down a adsets y anuncios",
     ],
-    firstStep:
-      "Click la card de una campaña para abrir sus adsets y anuncios.",
+    firstStep: TOUR_HINT,
     Mockup: MockCampanas,
   },
   estrategia: {
@@ -158,15 +159,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: Target,
     accent: "var(--brand-cyan)",
     emoji: "🎯",
-    whatIs: "El «porqué» detrás de los números · semáforos + reglas Julián.",
+    whatIs: "El porqué · semáforos + reglas Julián.",
     achievements: [
-      "Semáforo CPT/CPL/Budget con gauges animados",
-      "Reglas operativas de Julián (ABO, día 7 Plan B, día 14 contingencia)",
-      "Análisis profundo por campaña · qué pasó · qué hacer",
-      "Proyección al 31-may",
+      "Gauges CPT/CPL/Budget",
+      "Proyección al cierre de mes",
     ],
-    firstStep:
-      "Revisa el semáforo CPT · si está rojo, necesita acción hoy.",
+    firstStep: TOUR_HINT,
     Mockup: MockEstrategia,
   },
   paid: {
@@ -175,14 +173,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: TrendingUp,
     accent: "var(--brand-cyan)",
     emoji: "📈",
-    whatIs: "Vista cross-platform · Meta + Google Ads + TikTok (placeholders).",
+    whatIs: "Vista cross-platform: Meta + Google + TikTok.",
     achievements: [
-      "Comparativo de inversión entre plataformas",
-      "Best/worst campañas en una sola tabla",
-      "ROAS estimado y cross-platform attribution",
+      "Comparativo de inversión",
+      "Google/TikTok en placeholder esperando credenciales",
     ],
-    firstStep:
-      "Conecta Google Ads cuando tengas credenciales · ya está la UI lista.",
+    firstStep: TOUR_HINT,
     Mockup: MockPaid,
   },
   anuncios: {
@@ -191,15 +187,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: ImageIcon,
     accent: "var(--brand-lime)",
     emoji: "🖼",
-    whatIs: "Cada anuncio individual con preview, métricas y alertas.",
+    whatIs: "Cada creativo individual con CPR y alertas.",
     achievements: [
-      "Grid de creativos con thumbnails HD",
-      "Separar imágenes vs videos en pestañas",
-      "Alertas automáticas (frecuencia alta, CPR caro, etc)",
-      "Drawer con insights pro al click",
+      "Grid con thumbnails HD",
+      "Drawer pro al click",
     ],
-    firstStep:
-      "Filtra por «Imágenes» y ordena por CPR para ver tus ganadores.",
+    firstStep: TOUR_HINT,
     Mockup: MockAnuncios,
   },
   organico: {
@@ -208,16 +201,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: Sparkles,
     accent: "var(--brand-lime)",
     emoji: "✨",
-    whatIs:
-      "IG (@bewe_software · 50k followers) + FB (114k fans) en tiempo real.",
+    whatIs: "IG @bewe_software (50k) + FB (114k) en vivo.",
     achievements: [
-      "Posts cargados de cada red social",
-      "Métricas de engagement reales (likes, comments, shares)",
-      "Comparativo IG vs FB lado a lado",
-      "Top 3 posts del período seleccionado",
+      "Engagement real · likes, comments, shares",
+      "Top 3 posts del período",
     ],
-    firstStep:
-      "Click «Cargar» para traer los últimos posts publicados.",
+    firstStep: TOUR_HINT,
     Mockup: MockOrganico,
   },
   parrilla: {
@@ -226,15 +215,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: CalendarDays,
     accent: "var(--brand-cyan)",
     emoji: "📅",
-    whatIs: "Calendario editorial estilo Metricool con IA integrada.",
+    whatIs: "Calendario editorial estilo Metricool.",
     achievements: [
-      "Calendario mensual con posts programados",
-      "Composer con preview real (cómo se vería en IG/FB)",
-      "Hashtag finder + Idea generator powered by Mark/Lúa",
-      "Mejor hora de publicación sugerida",
+      "Composer con preview real",
+      "Hashtag finder asistido por IA",
     ],
-    firstStep:
-      "Click «Nuevo post» para programar tu primera publicación.",
+    firstStep: TOUR_HINT,
     Mockup: MockParrilla,
   },
   "open-bui": {
@@ -243,32 +229,26 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: Palette,
     accent: "var(--brand-violet)",
     emoji: "🎨",
-    whatIs: "Generador AI de piezas creativas (post IG, FB ad, banner, etc).",
+    whatIs: "Generador AI de piezas con brand kit Bewe.",
     achievements: [
-      "12 skill templates listos para usar",
-      "Brand kit Bewe pre-cargado · colores, fuentes, logos",
-      "HTML+CSS auto-generado por Mark/Lúa",
-      "Preview live + export PNG/HTML · canvas tldraw como opción",
+      "12 skill templates listos",
+      "Export HTML/PNG",
     ],
-    firstStep:
-      "Elige «Instagram Post» + describe tu idea + click Generar.",
+    firstStep: TOUR_HINT,
     Mockup: MockOpenDesign,
   },
   seo: {
     id: "seo",
-    label: "SEO+AEO",
+    label: "SEO",
     Icon: Search,
     accent: "var(--brand-lime)",
     emoji: "🔍",
-    whatIs: "Keywords, on-page, backlinks + AEO (cómo apareces en LLMs).",
+    whatIs: "Ranking orgánico web · Google Search Console.",
     achievements: [
-      "GSC integration · top keywords y posiciones",
-      "On-page audit checklist auto",
-      "AEO monitor · ¿Mark/Lúa te menciona en ChatGPT/Claude/Gemini?",
-      "30 prompts trackeados semanalmente",
+      "Top keywords + posiciones",
+      "On-page audit checklist",
     ],
-    firstStep:
-      "Espera al lunes · María Paula y tú conectan GSC en sesión conjunta.",
+    firstStep: TOUR_HINT,
     Mockup: MockSeo,
   },
   performance: {
@@ -277,15 +257,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: Gauge,
     accent: "var(--brand-violet)",
     emoji: "📊",
-    whatIs: "Vista para Performance Lead · funnel + unit economics.",
+    whatIs: "Funnel + unit economics LTV/CAC.",
     achievements: [
-      "Funnel ejecutivo Impresiones → Activated",
-      "CAC · LTV · LTV/CAC · payback period",
-      "ROAS por campaña ordenado",
-      "Decisión rápida pausar/escalar",
+      "Impresiones → Activated",
+      "ROAS y payback por campaña",
     ],
-    firstStep:
-      "Revisa el ratio LTV/CAC · sano si está ≥ 3×.",
+    firstStep: TOUR_HINT,
     Mockup: MockPerformance,
   },
   informe: {
@@ -294,14 +271,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: FileText,
     accent: "var(--brand-cyan)",
     emoji: "📄",
-    whatIs: "Reporte ejecutivo listo en 3 formatos para distintas audiencias.",
+    whatIs: "Reporte ejecutivo en 3 formatos.",
     achievements: [
-      "Slack short (3 líneas pegables al chat)",
-      "Email ejecutivo (1 página · interna)",
-      "Reporte completo para Julián (3 páginas)",
+      "Slack short · email exec · Julián full",
+      "Pegable y exportable",
     ],
-    firstStep:
-      "Genera el de Slack y pégalo en #bewe-pauta antes de las 11am.",
+    firstStep: TOUR_HINT,
     Mockup: MockInforme,
   },
   config: {
@@ -310,13 +285,12 @@ const TAB_DETAIL: Record<string, TabDetailContent> = {
     Icon: Settings2,
     accent: "var(--brand-violet)",
     emoji: "⚙️",
-    whatIs: "Tokens, memoria del agente y preferencias de sesión.",
+    whatIs: "Tokens, memoria del agente y personalidad.",
     achievements: [
-      "Setup del token Meta (✓ ya conectado)",
-      "Memoria del agente · ver / borrar / agregar",
-      "Personalidad copiloto (Mark / Lúa)",
+      "Setup Meta + memoria del copiloto",
+      "Elegir Mark o Lúa",
     ],
-    firstStep: "Verifica que «Meta Conectado» esté en verde.",
+    firstStep: TOUR_HINT,
     Mockup: MockConfig,
   },
 };
@@ -732,30 +706,87 @@ function SlideTourOptional({ onShowAround }: { onShowAround: () => void }) {
           <Target className="size-5 text-white" />
         </div>
         <div>
+          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-[hsl(var(--brand-violet))]">
+            Recomendado · 2 min
+          </div>
           <h2 className="font-display text-xl md:text-2xl font-bold tracking-tight leading-tight">
-            Tour visual (opcional)
+            Tour visual en vivo
           </h2>
-          <p className="text-[11.5px] text-muted-foreground mt-0.5">
-            Un spotlight sobre los elementos clave del shell.
-          </p>
         </div>
       </div>
-      <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
-        Antes de meternos tab por tab, si quieres puedo iluminar sidebar, topbar,
-        theme toggle y copiloto, uno por uno. Cuando termine volverás aquí en el
-        slide final.
+      <p className="text-[13px] text-muted-foreground leading-relaxed mb-5">
+        En vez de leer slides, te llevo de la mano por <strong className="text-foreground">cada rincón</strong> de
+        Bewe Pauta · topbar, las <strong className="text-foreground">13 tabs</strong>, sidebar y copiloto, con un spotlight
+        encima del elemento exacto y una explicación corta.
       </p>
-      <button
+
+      {/* CTA BIG · tentador */}
+      <motion.button
         type="button"
         onClick={onShowAround}
-        className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[hsl(var(--brand-violet))] hover:underline underline-offset-4"
+        whileHover={{ scale: 1.015, y: -1 }}
+        whileTap={{ scale: 0.985 }}
+        transition={{ type: "spring", stiffness: 380, damping: 22 }}
+        className={cn(
+          "group relative w-full overflow-hidden rounded-2xl p-5 text-left",
+          "border border-[hsl(var(--brand-violet)/0.45)]",
+          "bg-gradient-to-br from-[hsl(var(--brand-violet)/0.18)] via-[hsl(var(--brand-cyan)/0.12)] to-[hsl(var(--brand-lime)/0.12)]",
+          "shadow-[0_18px_44px_-18px_hsl(var(--brand-violet)/0.55)]",
+          "hover:border-[hsl(var(--brand-violet)/0.75)] hover:shadow-[0_24px_56px_-18px_hsl(var(--brand-violet)/0.7)]",
+          "transition-shadow",
+        )}
       >
-        Hacer tour visual ahora →
-      </button>
-      <p className="text-[11px] text-muted-foreground/70 leading-relaxed mt-3">
-        ¿Prefieres saltarlo? Continúa con{" "}
-        <strong className="text-foreground/80">Siguiente</strong> y entramos directo
-        a cada pestaña.
+        {/* halo animado */}
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -inset-px rounded-2xl opacity-60"
+          animate={{
+            background: [
+              "radial-gradient(120px 60px at 10% 50%, hsl(var(--brand-violet)/0.55), transparent 70%)",
+              "radial-gradient(120px 60px at 90% 50%, hsl(var(--brand-cyan)/0.55), transparent 70%)",
+              "radial-gradient(120px 60px at 10% 50%, hsl(var(--brand-violet)/0.55), transparent 70%)",
+            ],
+          }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <div className="relative flex items-center gap-4">
+          <motion.div
+            animate={{ rotate: [0, 8, -6, 0] }}
+            transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+            className="size-14 shrink-0 rounded-2xl bg-gradient-to-br from-[hsl(var(--brand-violet))] via-[hsl(var(--brand-cyan))] to-[hsl(var(--brand-lime))] grid place-items-center shadow-[0_10px_30px_-8px_hsl(var(--brand-violet)/0.75)]"
+          >
+            <Sparkles className="size-6 text-white" />
+          </motion.div>
+          <div className="min-w-0 flex-1">
+            <div className="font-display text-[17px] font-bold leading-tight mb-0.5">
+              Hacer tour visual ahora
+            </div>
+            <div className="text-[12px] text-foreground/80 leading-snug">
+              <strong className="text-[hsl(var(--brand-violet))]">25+ pasos</strong> con spotlight · navegando tab por tab en vivo.
+            </div>
+          </div>
+          <ArrowRight className="size-5 text-[hsl(var(--brand-violet))] shrink-0 transition-transform group-hover:translate-x-1" />
+        </div>
+        <div className="relative mt-4 pt-3 border-t border-[hsl(var(--brand-violet)/0.25)] grid grid-cols-3 gap-2 text-[10.5px] text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-[hsl(var(--brand-violet))]" />
+            Topbar + atajos
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-[hsl(var(--brand-cyan))]" />
+            13 tabs en vivo
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-[hsl(var(--brand-lime))]" />
+            Copiloto IA
+          </div>
+        </div>
+      </motion.button>
+
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed mt-4 text-center">
+        ¿Prefieres ver el resumen escrito? Continúa con{" "}
+        <strong className="text-foreground/80">Siguiente</strong> · son teasers
+        cortos de cada tab.
       </p>
     </motion.div>
   );
@@ -770,64 +801,6 @@ function SlideClosingCombined({
   sectionsCount: number;
   role: string;
 }) {
-  const recap = [
-    {
-      icon: CheckCircle2,
-      tone: "ok" as const,
-      text: (
-        <>
-          Vimos las{" "}
-          <strong className="text-foreground">{sectionsCount} pestañas</strong> de
-          tu rol{" "}
-          <span className="font-mono text-[10.5px] text-[hsl(var(--brand-violet))]">
-            ({role})
-          </span>{" "}
-          · qué son y qué hacer primero en cada una.
-        </>
-      ),
-    },
-    {
-      icon: CheckCircle2,
-      tone: "ok" as const,
-      text: (
-        <>
-          Tu copiloto{" "}
-          <strong className="text-foreground">Mark</strong> /{" "}
-          <strong className="text-foreground">Lúa</strong> conoce el plan, los datos
-          en vivo y la memoria creativa.
-        </>
-      ),
-    },
-    {
-      icon: KeyRound,
-      tone: "warn" as const,
-      text: (
-        <>
-          Pendiente:{" "}
-          <strong className="text-foreground">verifica el token Meta</strong> en
-          Config si la pill del topbar no está verde (
-          <code className="px-1 py-0.5 rounded bg-background/60 border border-border text-[10.5px] font-mono">
-            _docs/SETUP-TOKENS.md
-          </code>
-          ).
-        </>
-      ),
-    },
-    {
-      icon: Sparkles,
-      tone: "tip" as const,
-      text: (
-        <>
-          Tip: usa{" "}
-          <kbd className="px-1.5 py-0.5 rounded border border-border bg-background/60 text-[10px] font-mono">
-            Ctrl/Cmd+K
-          </kbd>{" "}
-          para abrir el copiloto desde cualquier tab.
-        </>
-      ),
-    },
-  ];
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -847,43 +820,31 @@ function SlideClosingCombined({
       <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-1.5">
         Listo, {displayName}.
       </h2>
-      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-1 italic">
-        Buena suerte · que tu CPT esté siempre bajo{" "}
-        <strong className="text-[hsl(var(--brand-violet))] not-italic">€2.20</strong>.
+      <p className="text-[13px] text-muted-foreground leading-relaxed max-w-md mx-auto mb-4">
+        {sectionsCount} pestañas a tu alcance ({role}) · CPT objetivo{" "}
+        <strong className="text-[hsl(var(--brand-violet))]">€2.20</strong>. A explorar.
       </p>
 
-      <div className="mt-4 text-left">
-        <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground mb-2">
-          Resumen rápido
+      <div className="rounded-xl border border-[hsl(var(--brand-ember)/0.3)] bg-[hsl(var(--brand-ember)/0.08)] p-3.5 max-w-md mx-auto text-left">
+        <div className="flex items-start gap-2.5">
+          <div className="size-7 rounded-md bg-[hsl(var(--brand-ember)/0.18)] grid place-items-center shrink-0">
+            <KeyRound className="size-3.5 text-[hsl(var(--brand-ember))]" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11.5px] font-semibold text-foreground/90 mb-0.5">
+              ¿Ves algo raro?
+            </div>
+            <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+              Díselo a <strong className="text-foreground">Santiago</strong> y lo
+              corregimos al toque · este dashboard está vivo.
+            </p>
+          </div>
         </div>
-        <ul className="space-y-2">
-          {recap.map((it, i) => {
-            const Icon = it.icon;
-            const toneClass =
-              it.tone === "ok"
-                ? "text-[hsl(var(--brand-lime))]"
-                : it.tone === "warn"
-                  ? "text-[hsl(var(--brand-ember,38_92%_50%))]"
-                  : "text-[hsl(var(--brand-cyan))]";
-            return (
-              <motion.li
-                key={i}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 + 0.06 * i, duration: 0.28 }}
-                className="flex gap-2.5 items-start text-[12px] text-muted-foreground leading-relaxed"
-              >
-                <Icon className={cn("size-4 shrink-0 mt-0.5", toneClass)} />
-                <span>{it.text}</span>
-              </motion.li>
-            );
-          })}
-        </ul>
       </div>
 
       <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-md mx-auto mt-4">
-        Puedes re-disparar este tour desde{" "}
-        <strong className="text-foreground/85">Config → Memoria del agente</strong>.
+        Re-abre el tour cuando quieras desde el botón{" "}
+        <strong className="text-foreground/85">?</strong> del topbar.
       </p>
     </motion.div>
   );

@@ -1,10 +1,11 @@
 "use client";
 import * as React from "react";
 import { motion } from "motion/react";
-import { Image as ImageIcon, Video, Layers, FileQuestion, Trophy } from "lucide-react";
+import { Image as ImageIcon, Video, Layers, FileQuestion, Trophy, TrendingUp, TrendingDown, Bookmark } from "lucide-react";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
-import { performanceByFormat, type AnalyticsPost } from "@/lib/organic-analytics";
+import { performanceByFormatRich, type AnalyticsPost } from "@/lib/organic-analytics";
+import { Sparkline } from "@/components/fx/sparkline";
 import { cn, fmt } from "@/lib/utils";
 
 interface FormatPerformanceProps {
@@ -43,7 +44,7 @@ const FORMAT_TONE: Record<string, { fg: string; bg: string; bar: string }> = {
 };
 
 export function FormatPerformance({ posts, onPostClick }: FormatPerformanceProps) {
-  const stats = React.useMemo(() => performanceByFormat(posts), [posts]);
+  const stats = React.useMemo(() => performanceByFormatRich(posts), [posts]);
   if (!stats.length) return null;
 
   const maxAvg = Math.max(...stats.map((s) => s.avgEngagement), 1);
@@ -95,6 +96,63 @@ export function FormatPerformance({ posts, onPostClick }: FormatPerformanceProps
                 />
               </div>
 
+              {/* Métricas reforzadas (queja #5 · "se ve simple/flojo") */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2.5">
+                <RichMetric
+                  label="Eng. rate"
+                  value={
+                    s.engagementRate !== null
+                      ? `${s.engagementRate.toFixed(2)}%`
+                      : "—"
+                  }
+                  tone={tone.fg}
+                  hint={
+                    s.engagementRate !== null ? "vs views" : "requiere insights"
+                  }
+                />
+                <RichMetric
+                  label="Save + share"
+                  value={s.saveShareRate.toFixed(1)}
+                  tone={tone.fg}
+                  hint="por post"
+                  icon={<Bookmark className="size-2.5" />}
+                />
+                <RichMetric
+                  label="vs media"
+                  value={`${s.diffVsAvgPct > 0 ? "+" : ""}${s.diffVsAvgPct.toFixed(0)}%`}
+                  tone={
+                    s.diffVsAvgPct >= 0
+                      ? "text-[hsl(var(--brand-lime))]"
+                      : "text-[hsl(var(--destructive))]"
+                  }
+                  hint="vs cuenta global"
+                  icon={
+                    s.diffVsAvgPct >= 0 ? (
+                      <TrendingUp className="size-2.5" />
+                    ) : (
+                      <TrendingDown className="size-2.5" />
+                    )
+                  }
+                />
+                <div className="rounded-md border border-border/40 bg-card/60 px-2 py-1.5">
+                  <div className="text-[8px] uppercase tracking-[0.12em] text-muted-foreground/80 font-bold">
+                    Sparkline
+                  </div>
+                  {s.trend.length > 1 ? (
+                    <Sparkline
+                      data={s.trend}
+                      height={20}
+                      className="opacity-80 mt-0.5"
+                      color={`hsl(var(--brand-cyan))`}
+                    />
+                  ) : (
+                    <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+                      {s.trend.length === 1 ? "1 dato" : "sin serie"}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground/80">
                 <span className="font-mono">
                   {fmt.int(s.totalLikes)} likes · {fmt.int(s.totalComments)} comentarios
@@ -120,5 +178,31 @@ export function FormatPerformance({ posts, onPostClick }: FormatPerformanceProps
         Tip: el formato con mayor eng/post merece más inversión orgánica · IG favorece carruseles y reels
       </div>
     </TextureCard>
+  );
+}
+
+function RichMetric({
+  label,
+  value,
+  tone,
+  hint,
+  icon,
+}: {
+  label: string;
+  value: string;
+  tone: string;
+  hint?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-md border border-border/40 bg-card/60 px-2 py-1.5">
+      <div className="text-[8px] uppercase tracking-[0.12em] text-muted-foreground/80 font-bold inline-flex items-center gap-1">
+        {icon} {label}
+      </div>
+      <div className={cn("font-mono font-bold text-[12px] mt-0.5", tone)}>{value}</div>
+      {hint && (
+        <div className="text-[8px] text-muted-foreground/60 leading-tight">{hint}</div>
+      )}
+    </div>
   );
 }

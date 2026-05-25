@@ -33,13 +33,18 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export function DailySummary() {
-  const { campaigns, daysElapsed } = useDashboard();
+  const { campaigns, daysElapsed, daily } = useDashboard();
   const m = React.useMemo(() => computeMetrics(campaigns), [campaigns]);
-  const yest = React.useMemo(() => getYesterday(campaigns, daysElapsed), [campaigns, daysElapsed]);
+  const yest = React.useMemo(
+    () => getYesterday(campaigns, daysElapsed, daily),
+    [campaigns, daysElapsed, daily],
+  );
 
-  const dSpend = delta(m.spend, yest.spend);
-  const dCR = delta(m.totalConvCR, yest.cr);
-  const dIC = delta(m.totalConvIC, yest.ic);
+  // Si no hay snapshot del día anterior `getYesterday` devuelve null · usamos
+  // los valores actuales como base (delta 0) para no fabricar comparaciones.
+  const dSpend = delta(m.spend, yest?.spend ?? m.spend);
+  const dCR = delta(m.totalConvCR, yest?.cr ?? m.totalConvCR);
+  const dIC = delta(m.totalConvIC, yest?.ic ?? m.totalConvIC);
 
   const highlights = React.useMemo(() => dailyHighlights(campaigns), [campaigns]);
   const risks = React.useMemo(() => dailyRisks(campaigns), [campaigns]);
@@ -48,8 +53,8 @@ export function DailySummary() {
   const [copied, setCopied] = React.useState(false);
 
   const julianText = React.useMemo(
-    () => buildJulianMessage(campaigns, daysElapsed, PLAN.totalDays),
-    [campaigns, daysElapsed],
+    () => buildJulianMessage(campaigns, daysElapsed, PLAN.totalDays, daily),
+    [campaigns, daysElapsed, daily],
   );
 
   function saveSnapshot() {
@@ -65,8 +70,9 @@ export function DailySummary() {
     setTimeout(() => setCopied(false), 2200);
   }
 
-  const yestDate = new Date(yest.dateISO);
-  const yestStr = yestDate.toLocaleDateString("es", { day: "numeric", month: "short" });
+  const yestStr = yest
+    ? new Date(yest.dateISO).toLocaleDateString("es", { day: "numeric", month: "short" })
+    : "sin referencia";
 
   return (
     <>

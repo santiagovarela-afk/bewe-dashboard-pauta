@@ -49,7 +49,7 @@ export function Sidebar() {
   }, [campaigns]);
 
   return (
-    <aside className="hidden md:flex flex-col w-[232px] shrink-0 sticky top-0 h-screen border-r border-border/70 bg-card/40 light:bg-card/80 backdrop-blur-xl z-40">
+    <aside data-tour="sidebar" className="hidden md:flex flex-col w-[232px] shrink-0 sticky top-0 h-screen border-r border-border/70 bg-card/40 light:bg-card/80 backdrop-blur-xl z-40">
       {/* logo */}
       <div className="flex items-center gap-2.5 px-5 pt-6 pb-5 border-b border-border/60">
         <div className="size-7 rounded-md bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] grid place-items-center shadow-[0_4px_18px_-4px_hsl(var(--brand-violet)/0.55)]">
@@ -72,7 +72,7 @@ export function Sidebar() {
           const visible = groupTabs.filter((t) => allowed.includes(t.id));
           if (visible.length === 0) return null;
           return (
-            <div key={group.id} className="flex flex-col gap-0.5">
+            <div key={group.id} data-tour-group={group.id} className="flex flex-col gap-0.5">
               <div className="px-3 mb-1 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/60">
                 {group.label}
               </div>
@@ -83,6 +83,7 @@ export function Sidebar() {
                 return (
                   <button
                     key={t.id}
+                    data-tour-tab={t.id}
                     onClick={() => isAllowed && setTab(t.id)}
                     disabled={!isAllowed}
                     className={cn(

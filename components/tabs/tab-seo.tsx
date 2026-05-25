@@ -1,531 +1,777 @@
-﻿"use client";
+"use client";
 import * as React from "react";
 import { motion } from "motion/react";
 import {
   Search,
-  TrendingUp,
-  TrendingDown,
-  Link2,
-  CheckCircle2,
   AlertTriangle,
-  XCircle,
-  Globe2,
-  Plug,
-  FileText,
-  Eye,
+  ExternalLink,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Lightbulb,
   MousePointerClick,
-  ChartLine,
-  Building2,
+  Eye,
+  Percent,
+  Target,
+  FileText,
 } from "lucide-react";
 import { fmt, cn } from "@/lib/utils";
-import { fakeTrend } from "@/lib/selectors";
 import { SectionHeader } from "@/components/shared/section-header";
 import { KpiCard } from "@/components/shared/kpi-card";
-import { ExplainedMetric } from "@/components/shared/explained-metric";
-import { SpotlightCard } from "@/components/fx/spotlight-card";
 import { TextureCard } from "@/components/fx/texture-card";
-import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
-import { Sparkline } from "@/components/fx/sparkline";
+import { Reveal } from "@/components/fx/reveal";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ConnectModal } from "@/components/paid/connect-modal";
-import {
-  SEO_SUMMARY,
-  SEO_KEYWORDS,
-  SEO_PAGES,
-  SEO_ONPAGE,
-  SEO_BACKLINK_TOPS,
-  type OnPageCheck,
-} from "@/components/seo/seed";
+import { Skeleton } from "@/components/ui/skeleton";
+import type {
+  GSCDaily,
+  GSCOverview,
+  GSCPage,
+  GSCQuery,
+} from "@/lib/google-search-console";
 
-const STATUS_MAP: Record<OnPageCheck["status"], { Icon: typeof CheckCircle2; color: string; badge: "success" | "warning" | "danger" }> = {
-  ok: { Icon: CheckCircle2, color: "var(--success)", badge: "success" },
-  warn: { Icon: AlertTriangle, color: "var(--warning)", badge: "warning" },
-  fail: { Icon: XCircle, color: "var(--destructive)", badge: "danger" },
-};
+type Period = 7 | 28 | 90;
 
-const INTENT_VARIANT: Record<string, "default" | "violet" | "cyan" | "lime" | "ember"> = {
-  comercial: "violet",
-  transaccional: "lime",
-  info: "cyan",
-  navegacional: "ember",
-};
+interface ApiResponse<T> {
+  data?: T;
+  error?: string;
+  configured: boolean;
+}
+
+type QuerySortKey = "query" | "clicks" | "impressions" | "ctr" | "position";
+type PageSortKey = "page" | "clicks" | "impressions" | "ctr" | "position";
+type SortDir = "asc" | "desc";
 
 export function TabSeo() {
-  const [connectOpen, setConnectOpen] = React.useState(false);
+  const [period, setPeriod] = React.useState<Period>(28);
 
-  const okCount = SEO_ONPAGE.filter((c) => c.status === "ok").length;
-  const warnCount = SEO_ONPAGE.filter((c) => c.status === "warn").length;
-  const failCount = SEO_ONPAGE.filter((c) => c.status === "fail").length;
-  const healthPct = Math.round((okCount / SEO_ONPAGE.length) * 100);
+  const [overview, setOverview] = React.useState<GSCOverview | null>(null);
+  const [queries, setQueries] = React.useState<GSCQuery[]>([]);
+  const [pages, setPages] = React.useState<GSCPage[]>([]);
+
+  const [loading, setLoading] = React.useState(true);
+  const [configured, setConfigured] = React.useState(true);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setErrorMsg(null);
+
+    (async () => {
+      try {
+        const [oRes, qRes, pRes] = await Promise.all([
+          fetch(`/api/seo/overview?days=${period}`),
+          fetch(`/api/seo/queries?days=${period}&limit=50`),
+          fetch(`/api/seo/pages?days=${period}&limit=25`),
+        ]);
+        const oJson = (await oRes.json()) as ApiResponse<GSCOverview>;
+        const qJson = (await qRes.json()) as ApiResponse<GSCQuery[]>;
+        const pJson = (await pRes.json()) as ApiResponse<GSCPage[]>;
+
+        if (cancelled) return;
+
+        const allConfigured = oJson.configured && qJson.configured && pJson.configured;
+        setConfigured(allConfigured);
+
+        if (!allConfigured) {
+          setErrorMsg(oJson.error ?? qJson.error ?? pJson.error ?? null);
+          setOverview(null);
+          setQueries([]);
+          setPages([]);
+        } else {
+          setOverview(oJson.data ?? null);
+          setQueries(qJson.data ?? []);
+          setPages(pJson.data ?? []);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setConfigured(false);
+        setErrorMsg(err instanceof Error ? err.message : "Error de red consultando GSC");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [period]);
 
   return (
     <div className="space-y-7 max-w-[1500px]">
-      {/* ─────── DEMO DATA BANNER ─────── */}
-      <Reveal>
-        <div
-          className="rounded-xl border px-4 py-3 flex items-start gap-3"
-          style={{
-            background: `hsl(var(--warning) / 0.15)`,
-            borderColor: `hsl(var(--brand-ember) / 0.45)`,
-          }}
-        >
-          <div
-            className="size-9 grid place-items-center rounded-lg shrink-0"
-            style={{
-              background: `hsl(var(--brand-ember) / 0.18)`,
-              border: `1px solid hsl(var(--brand-ember) / 0.45)`,
-              color: `hsl(var(--brand-ember))`,
-            }}
-          >
-            <AlertTriangle className="size-4" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--brand-ember))] mb-0.5">
-              Datos demostrativos
-            </div>
-            <p className="text-[12px] leading-relaxed text-foreground/85">
-              Este tab muestra la <strong>estructura de SEO</strong> con datos falsos mientras se conectan las herramientas adecuadas.
-              Para conectar tu cuenta real necesitamos{" "}
-              <strong>Google Search Console + GA4</strong> (gratis). Pedile a Santi que active la integración.
-            </p>
-          </div>
-        </div>
-      </Reveal>
+      <Header period={period} onPeriod={setPeriod} />
 
-      {/* ─────── HERO + DEMO BANNER ─────── */}
-      <Reveal>
-        <div className="relative overflow-hidden rounded-2xl border border-border bg-card/30 backdrop-blur-sm">
-          <div className="absolute inset-0 bg-grid bg-grid-fade opacity-30" />
-          <div className="absolute -top-24 -right-16 w-[420px] h-[420px] bg-[hsl(var(--brand-cyan)/0.16)] rounded-full blur-3xl" />
-          <div className="absolute -bottom-24 -left-24 w-[380px] h-[380px] bg-[hsl(var(--brand-lime)/0.12)] rounded-full blur-3xl" />
+      {!configured && <NotConfiguredBanner message={errorMsg} />}
 
-          <div className="relative px-6 md:px-10 py-7 md:py-9">
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                <Search className="size-3" />
-                SEO · posicionamiento orgánico
-              </div>
-              <Badge variant="warning" className="font-mono">
-                Demo · pendiente conectar GSC
-              </Badge>
-            </div>
-            <div className="grid md:grid-cols-[1.5fr_1fr] gap-6 items-center">
-              <div>
-                <h1 className="font-display font-bold tracking-[-0.025em] text-3xl md:text-4xl leading-[1.05] mb-3">
-                  Orgánico, contenido y <span className="text-aurora">authority.</span>
-                </h1>
-                <p className="text-sm text-muted-foreground max-w-[520px] leading-relaxed">
-                  Vista para perfil <strong className="text-foreground/90">SEO / Content Lead</strong>.
-                  Datos placeholder hasta integrar Google Search Console y Ahrefs.
-                </p>
-              </div>
+      {loading ? (
+        <KpiRowSkeleton />
+      ) : configured && overview ? (
+        <KpiRow overview={overview} />
+      ) : null}
 
-              <div className="grid grid-cols-2 gap-3">
-                <HeroStat label="Visitas org." value={fmt.short(SEO_SUMMARY.organicVisits)} sub={`+${SEO_SUMMARY.organicVisitsDeltaPct}% MoM`} accent="var(--brand-cyan)" />
-                <HeroStat label="Keywords" value={fmt.int(SEO_SUMMARY.keywordsRanking)} sub={`${SEO_SUMMARY.keywordsTop10} en top 10`} accent="var(--brand-lime)" />
-                <HeroStat label="Pos. media" value={SEO_SUMMARY.avgPosition.toFixed(1)} sub={`${SEO_SUMMARY.avgPositionDelta > 0 ? "+" : ""}${SEO_SUMMARY.avgPositionDelta} vs ayer`} accent="var(--brand-violet)" />
-                <HeroStat label="DR Ahrefs" value={String(SEO_SUMMARY.domainRating)} sub={`${SEO_SUMMARY.referringDomains} ref. domains`} accent="var(--brand-ember)" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </Reveal>
-
-      {/* ─────── KPI ROW ─────── */}
-      <section>
-        <SectionHeader title="KPIs orgánicos" sub="Snapshot · últimos 30 días (placeholder)" />
-        {/* sparkline demo · matches banner — QA selector: [data-demo="1"] */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-demo="1">
-          <KpiCard
-            label="Tráfico orgánico"
-            value={SEO_SUMMARY.organicVisits}
-            format={(v) => fmt.short(v)}
-            sub={`+${SEO_SUMMARY.organicVisitsDeltaPct}% vs mes anterior`}
-            tone="cyan"
-            trend={fakeTrend(31, SEO_SUMMARY.organicVisits, 14, 0.12)}
-            badge={<Badge variant="success"><TrendingUp className="size-2.5 mr-0.5" />MoM</Badge>}
-            delay={0.02}
-          />
-          <KpiCard
-            label="Keywords ranking"
-            value={SEO_SUMMARY.keywordsRanking}
-            format={(v) => fmt.int(v)}
-            sub={`${SEO_SUMMARY.keywordsTop10} en TOP 10 · ${SEO_SUMMARY.keywordsRanking - SEO_SUMMARY.keywordsTop10} a empujar`}
-            tone="lime"
-            trend={fakeTrend(32, SEO_SUMMARY.keywordsRanking)}
-            delay={0.06}
-          />
-          <KpiCard
-            label="Posición media"
-            value={SEO_SUMMARY.avgPosition}
-            format={(v) => v.toFixed(1)}
-            sub={`${SEO_SUMMARY.avgPositionDelta > 0 ? "↓" : "↑"} ${Math.abs(SEO_SUMMARY.avgPositionDelta)} vs ayer`}
-            tone={SEO_SUMMARY.avgPosition <= 10 ? "success" : SEO_SUMMARY.avgPosition <= 20 ? "warning" : "danger"}
-            trend={fakeTrend(33, SEO_SUMMARY.avgPosition)}
-            delay={0.1}
-          />
-          <KpiCard
-            label="CTR orgánico"
-            value={SEO_SUMMARY.organicCtr}
-            format={(v) => fmt.pct(v)}
-            sub={`+${SEO_SUMMARY.organicCtrDelta}pp vs último ciclo`}
-            tone="violet"
-            trend={fakeTrend(34, SEO_SUMMARY.organicCtr)}
-            delay={0.14}
-          />
-        </div>
-      </section>
-
-      {/* ─────── KEYWORDS TABLE ─────── */}
-      <section>
-        <SectionHeader
-          title="Top keywords"
-          sub="Mejores 10 queries ordenadas por clicks · placeholder"
-          right={
-            <Badge variant="outline" className="font-mono">
-              {SEO_KEYWORDS.length} de {SEO_SUMMARY.keywordsRanking}
-            </Badge>
-          }
+      {loading ? (
+        <ChartSkeleton />
+      ) : configured && overview && overview.daily.length > 0 ? (
+        <DailyChart daily={overview.daily} />
+      ) : configured && overview && overview.daily.length === 0 ? (
+        <EmptyState
+          title="Sin datos diarios todavía"
+          sub="GSC todavía no acumuló data suficiente · esperá 2-3 días tras conectar."
         />
-        <TextureCard className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground border-b border-border">
-                <tr>
-                  <th className="text-left px-4 py-3 font-semibold">Query</th>
-                  <th className="text-right px-4 py-3 font-semibold">
-                    <ExplainedMetric explanation="Posición media en SERP (1 = primer resultado)">
-                      <span>Pos</span>
-                    </ExplainedMetric>
-                  </th>
-                  <th className="text-right px-4 py-3 font-semibold">Vol./mes</th>
-                  <th className="text-right px-4 py-3 font-semibold">Clicks</th>
-                  <th className="text-right px-4 py-3 font-semibold">Impr.</th>
-                  <th className="text-right px-4 py-3 font-semibold">CTR</th>
-                  <th className="text-left px-4 py-3 font-semibold">Intent</th>
-                </tr>
-              </thead>
-              <tbody>
-                {SEO_KEYWORDS.map((k, i) => {
-                  const posTone =
-                    k.position <= 3 ? "var(--success)" :
-                    k.position <= 10 ? "var(--brand-lime)" :
-                    k.position <= 20 ? "var(--warning)" :
-                    "var(--destructive)";
-                  return (
-                    <motion.tr
-                      key={k.query}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.03 * i }}
-                      className="border-b border-border/40 last:border-0 hover:bg-secondary/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-medium text-foreground/90">{k.query}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span
-                          className="inline-block size-7 grid place-items-center rounded-md font-mono font-bold text-[11px] tabular"
-                          style={{
-                            background: `hsl(${posTone} / 0.14)`,
-                            color: `hsl(${posTone})`,
-                            border: `1px solid hsl(${posTone} / 0.35)`,
-                          }}
-                        >
-                          {k.position}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono tabular text-muted-foreground">
-                        {fmt.short(k.monthlySearches)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono tabular font-semibold">{fmt.int(k.clicks)}</td>
-                      <td className="px-4 py-3 text-right font-mono tabular text-muted-foreground">
-                        {fmt.short(k.impressions)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono tabular">{fmt.pct(k.ctr, 1)}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={INTENT_VARIANT[k.intent]}>{k.intent}</Badge>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </TextureCard>
+      ) : null}
+
+      <section className="grid lg:grid-cols-[1.4fr_1fr] gap-4">
+        {loading ? <TableSkeleton rows={10} /> : configured ? <QueriesTable rows={queries} /> : null}
+        {loading ? <TableSkeleton rows={10} /> : configured ? <PagesTable rows={pages} /> : null}
       </section>
 
-      {/* ─────── PAGES + AUDIT ─────── */}
-      <section className="grid lg:grid-cols-[1.2fr_1fr] gap-4">
-        {/* TOP PAGES */}
-        <TextureCard className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <FileText className="size-4 text-[hsl(var(--brand-violet))]" />
-              <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                Páginas top · clicks
-              </h3>
-            </div>
-            <Badge variant="outline" className="font-mono">{SEO_PAGES.length} URLs</Badge>
-          </div>
-          <div className="space-y-2">
-            {SEO_PAGES.map((p, i) => {
-              const max = Math.max(...SEO_PAGES.map((x) => x.clicks));
-              const widthPct = (p.clicks / max) * 100;
-              return (
-                <motion.div
-                  key={p.url}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.04 * i }}
-                  className="group"
-                >
-                  <div className="flex items-center justify-between gap-3 mb-1">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12px] font-semibold truncate">{p.title}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono truncate">bewe.ai{p.url}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-[12px] font-mono font-bold tabular">{fmt.int(p.clicks)}</div>
-                      <div className="text-[10px] text-muted-foreground">pos {p.avgPosition.toFixed(1)}</div>
-                    </div>
-                  </div>
-                  <div className="h-1 bg-secondary/50 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${widthPct}%` }}
-                      transition={{ delay: 0.06 * i + 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                      className="h-full rounded-full bg-gradient-to-r from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))]"
-                    />
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </TextureCard>
-
-        {/* ON-PAGE AUDIT */}
-        <TextureCard className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <ChartLine className="size-4 text-[hsl(var(--brand-lime))]" />
-              <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                Auditoría on-page
-              </h3>
-            </div>
-            <Badge variant={healthPct >= 80 ? "success" : healthPct >= 60 ? "warning" : "danger"} className="font-mono">
-              {healthPct}% salud
-            </Badge>
-          </div>
-
-          <div className="flex items-center gap-3 mb-4 text-[11px]">
-            <span className="inline-flex items-center gap-1 text-[hsl(var(--success))]">
-              <CheckCircle2 className="size-3" /> {okCount}
-            </span>
-            <span className="inline-flex items-center gap-1 text-[hsl(var(--warning))]">
-              <AlertTriangle className="size-3" /> {warnCount}
-            </span>
-            <span className="inline-flex items-center gap-1 text-[hsl(var(--destructive))]">
-              <XCircle className="size-3" /> {failCount}
-            </span>
-          </div>
-
-          <ul className="space-y-1.5">
-            {SEO_ONPAGE.map((c, i) => {
-              const s = STATUS_MAP[c.status];
-              return (
-                <motion.li
-                  key={c.label}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.02 * i }}
-                  className="flex items-start gap-2.5 px-2 py-1.5 rounded-md hover:bg-secondary/30 transition-colors"
-                  title={c.detail}
-                >
-                  <s.Icon className="size-3.5 mt-0.5 shrink-0" style={{ color: `hsl(${s.color})` }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-medium leading-tight">{c.label}</div>
-                    <div className="text-[10px] text-muted-foreground leading-snug mt-0.5 line-clamp-1">
-                      {c.detail}
-                    </div>
-                  </div>
-                </motion.li>
-              );
-            })}
-          </ul>
-        </TextureCard>
-      </section>
-
-      {/* ─────── BACKLINKS ─────── */}
-      <section>
-        <SectionHeader
-          title="Authority · backlinks"
-          sub="Top dominios que enlazan a bewe.ai · placeholder Ahrefs"
-        />
-        <div className="grid lg:grid-cols-[1fr_2fr] gap-4">
-          <SpotlightCard spotlightColor="var(--brand-ember)" intensity={0.28} className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div
-                className="size-9 grid place-items-center rounded-lg border"
-                style={{
-                  background: `hsl(var(--brand-ember) / 0.14)`,
-                  borderColor: `hsl(var(--brand-ember) / 0.35)`,
-                  color: `hsl(var(--brand-ember))`,
-                }}
-              >
-                <Link2 className="size-4" />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Total backlinks</div>
-                <div className="text-2xl font-mono font-bold tabular leading-none mt-1">
-                  {fmt.int(SEO_SUMMARY.totalBacklinks)}
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div className="px-2 py-2 rounded-md bg-secondary/40">
-                <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Ref. domains</div>
-                <div className="font-mono font-bold text-[15px] tabular mt-0.5">{SEO_SUMMARY.referringDomains}</div>
-              </div>
-              <div className="px-2 py-2 rounded-md bg-secondary/40">
-                <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">DR</div>
-                <div className="font-mono font-bold text-[15px] tabular mt-0.5">{SEO_SUMMARY.domainRating}</div>
-              </div>
-            </div>
-            <div className="mt-4 pt-3 border-t border-border/60 text-[10px] text-muted-foreground">
-              Top referente: <span className="font-mono text-foreground/90">{SEO_SUMMARY.topRefDomain}</span>
-            </div>
-          </SpotlightCard>
-
-          <TextureCard className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="size-4 text-[hsl(var(--brand-violet))]" />
-                <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  Top dominios referentes
-                </h3>
-              </div>
-              <Badge variant="outline">Demo</Badge>
-            </div>
-            <div className="space-y-1.5">
-              {SEO_BACKLINK_TOPS.map((b, i) => (
-                <motion.div
-                  key={b.domain}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.04 * i }}
-                  className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-secondary/30 transition-colors"
-                >
-                  <Globe2 className="size-3.5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-mono truncate">{b.domain}</div>
-                    <div className="text-[10px] text-muted-foreground">{b.type}</div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-[11px] font-mono font-bold tabular">DR {b.dr}</div>
-                    <div className="text-[10px] text-muted-foreground">{b.links} links</div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </TextureCard>
-        </div>
-      </section>
-
-      {/* ─────── CTA ─────── */}
-      <StaggerGroup className="grid md:grid-cols-3 gap-3">
-        <StaggerItem>
-          <SpotlightCard spotlightColor="var(--brand-cyan)" intensity={0.25} className="p-5">
-            <Eye className="size-5 text-[hsl(var(--brand-cyan))] mb-2" />
-            <h3 className="text-[13px] font-semibold mb-1">Google Search Console</h3>
-            <p className="text-[11px] text-muted-foreground leading-relaxed mb-3">
-              Para sustituir estos datos demo por tráfico orgánico real.
-            </p>
-            <Button variant="elevated" size="sm" onClick={() => setConnectOpen(true)}>
-              <Plug className="size-3.5" /> Conectar GSC
-            </Button>
-          </SpotlightCard>
-        </StaggerItem>
-        <StaggerItem>
-          <SpotlightCard spotlightColor="var(--brand-lime)" intensity={0.22} className="p-5">
-            <MousePointerClick className="size-5 text-[hsl(var(--brand-lime))] mb-2" />
-            <h3 className="text-[13px] font-semibold mb-1">Ahrefs / SEMrush</h3>
-            <p className="text-[11px] text-muted-foreground leading-relaxed mb-3">
-              Habilita ranking tracker + backlinks · API key requerida.
-            </p>
-            <Button variant="elevated" size="sm" disabled>
-              <Plug className="size-3.5" /> Próximamente
-            </Button>
-          </SpotlightCard>
-        </StaggerItem>
-        <StaggerItem>
-          <SpotlightCard spotlightColor="var(--brand-ember)" intensity={0.22} className="p-5">
-            <TrendingDown className="size-5 text-[hsl(var(--brand-ember))] mb-2" />
-            <h3 className="text-[13px] font-semibold mb-1">Lighthouse · CWV</h3>
-            <p className="text-[11px] text-muted-foreground leading-relaxed mb-3">
-              Auditoría automática mensual de Core Web Vitals por plantilla.
-            </p>
-            <Button variant="elevated" size="sm" disabled>
-              <Plug className="size-3.5" /> Próximamente
-            </Button>
-          </SpotlightCard>
-        </StaggerItem>
-      </StaggerGroup>
-
-      {/* Trend strip · fun visual */}
-      {/* sparkline demo · matches banner — QA selector: [data-demo="1"] */}
-      <Reveal>
-        <TextureCard className="p-4 flex items-center gap-4" data-demo="1">
-          <div className="shrink-0">
-            <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground">Visitas org. · 14d</div>
-            <div className="font-mono font-bold text-lg tabular leading-none mt-0.5">
-              {fmt.short(SEO_SUMMARY.organicVisits)}
-            </div>
-          </div>
-          <Sparkline
-            data={fakeTrend(99, SEO_SUMMARY.organicVisits, 14, 0.22)}
-            color="hsl(var(--brand-cyan))"
-            height={36}
-            className="flex-1"
-          />
-          <Badge variant="cyan">+{SEO_SUMMARY.organicVisitsDeltaPct}% MoM</Badge>
-        </TextureCard>
-      </Reveal>
-
-      <ConnectModal
-        open={connectOpen}
-        onClose={() => setConnectOpen(false)}
-        platform="Google Search Console"
-        accent="var(--brand-cyan)"
-        steps={[
-          "Verifica la propiedad de bewe.ai en Search Console.",
-          "Genera un service account en Google Cloud con acceso a la API.",
-          "Sube el JSON de credenciales al panel Config → Conectores.",
-          "Espera la primera carga (≈5 min) y refresca esta vista.",
-        ]}
-        docsHref="https://developers.google.com/webmaster-tools"
-      />
+      <TipsFooter />
     </div>
   );
 }
 
-function HeroStat({
+// ─────────────────────────────────────────────────────────────────────
+// HEADER
+// ─────────────────────────────────────────────────────────────────────
+function Header({ period, onPeriod }: { period: Period; onPeriod: (p: Period) => void }) {
+  return (
+    <Reveal>
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-card/30 backdrop-blur-sm">
+        <div className="absolute inset-0 bg-grid bg-grid-fade opacity-30" />
+        <div className="absolute -top-24 -right-16 w-[420px] h-[420px] bg-[hsl(var(--brand-cyan)/0.16)] rounded-full blur-3xl" />
+        <div className="absolute -bottom-24 -left-24 w-[380px] h-[380px] bg-[hsl(var(--brand-lime)/0.12)] rounded-full blur-3xl" />
+
+        <div className="relative px-6 md:px-10 py-6 md:py-7 flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
+              <Search className="size-3" />
+              SEO · Google Search Console
+            </div>
+            <h1 className="font-display font-bold tracking-[-0.025em] text-2xl md:text-3xl leading-[1.05]">
+              Data real de <span className="text-aurora">bewe.ai</span>
+            </h1>
+            <p className="text-[12px] text-muted-foreground mt-1.5">
+              Últimos {period} días · datos directos de Google Search Console
+            </p>
+          </div>
+
+          <PeriodSelector value={period} onChange={onPeriod} />
+        </div>
+      </div>
+    </Reveal>
+  );
+}
+
+function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  const options: Period[] = [7, 28, 90];
+  return (
+    <div className="inline-flex rounded-lg border border-border/60 bg-card/40 backdrop-blur p-1 gap-1">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={cn(
+            "px-3 py-1.5 rounded-md text-[11px] font-semibold tabular transition-colors",
+            value === opt
+              ? "bg-[hsl(var(--brand-cyan)/0.18)] text-[hsl(var(--brand-cyan))] border border-[hsl(var(--brand-cyan)/0.4)]"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent",
+          )}
+        >
+          {opt}d
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// CONFIG BANNER
+// ─────────────────────────────────────────────────────────────────────
+function NotConfiguredBanner({ message }: { message: string | null }) {
+  return (
+    <Reveal>
+      <div
+        className="rounded-xl border px-4 py-3 flex items-start gap-3"
+        style={{
+          background: `hsl(var(--warning) / 0.15)`,
+          borderColor: `hsl(var(--brand-ember) / 0.45)`,
+        }}
+      >
+        <div
+          className="size-9 grid place-items-center rounded-lg shrink-0"
+          style={{
+            background: `hsl(var(--brand-ember) / 0.18)`,
+            border: `1px solid hsl(var(--brand-ember) / 0.45)`,
+            color: `hsl(var(--brand-ember))`,
+          }}
+        >
+          <AlertTriangle className="size-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--brand-ember))] mb-0.5">
+            Google Search Console no configurado
+          </div>
+          <p className="text-[12px] leading-relaxed text-foreground/85">
+            Conectá tu Service Account en Vercel cargando las env vars{" "}
+            <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-secondary/60">GOOGLE_SA_KEY</code>{" "}
+            y{" "}
+            <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-secondary/60">GSC_SITE_URL</code>{" "}
+            para ver data real.{" "}
+            <a
+              href="https://search.google.com/search-console"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-0.5 underline underline-offset-2 text-[hsl(var(--brand-cyan))] hover:opacity-80"
+            >
+              Abrir Search Console
+              <ExternalLink className="size-3" />
+            </a>
+          </p>
+          {message && (
+            <p className="text-[11px] text-muted-foreground mt-1.5 font-mono">{message}</p>
+          )}
+        </div>
+      </div>
+    </Reveal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// KPI ROW
+// ─────────────────────────────────────────────────────────────────────
+function KpiRow({ overview }: { overview: GSCOverview }) {
+  const clicksTrend = overview.daily.map((d) => d.clicks);
+  const imprTrend = overview.daily.map((d) => d.impressions);
+  const ctrTrend = overview.daily.map((d) => d.ctr);
+  const posTrend = overview.daily.map((d) => d.position);
+
+  return (
+    <section>
+      <SectionHeader title="KPIs orgánicos" sub="Snapshot · totales del período" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard
+          label="Clicks"
+          value={overview.clicks}
+          format={(v) => fmt.int(v)}
+          sub="Visitas desde Google"
+          tone="cyan"
+          trend={clicksTrend.length > 1 ? clicksTrend : undefined}
+          badge={<Badge variant="cyan"><MousePointerClick className="size-2.5 mr-0.5" />GSC</Badge>}
+          delay={0.02}
+        />
+        <KpiCard
+          label="Impresiones"
+          value={overview.impressions}
+          format={(v) => fmt.short(v)}
+          sub="Apariciones en SERP"
+          tone="violet"
+          trend={imprTrend.length > 1 ? imprTrend : undefined}
+          badge={<Badge variant="violet"><Eye className="size-2.5 mr-0.5" />SERP</Badge>}
+          delay={0.06}
+        />
+        <KpiCard
+          label="CTR promedio"
+          value={overview.avgCtr}
+          format={(v) => fmt.pct(v, 2)}
+          sub="Clicks / impresiones"
+          tone={overview.avgCtr >= 3 ? "success" : overview.avgCtr >= 1.5 ? "lime" : "warning"}
+          trend={ctrTrend.length > 1 ? ctrTrend : undefined}
+          badge={<Badge variant="lime"><Percent className="size-2.5 mr-0.5" />CTR</Badge>}
+          delay={0.1}
+        />
+        <KpiCard
+          label="Posición media"
+          value={overview.avgPosition}
+          format={(v) => v.toFixed(1)}
+          sub="1 = primer resultado"
+          tone={overview.avgPosition <= 10 ? "success" : overview.avgPosition <= 20 ? "warning" : "danger"}
+          trend={posTrend.length > 1 ? posTrend : undefined}
+          badge={<Badge variant="ember"><Target className="size-2.5 mr-0.5" />POS</Badge>}
+          delay={0.14}
+        />
+      </div>
+    </section>
+  );
+}
+
+function KpiRowSkeleton() {
+  return (
+    <section>
+      <SectionHeader title="KPIs orgánicos" sub="Cargando data de Google Search Console..." />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-[120px] rounded-2xl" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// DAILY CHART
+// ─────────────────────────────────────────────────────────────────────
+function DailyChart({ daily }: { daily: GSCDaily[] }) {
+  const width = 1200;
+  const height = 220;
+  const padX = 36;
+  const padY = 20;
+
+  if (daily.length < 2) return null;
+
+  const clicks = daily.map((d) => d.clicks);
+  const impressions = daily.map((d) => d.impressions);
+
+  const maxClicks = Math.max(...clicks, 1);
+  const maxImpr = Math.max(...impressions, 1);
+
+  const stepX = (width - padX * 2) / (daily.length - 1);
+  const usableY = height - padY * 2;
+
+  const clicksPoints = daily.map((d, i) => {
+    const x = padX + i * stepX;
+    const y = padY + usableY - (d.clicks / maxClicks) * usableY;
+    return [x, y] as const;
+  });
+  const imprPoints = daily.map((d, i) => {
+    const x = padX + i * stepX;
+    const y = padY + usableY - (d.impressions / maxImpr) * usableY;
+    return [x, y] as const;
+  });
+
+  const toPath = (pts: readonly (readonly [number, number])[]): string => {
+    if (pts.length === 0) return "";
+    return (
+      "M " +
+      pts
+        .map(([x, y], i, arr) => {
+          if (i === 0) return `${x},${y}`;
+          const [px, py] = arr[i - 1];
+          const cx = (px + x) / 2;
+          return `Q ${cx},${py} ${(cx + x) / 2},${(py + y) / 2} T ${x},${y}`;
+        })
+        .join(" ")
+    );
+  };
+
+  const clicksPath = toPath(clicksPoints);
+  const imprPath = toPath(imprPoints);
+
+  const lastDate = daily[daily.length - 1].date;
+  const firstDate = daily[0].date;
+
+  return (
+    <section>
+      <SectionHeader
+        title="Evolución diaria"
+        sub={`Clicks e impresiones · ${firstDate} → ${lastDate}`}
+        right={
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-[hsl(var(--brand-cyan))]" />
+              Clicks
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <span className="size-2.5 rounded-full bg-[hsl(var(--brand-violet))]" />
+              Impresiones
+            </span>
+          </div>
+        }
+      />
+      <TextureCard className="p-5">
+        <div className="w-full overflow-hidden">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="none"
+            className="w-full"
+            style={{ height: "220px" }}
+          >
+            {/* grid */}
+            {[0.25, 0.5, 0.75].map((p) => (
+              <line
+                key={p}
+                x1={padX}
+                x2={width - padX}
+                y1={padY + usableY * p}
+                y2={padY + usableY * p}
+                stroke="hsl(var(--border))"
+                strokeOpacity={0.35}
+                strokeDasharray="2 4"
+              />
+            ))}
+
+            {/* impressions fill */}
+            <motion.path
+              d={`${imprPath} L ${width - padX},${height - padY} L ${padX},${height - padY} Z`}
+              fill="hsl(var(--brand-violet))"
+              opacity={0.1}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.1 }}
+              transition={{ duration: 0.9 }}
+            />
+            {/* impressions line */}
+            <motion.path
+              d={imprPath}
+              fill="none"
+              stroke="hsl(var(--brand-violet))"
+              strokeWidth={1.5}
+              strokeOpacity={0.7}
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 1.4, ease: "easeInOut" }}
+            />
+
+            {/* clicks fill */}
+            <motion.path
+              d={`${clicksPath} L ${width - padX},${height - padY} L ${padX},${height - padY} Z`}
+              fill="hsl(var(--brand-cyan))"
+              opacity={0.18}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.18 }}
+              transition={{ duration: 0.9 }}
+            />
+            {/* clicks line */}
+            <motion.path
+              d={clicksPath}
+              fill="none"
+              stroke="hsl(var(--brand-cyan))"
+              strokeWidth={2}
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 1.4, ease: "easeInOut" }}
+            />
+          </svg>
+        </div>
+      </TextureCard>
+    </section>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <section>
+      <SectionHeader title="Evolución diaria" sub="Cargando..." />
+      <Skeleton className="h-[260px] rounded-2xl" />
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// QUERIES TABLE
+// ─────────────────────────────────────────────────────────────────────
+function QueriesTable({ rows }: { rows: GSCQuery[] }) {
+  const [sortKey, setSortKey] = React.useState<QuerySortKey>("clicks");
+  const [sortDir, setSortDir] = React.useState<SortDir>("desc");
+
+  const sorted = React.useMemo(() => {
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      let cmp = 0;
+      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr.slice(0, 25);
+  }, [rows, sortKey, sortDir]);
+
+  const onSort = (key: QuerySortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir(key === "query" ? "asc" : "desc");
+    }
+  };
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        title="Sin queries todavía"
+        sub="GSC necesita 2-3 días para mostrar keywords con clicks."
+      />
+    );
+  }
+
+  return (
+    <section>
+      <SectionHeader
+        title="Top 25 keywords"
+        sub="Sortable · click en columna"
+        right={<Badge variant="outline" className="font-mono">{rows.length} total</Badge>}
+      />
+      <TextureCard className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground border-b border-border">
+              <tr>
+                <Th label="Query" sortKey="query" current={sortKey} dir={sortDir} onSort={onSort} align="left" />
+                <Th label="Clicks" sortKey="clicks" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <Th label="Impr." sortKey="impressions" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <Th label="CTR" sortKey="ctr" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <Th label="Pos" sortKey="position" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((k, i) => {
+                const posTone =
+                  k.position <= 3 ? "var(--success)" :
+                  k.position <= 10 ? "var(--brand-lime)" :
+                  k.position <= 20 ? "var(--warning)" :
+                  "var(--destructive)";
+                return (
+                  <motion.tr
+                    key={`${k.query}-${i}`}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.015 * i }}
+                    className="border-b border-border/40 last:border-0 hover:bg-secondary/30 transition-colors"
+                  >
+                    <td className="px-4 py-2.5 font-medium text-foreground/90 truncate max-w-[260px]" title={k.query}>
+                      {k.query}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular font-semibold">
+                      {fmt.int(k.clicks)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular text-muted-foreground">
+                      {fmt.short(k.impressions)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular">
+                      {fmt.pct(k.ctr, 1)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span
+                        className="inline-flex items-center justify-center min-w-[28px] px-1.5 h-6 rounded-md font-mono font-bold text-[11px] tabular"
+                        style={{
+                          background: `hsl(${posTone} / 0.14)`,
+                          color: `hsl(${posTone})`,
+                          border: `1px solid hsl(${posTone} / 0.35)`,
+                        }}
+                      >
+                        {k.position.toFixed(1)}
+                      </span>
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </TextureCard>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// PAGES TABLE
+// ─────────────────────────────────────────────────────────────────────
+function PagesTable({ rows }: { rows: GSCPage[] }) {
+  const [sortKey, setSortKey] = React.useState<PageSortKey>("clicks");
+  const [sortDir, setSortDir] = React.useState<SortDir>("desc");
+
+  const sorted = React.useMemo(() => {
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      let cmp = 0;
+      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr.slice(0, 15);
+  }, [rows, sortKey, sortDir]);
+
+  const onSort = (key: PageSortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir(key === "page" ? "asc" : "desc");
+    }
+  };
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        title="Sin páginas todavía"
+        sub="GSC necesita 2-3 días para mostrar URLs con tráfico."
+      />
+    );
+  }
+
+  return (
+    <section>
+      <SectionHeader
+        title="Top 15 pages"
+        sub="Sortable · click en columna"
+        right={<Badge variant="outline" className="font-mono">{rows.length} total</Badge>}
+      />
+      <TextureCard className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground border-b border-border">
+              <tr>
+                <Th label="Page" sortKey="page" current={sortKey} dir={sortDir} onSort={onSort} align="left" />
+                <Th label="Clicks" sortKey="clicks" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <Th label="Impr." sortKey="impressions" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <Th label="CTR" sortKey="ctr" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <Th label="Pos" sortKey="position" current={sortKey} dir={sortDir} onSort={onSort} align="right" />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((p, i) => {
+                const display = shortenUrl(p.page);
+                return (
+                  <motion.tr
+                    key={`${p.page}-${i}`}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.015 * i }}
+                    className="border-b border-border/40 last:border-0 hover:bg-secondary/30 transition-colors"
+                  >
+                    <td className="px-4 py-2.5 font-mono text-[11px] truncate max-w-[240px]" title={p.page}>
+                      {display}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular font-semibold">
+                      {fmt.int(p.clicks)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular text-muted-foreground">
+                      {fmt.short(p.impressions)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular">
+                      {fmt.pct(p.ctr, 1)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular text-muted-foreground">
+                      {p.position.toFixed(1)}
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </TextureCard>
+    </section>
+  );
+}
+
+function shortenUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname + u.search;
+    return path === "/" ? u.hostname : path;
+  } catch {
+    return url;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// TH · sortable
+// ─────────────────────────────────────────────────────────────────────
+function Th<K extends string>({
   label,
-  value,
-  sub,
-  accent = "var(--foreground)",
+  sortKey,
+  current,
+  dir,
+  onSort,
+  align,
 }: {
   label: string;
-  value: string;
-  sub: string;
-  accent?: string;
+  sortKey: K;
+  current: K;
+  dir: SortDir;
+  onSort: (k: K) => void;
+  align: "left" | "right";
 }) {
+  const active = current === sortKey;
+  const Icon = !active ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
   return (
-    <TextureCard className="px-3 py-2.5">
-      <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground mb-1">{label}</div>
-      <div className={cn("font-mono font-bold text-lg tabular leading-none")} style={{ color: `hsl(${accent})` }}>
-        {value}
+    <th
+      className={cn(
+        "px-4 py-3 font-semibold cursor-pointer select-none",
+        align === "right" ? "text-right" : "text-left",
+        active ? "text-foreground" : "",
+      )}
+      onClick={() => onSort(sortKey)}
+    >
+      <span className={cn("inline-flex items-center gap-1", align === "right" ? "justify-end" : "")}>
+        {label}
+        <Icon className="size-3 opacity-60" />
+      </span>
+    </th>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// TIPS FOOTER
+// ─────────────────────────────────────────────────────────────────────
+function TipsFooter() {
+  const tips: { title: string; body: string; tone: "lime" | "cyan" | "ember" }[] = [
+    {
+      title: "Quick wins",
+      body: "Keywords con posición 11-20 son los próximos a empujar · están a un cambio de title/H1 de entrar al top 10.",
+      tone: "lime",
+    },
+    {
+      title: "CTR bajo en top",
+      body: "CTR < 2% en posiciones 1-3 significa que el title/meta no convence · A/B test el copy.",
+      tone: "cyan",
+    },
+    {
+      title: "Intent mismatch",
+      body: "Pages con muchas impresiones pero cero clicks suelen tener canibalización o desalineación con la query.",
+      tone: "ember",
+    },
+  ];
+  return (
+    <section>
+      <SectionHeader title="¿Cómo usar esto?" sub="3 lecturas accionables de los números" />
+      <div className="grid md:grid-cols-3 gap-3">
+        {tips.map((t) => (
+          <TextureCard key={t.title} className="p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <div
+                className="size-8 grid place-items-center rounded-lg"
+                style={{
+                  background: `hsl(var(--brand-${t.tone}) / 0.16)`,
+                  border: `1px solid hsl(var(--brand-${t.tone}) / 0.4)`,
+                  color: `hsl(var(--brand-${t.tone}))`,
+                }}
+              >
+                <Lightbulb className="size-4" />
+              </div>
+              <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-foreground/90">
+                {t.title}
+              </h3>
+            </div>
+            <p className="text-[12px] text-muted-foreground leading-relaxed">{t.body}</p>
+          </TextureCard>
+        ))}
       </div>
-      <div className="text-[10px] text-muted-foreground mt-1">{sub}</div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// EMPTY · SKELETONS
+// ─────────────────────────────────────────────────────────────────────
+function EmptyState({ title, sub }: { title: string; sub: string }) {
+  return (
+    <TextureCard className="p-8 text-center">
+      <FileText className="size-6 mx-auto mb-2 text-muted-foreground/60" />
+      <div className="text-[13px] font-semibold mb-1">{title}</div>
+      <p className="text-[11px] text-muted-foreground max-w-[440px] mx-auto">{sub}</p>
+    </TextureCard>
+  );
+}
+
+function TableSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <TextureCard className="p-4 space-y-2">
+      <Skeleton className="h-5 w-1/3" />
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className="h-7 w-full" />
+      ))}
     </TextureCard>
   );
 }

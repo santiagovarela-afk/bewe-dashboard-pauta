@@ -51,7 +51,7 @@ type ProjBase = "3d" | "7d" | "all";
 type PlanView = "actual" | "junio";
 
 export function TabEstrategia() {
-  const { campaigns, adsets, daysElapsed, daily, hasDailyBreakdown } = useDashboard();
+  const { campaigns, rawCampaigns, adsets, daysElapsed, daily, hasDailyBreakdown } = useDashboard();
   const m = computeMetrics(campaigns);
   const [projBase, setProjBase] = React.useState<ProjBase>("3d");
   const [planView, setPlanView] = React.useState<PlanView>("actual");
@@ -86,6 +86,7 @@ export function TabEstrategia() {
         <ActualStrategy
           m={m}
           campaigns={campaigns}
+          rawCampaigns={rawCampaigns}
           adsets={adsets}
           daily={daily}
           daysElapsed={daysElapsed}
@@ -101,6 +102,8 @@ export function TabEstrategia() {
 interface ActualStrategyProps {
   m: ReturnType<typeof computeMetrics>;
   campaigns: ReturnType<typeof useDashboard>["campaigns"];
+  /** Campañas SIN filtrar por dateRange · acumulado del mes desde Meta API */
+  rawCampaigns: ReturnType<typeof useDashboard>["rawCampaigns"];
   adsets: ReturnType<typeof useDashboard>["adsets"];
   daily: DailyRow[];
   daysElapsed: number;
@@ -111,6 +114,7 @@ interface ActualStrategyProps {
 
 function ActualStrategy({
   m,
+  rawCampaigns,
   campaigns,
   adsets,
   daily,
@@ -256,7 +260,7 @@ function ActualStrategy({
 
       {/* Pacing real (vs días corridos) + Proyección quick view */}
       <div className="grid lg:grid-cols-2 gap-4">
-        <PacingCard pacing={pacing} />
+        <TrafficQualityCard campaigns={rawCampaigns} />
 
         <TextureCard className="p-5">
           <div className="flex items-center justify-between mb-3">
@@ -945,104 +949,204 @@ function ThresholdRow({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- *  PacingCard · gasto real vs ritmo ideal por días corridos del plan
- *  Fix al feedback "Pacing presupuesto · a veces muestra valores raros"
+ *  PacingCard · REEMPLAZADO por TrafficQualityCard.
+ *  El usuario pidió quitar el pacing (mostraba valores raros con filtros)
+ *  y poner indicadores de calidad del tráfico más accionables.
  * ─────────────────────────────────────────────────────────────────────── */
 
-function PacingCard({ pacing }: { pacing: PacingState }) {
-  const realPctClamped = Math.min(100, pacing.realPct);
-  const expectedPctClamped = Math.min(100, pacing.expectedPct);
-  const isOver = pacing.status === "over";
-  const isUnder = pacing.status === "under";
-  const statusColor = isOver
-    ? "var(--destructive)"
-    : isUnder
-      ? "var(--warning)"
-      : "var(--success)";
-  const statusLabel = isOver
-    ? "Sobre pacing"
-    : isUnder
-      ? "Bajo pacing"
-      : "En ritmo";
+interface TrafficQualityProps {
+  campaigns: Campaign[];
+}
+
+function TrafficQualityCard({ campaigns }: TrafficQualityProps) {
+  // Agregar métricas de las ACTIVAS solo · descartar pausadas y anomalía
+  const active = campaigns.filter(
+    (c) => shouldShowAsActive({ cid: c.cid, spend: c.spend, status: c.status }) && c.flag !== "anomaly",
+  );
+
+  const totalSpend = active.reduce((s, c) => s + c.spend, 0);
+  const totalImpressions = active.reduce((s, c) => s + c.impressions, 0);
+  const totalClicks = active.reduce((s, c) => s + c.clicks, 0);
+  const totalReach = active.reduce((s, c) => Math.max(s, c.reach), 0);
+
+  const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const cpm = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
+  // Frecuencia promedio ponderada por impresiones
+  const weightedFreq =
+    totalImpressions > 0
+      ? active.reduce((s, c) => s + c.freq * c.impressions, 0) / totalImpressions
+      : 0;
+  // Reach unique vs alcance acumulado
+  const reachShare = totalImpressions > 0 ? (totalReach / totalImpressions) * 100 : 0;
+
+  // Health checks
+  const ctrStatus =
+    ctr >= 1.5 && ctr <= 4
+      ? "healthy"
+      : ctr > 4
+        ? "exceptional"
+        : ctr >= 0.8
+          ? "watch"
+          : "bad";
+  const freqStatus =
+    weightedFreq < 1.5
+      ? "fresh"
+      : weightedFreq < 2.5
+        ? "healthy"
+        : weightedFreq < 3.5
+          ? "watch"
+          : "fatigue";
+  const cpmStatus =
+    cpm < 3 ? "great" : cpm < 6 ? "healthy" : cpm < 9 ? "watch" : "expensive";
+
+  // Status palette
+  const statusColor: Record<string, string> = {
+    great: "success",
+    exceptional: "success",
+    healthy: "success",
+    fresh: "success",
+    watch: "warning",
+    bad: "destructive",
+    expensive: "destructive",
+    fatigue: "destructive",
+  };
+  const statusLabel: Record<string, string> = {
+    great: "Excelente",
+    exceptional: "Excepcional",
+    healthy: "Saludable",
+    fresh: "Audiencia fresca",
+    watch: "Monitorear",
+    bad: "Bajo",
+    expensive: "Caro",
+    fatigue: "Audiencia cansada",
+  };
+
+  // Score global (0-100) basado en cuántos están healthy/great
+  const checks = [ctrStatus, freqStatus, cpmStatus];
+  const greenCount = checks.filter((s) =>
+    ["great", "exceptional", "healthy", "fresh"].includes(s),
+  ).length;
+  const score = (greenCount / 3) * 100;
+  const overallTone =
+    score >= 80 ? "success" : score >= 50 ? "warning" : "destructive";
 
   return (
     <TextureCard className="p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-2">
-          <Wallet className="size-3.5" /> Pacing presupuesto
+          <Wallet className="size-3.5" /> Calidad del tráfico
         </h3>
-        <Badge
-          variant={isOver ? "danger" : isUnder ? "warning" : "success"}
-        >
-          {statusLabel} · {pacing.deltaPct > 0 ? "+" : ""}
-          {pacing.deltaPct.toFixed(1)}pp
+        <Badge variant={overallTone === "success" ? "success" : overallTone === "warning" ? "warning" : "danger"}>
+          {greenCount}/3 saludables
         </Badge>
       </div>
 
-      {/* Barra real */}
-      <div className="space-y-1 mb-3">
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-          <span>Gasto real</span>
-          <span className="font-mono tabular text-foreground">
-            {fmt.pct(pacing.realPct, 1)}
-          </span>
-        </div>
-        <div className="h-2 rounded-full bg-border/60 overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${realPctClamped}%` }}
-            transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
-            className="h-full"
-            style={{ background: `hsl(${statusColor})` }}
-          />
-        </div>
+      <div className="space-y-3">
+        <QualityRow
+          label="CTR · click-through rate"
+          value={`${ctr.toFixed(2)}%`}
+          status={statusLabel[ctrStatus]}
+          statusColor={statusColor[ctrStatus]}
+          benchmark="benchmark · 1.5% - 4%"
+          fillPct={Math.min(100, (ctr / 5) * 100)}
+        />
+        <QualityRow
+          label="Frecuencia promedio"
+          value={`${weightedFreq.toFixed(2)}×`}
+          status={statusLabel[freqStatus]}
+          statusColor={statusColor[freqStatus]}
+          benchmark="ideal · < 2.5× · saturación > 3.5×"
+          fillPct={Math.min(100, (weightedFreq / 4) * 100)}
+        />
+        <QualityRow
+          label="CPM · costo por mil impresiones"
+          value={fmt.eur(cpm)}
+          status={statusLabel[cpmStatus]}
+          statusColor={statusColor[cpmStatus]}
+          benchmark="target LATAM · < €9"
+          fillPct={Math.min(100, (cpm / 10) * 100)}
+        />
       </div>
 
-      {/* Barra esperada */}
-      <div className="space-y-1 mb-4">
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-          <span>Esperado (días corridos)</span>
-          <span className="font-mono tabular text-foreground">
-            {fmt.pct(pacing.expectedPct, 1)}
-          </span>
-        </div>
-        <div className="h-2 rounded-full bg-border/60 overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${expectedPctClamped}%` }}
-            transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-            className="h-full bg-muted-foreground/60"
-          />
-        </div>
+      <div className="mt-4 pt-4 border-t border-border/40 space-y-1">
+        <Row k="Reach total" v={fmt.int(totalReach)} sub="audiencia única alcanzada" />
+        <Row k="Clicks totales" v={fmt.int(totalClicks)} />
+        <Row k="Impresiones" v={fmt.int(totalImpressions)} />
       </div>
 
-      <div className="space-y-1">
-        <Row
-          k="Gastado"
-          v={fmt.eur(pacing.spendTotal, { decimals: 0 })}
-          sub={`de €${pacing.budget.toLocaleString("es")}`}
-        />
-        <Row
-          k="Ritmo medio hasta hoy"
-          v={`${fmt.eur(pacing.dailyAvg, { decimals: 0 })}/día`}
-        />
-        <Row
-          k="Necesario ahora"
-          v={`${fmt.eur(pacing.requiredDailyToFinish, { decimals: 0 })}/día`}
-          tone={
-            pacing.requiredDailyToFinish > pacing.dailyAvg * 1.2
-              ? "warning"
-              : "default"
-          }
-        />
-        <Row
-          k={`Día ${pacing.daysElapsed} / ${pacing.totalDays}`}
-          v={`${Math.max(0, pacing.totalDays - pacing.daysElapsed)} día${
-            pacing.totalDays - pacing.daysElapsed !== 1 ? "s" : ""
-          } restantes`}
-        />
+      {/* Hint dinámico */}
+      <div className="mt-4 pt-4 border-t border-border/40 text-[10px] text-muted-foreground leading-relaxed">
+        {freqStatus === "fatigue" ? (
+          <>
+            <strong className="text-[hsl(var(--destructive))]">Acción:</strong>{" "}
+            frecuencia alta · refrescar creativos o ampliar audiencia
+          </>
+        ) : ctrStatus === "exceptional" ? (
+          <>
+            <strong className="text-[hsl(var(--success))]">Insight:</strong>{" "}
+            CTR excepcional · escalar budget en las campañas activas
+          </>
+        ) : cpmStatus === "expensive" ? (
+          <>
+            <strong className="text-[hsl(var(--warning))]">Atención:</strong>{" "}
+            CPM elevado · audiencia muy estrecha o subasta caliente
+          </>
+        ) : (
+          <>
+            <strong className="text-[hsl(var(--muted-foreground))]">Estado:</strong>{" "}
+            todos los indicadores dentro de rango saludable
+          </>
+        )}
       </div>
     </TextureCard>
+  );
+}
+
+function QualityRow({
+  label,
+  value,
+  status,
+  statusColor,
+  benchmark,
+  fillPct,
+}: {
+  label: string;
+  value: string;
+  status: string;
+  statusColor: string;
+  benchmark: string;
+  fillPct: number;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-muted-foreground">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono tabular text-[14px] font-semibold text-foreground">
+            {value}
+          </span>
+          <span
+            className="text-[9px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded"
+            style={{
+              background: `hsl(${statusColor} / 0.16)`,
+              color: `hsl(${statusColor})`,
+            }}
+          >
+            {status}
+          </span>
+        </div>
+      </div>
+      <div className="h-1.5 rounded-full bg-border/40 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${fillPct}%` }}
+          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+          className="h-full"
+          style={{ background: `hsl(${statusColor})` }}
+        />
+      </div>
+      <div className="text-[9px] text-muted-foreground/60 italic">{benchmark}</div>
+    </div>
   );
 }
 

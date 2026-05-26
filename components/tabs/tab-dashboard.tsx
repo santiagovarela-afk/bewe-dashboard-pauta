@@ -1918,12 +1918,34 @@ const STAGE_LINEAR_PARENT: Record<FunnelStage, FunnelStage | null> = {
   subscription: "trial",
 };
 
+/** Orden lineal del embudo principal · sólo estas etapas se dibujan
+ *  como trapezoides apilados en el SVG. El resto (pricing_visit, whatsapp,
+ *  password) son ramas paralelas / sub-pasos · van en la columna detalle. */
+const LINEAR_FUNNEL_STAGES: FunnelStage[] = [
+  "impression",
+  "click",
+  "register_intent",
+  "signup",
+  "trial",
+  "subscription",
+];
+
+const PARALLEL_BRANCH_STAGES: FunnelStage[] = [
+  "pricing_visit",
+  "whatsapp",
+  "password",
+];
+
 function SaasJourneyFunnel() {
-  const { campaigns } = useDashboard();
+  // El funnel SIEMPRE usa rawCampaigns (acumulado del mes) en lugar de
+  // campaigns (filtrado por dateRange). Un funnel necesita volumen para
+  // que las conversion rates sean significativas · no tiene sentido
+  // mostrar "0 conv" cuando el filtro es "Hoy" y aún no llegó la data.
+  const { rawCampaigns } = useDashboard();
   const { events: ga4Events, configured: ga4Configured, loading: ga4Loading } =
     useFunnelEvents(28);
 
-  // Totales Meta agregados sobre todas las campañas del rango activo.
+  // Totales Meta agregados del MES sobre todas las campañas (raw).
   const metaTotals = React.useMemo(() => {
     let impressions = 0;
     let clicks = 0;
@@ -1932,7 +1954,7 @@ function SaasJourneyFunnel() {
     let completeReg = 0;
     let startTrial = 0;
     let subscribe = 0;
-    for (const c of campaigns) {
+    for (const c of rawCampaigns) {
       impressions += c.impressions;
       clicks += c.clicks;
       lead += c.evContact;
@@ -1942,7 +1964,7 @@ function SaasJourneyFunnel() {
       subscribe += c.evSubscribe;
     }
     return { impressions, clicks, lead, initiateCheckout, completeReg, startTrial, subscribe };
-  }, [campaigns]);
+  }, [rawCampaigns]);
 
   // Construir cada step del journey · prioriza Meta sobre GA4 para CAPI events
   const steps = React.useMemo<JourneyStepData[]>(() => {
@@ -2006,6 +2028,55 @@ function SaasJourneyFunnel() {
     return map;
   }, [steps]);
 
+  // Steps lineales (los que dibujan el trapecio).
+  const linearSteps = React.useMemo<JourneyStepData[]>(() => {
+    const arr: JourneyStepData[] = [];
+    for (const stage of LINEAR_FUNNEL_STAGES) {
+      const s = stepByStage.get(stage);
+      if (s) arr.push(s);
+    }
+    return arr;
+  }, [stepByStage]);
+
+  // Geometría del SVG funnel.
+  const FUNNEL_WIDTH = 320;
+  const STEP_HEIGHT = 64;
+  const MIN_WIDTH = 28;
+  const FUNNEL_HEIGHT = STEP_HEIGHT * linearSteps.length;
+
+  // Ancho computado por step · sqrt(value / impresiones) * FUNNEL_WIDTH
+  // sqrt para que el embudo no colapse a 0 cuando los pasos finales
+  // son chiquitos. Se fuerza monótono decreciente (cada step ≤ anterior).
+  const stepWidths = React.useMemo<number[]>(() => {
+    const widths: number[] = [];
+    let prev = FUNNEL_WIDTH;
+    linearSteps.forEach((step, i) => {
+      let w: number;
+      if (i === 0) {
+        w = FUNNEL_WIDTH;
+      } else if (step.value === null) {
+        // Pendiente · usar 60% del anterior para mostrar el "hueco" sin colapsar
+        w = Math.max(MIN_WIDTH, prev * 0.6);
+      } else {
+        const ratio = Math.sqrt((step.value ?? 0) / impressionsTotal);
+        w = Math.max(MIN_WIDTH, Math.min(prev, ratio * FUNNEL_WIDTH));
+      }
+      widths.push(w);
+      prev = w;
+    });
+    return widths;
+  }, [linearSteps, impressionsTotal]);
+
+  // Ramas paralelas para la columna detalle.
+  const parallelSteps = React.useMemo<JourneyStepData[]>(() => {
+    const arr: JourneyStepData[] = [];
+    for (const stage of PARALLEL_BRANCH_STAGES) {
+      const s = stepByStage.get(stage);
+      if (s) arr.push(s);
+    }
+    return arr;
+  }, [stepByStage]);
+
   return (
     <TextureCard className="p-6">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
@@ -2037,143 +2108,353 @@ function SaasJourneyFunnel() {
         </div>
       </div>
 
-      {/* Trapecio invertido · cada paso es una fila con barra centrada cuyo
-          ancho = % vs impresiones · va angostándose hacia abajo. */}
-      <div className="flex flex-col gap-1.5">
-        {steps.map((step, i) => {
-          const isPending = step.value === null;
-          const value = step.value ?? 0;
-          // Ancho de barra = sqrt(% vs impresiones) para que el embudo
-          // no colapse a 0% cuando el valor es muy chico (sigue siendo monótono).
-          const pctOfImpressions = (value / impressionsTotal) * 100;
-          const widthPct = isPending
-            ? 6
-            : Math.max(6, Math.min(100, Math.sqrt(pctOfImpressions / 100) * 100));
-
-          // % vs padre lineal (solo cuando aplica).
-          const parentStage = STAGE_LINEAR_PARENT[step.stage];
-          const parent = parentStage ? stepByStage.get(parentStage) : null;
-          const linearConv =
-            parent && parent.value !== null && parent.value > 0 && step.value !== null
-              ? (step.value / parent.value) * 100
-              : null;
-
-          return (
-            <motion.div
-              key={step.stage}
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.4 }}
-              className="grid grid-cols-[200px_1fr_180px] items-center gap-3"
-            >
-              {/* IZQUIERDA · icon + label + source */}
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className="size-9 shrink-0 grid place-items-center rounded-lg border"
-                  style={{
-                    background: isPending
-                      ? "hsl(var(--muted) / 0.2)"
-                      : `hsl(${step.color} / 0.14)`,
-                    borderColor: isPending
-                      ? "hsl(var(--muted) / 0.3)"
-                      : `hsl(${step.color} / 0.4)`,
-                    color: isPending ? "hsl(var(--muted-foreground))" : `hsl(${step.color})`,
-                  }}
+      {/* Layout · 2 columnas: SVG funnel + detalle */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6">
+        {/* ─── COLUMNA IZQ · SVG TRAPEZOIDAL FUNNEL ───────────────────── */}
+        <div className="flex flex-col items-center justify-start">
+          <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-3 self-start">
+            Funnel lineal · 6 etapas principales
+          </div>
+          <svg
+            viewBox={`0 0 ${FUNNEL_WIDTH} ${FUNNEL_HEIGHT}`}
+            width="100%"
+            style={{ maxWidth: FUNNEL_WIDTH + 60 }}
+            className="overflow-visible"
+            aria-label="Funnel de conversión visual"
+          >
+            <defs>
+              {linearSteps.map((step) => (
+                <linearGradient
+                  key={`grad-${step.stage}`}
+                  id={`funnel-grad-${step.stage}`}
+                  x1="0%"
+                  y1="0%"
+                  x2="100%"
+                  y2="0%"
                 >
-                  <step.Icon className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[12px] font-semibold leading-tight truncate">
-                    {step.label}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {step.isConversion && !isPending && (
-                      <Badge variant="lime" className="text-[9px] py-0">
-                        conversión
-                      </Badge>
-                    )}
-                    <SourceBadge source={step.source} />
-                  </div>
-                </div>
-              </div>
+                  <stop offset="0%" stopColor={`hsl(${step.color} / 0.35)`} />
+                  <stop offset="50%" stopColor={`hsl(${step.color} / 0.85)`} />
+                  <stop offset="100%" stopColor={`hsl(${step.color} / 0.35)`} />
+                </linearGradient>
+              ))}
+              <pattern
+                id="funnel-pending-pattern"
+                width="6"
+                height="6"
+                patternUnits="userSpaceOnUse"
+                patternTransform="rotate(45)"
+              >
+                <line
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="6"
+                  stroke="hsl(var(--brand-ember) / 0.55)"
+                  strokeWidth="1.4"
+                />
+              </pattern>
+            </defs>
 
-              {/* CENTRO · barra horizontal del embudo (centrada · se angosta) */}
-              <div className="relative h-10 flex items-center justify-center">
-                {isPending ? (
-                  <motion.div
-                    initial={{ width: 0, opacity: 0 }}
-                    animate={{ width: `${widthPct}%`, opacity: 1 }}
-                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: i * 0.05 }}
-                    className="h-7 rounded-md border border-dashed border-border/50 grid place-items-center"
-                    style={{ background: "hsl(var(--muted) / 0.15)" }}
-                  >
-                    <span className="text-[10px] italic text-muted-foreground/70">
-                      Analytics pendiente
-                    </span>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${widthPct}%` }}
-                    transition={{ duration: 0.95, ease: [0.16, 1, 0.3, 1], delay: i * 0.05 }}
-                    className="h-8 rounded-md relative overflow-hidden"
+            {linearSteps.map((step, i) => {
+              const topW = i === 0 ? FUNNEL_WIDTH : stepWidths[i - 1] ?? FUNNEL_WIDTH;
+              const botW = stepWidths[i] ?? MIN_WIDTH;
+              const y0 = i * STEP_HEIGHT;
+              const y1 = (i + 1) * STEP_HEIGHT;
+              const xTopL = (FUNNEL_WIDTH - topW) / 2;
+              const xTopR = (FUNNEL_WIDTH + topW) / 2;
+              const xBotL = (FUNNEL_WIDTH - botW) / 2;
+              const xBotR = (FUNNEL_WIDTH + botW) / 2;
+              const path = `M ${xTopL} ${y0} L ${xTopR} ${y0} L ${xBotR} ${y1} L ${xBotL} ${y1} Z`;
+              const isPending = step.value === null;
+              const cx = FUNNEL_WIDTH / 2;
+              const cy = y0 + STEP_HEIGHT / 2;
+
+              // % vs padre lineal para el subtítulo del trapezoide
+              const parentStage = STAGE_LINEAR_PARENT[step.stage];
+              const parent = parentStage ? stepByStage.get(parentStage) : null;
+              const linearConv =
+                parent && parent.value !== null && parent.value > 0 && step.value !== null
+                  ? (step.value / parent.value) * 100
+                  : null;
+
+              return (
+                <motion.g
+                  key={step.stage}
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.08, duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  {/* trapezoide base · gradient o pattern dashed si pendiente */}
+                  <path
+                    d={path}
+                    fill={
+                      isPending
+                        ? "url(#funnel-pending-pattern)"
+                        : `url(#funnel-grad-${step.stage})`
+                    }
+                    stroke={
+                      isPending
+                        ? "hsl(var(--brand-ember) / 0.7)"
+                        : `hsl(${step.color} / 0.85)`
+                    }
+                    strokeWidth={isPending ? 1.2 : 1}
+                    strokeDasharray={isPending ? "4 3" : undefined}
                     style={{
-                      background: `linear-gradient(90deg, hsl(${step.color} / 0.85), hsl(${step.color} / 0.55), hsl(${step.color} / 0.85))`,
-                      boxShadow: `0 0 24px -10px hsl(${step.color} / 0.7), inset 0 1px 0 hsl(${step.color} / 0.6)`,
+                      filter: isPending
+                        ? "none"
+                        : `drop-shadow(0 4px 14px hsl(${step.color} / 0.25))`,
+                    }}
+                  />
+
+                  {/* línea interna sutil para definir el separador entre steps */}
+                  {i < linearSteps.length - 1 && (
+                    <line
+                      x1={xBotL}
+                      y1={y1}
+                      x2={xBotR}
+                      y2={y1}
+                      stroke="hsl(var(--background) / 0.6)"
+                      strokeWidth="0.6"
+                    />
+                  )}
+
+                  {/* Label del valor · centrado dentro del trapezoide */}
+                  <text
+                    x={cx}
+                    y={cy - 4}
+                    textAnchor="middle"
+                    style={{
+                      fontFamily: "var(--font-mono, ui-monospace)",
+                      fontWeight: 700,
+                      fontSize: botW > 90 ? 16 : botW > 50 ? 13 : 11,
+                      fill: isPending
+                        ? "hsl(var(--muted-foreground))"
+                        : "hsl(var(--foreground))",
+                      letterSpacing: "0.02em",
                     }}
                   >
-                    <div
-                      className="absolute inset-0 opacity-20 mix-blend-overlay"
-                      style={{
-                        background:
-                          "linear-gradient(90deg, transparent 40%, rgba(255,255,255,0.4), transparent 60%)",
-                      }}
-                    />
-                  </motion.div>
-                )}
-              </div>
+                    {isPending ? "—" : fmt.int(step.value ?? 0)}
+                  </text>
+                  <text
+                    x={cx}
+                    y={cy + 11}
+                    textAnchor="middle"
+                    style={{
+                      fontSize: 9,
+                      fontFamily: "var(--font-mono, ui-monospace)",
+                      fill: "hsl(var(--muted-foreground))",
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {isPending
+                      ? "pendiente"
+                      : linearConv !== null
+                        ? `${linearConv.toFixed(linearConv < 1 ? 2 : 1)}% step anterior`
+                        : "base"}
+                  </text>
 
-              {/* DERECHA · valor + métricas */}
-              <div className="text-right shrink-0">
-                {isPending ? (
-                  <div className="text-[11px] italic text-muted-foreground/60">
-                    sin data
-                  </div>
-                ) : (
-                  <>
-                    <div
-                      className="font-mono font-bold text-[18px] tabular leading-none"
-                      style={{ color: `hsl(${step.color})` }}
-                    >
-                      <AnimatedNumber value={value} format={fmt.int} />
-                    </div>
-                    <div className="text-[9px] text-muted-foreground font-mono mt-1 leading-tight">
-                      {linearConv !== null ? (
-                        <>
-                          <span style={{ color: `hsl(${step.color})` }}>
-                            {linearConv.toFixed(linearConv < 1 ? 2 : 1)}%
-                          </span>{" "}
-                          del paso anterior
-                        </>
-                      ) : i === 0 ? (
-                        "base del embudo"
-                      ) : (
-                        <>
-                          {pctOfImpressions < 0.01
-                            ? pctOfImpressions.toFixed(4)
-                            : pctOfImpressions.toFixed(2)}
-                          % de impresiones
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
+                  {/* Label lateral con el nombre del step · a la derecha */}
+                  <line
+                    x1={xBotR + 4}
+                    y1={cy}
+                    x2={FUNNEL_WIDTH + 14}
+                    y2={cy}
+                    stroke={
+                      isPending
+                        ? "hsl(var(--muted) / 0.5)"
+                        : `hsl(${step.color} / 0.5)`
+                    }
+                    strokeWidth="0.8"
+                    strokeDasharray="2 2"
+                  />
+                  <text
+                    x={FUNNEL_WIDTH + 18}
+                    y={cy + 3}
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: isPending
+                        ? "hsl(var(--muted-foreground))"
+                        : `hsl(${step.color})`,
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {step.label}
+                  </text>
+                </motion.g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* ─── COLUMNA DER · DETALLE POR ETAPA ───────────────────────── */}
+        <div className="flex flex-col min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-3">
+            Detalle por etapa
+          </div>
+
+          <div className="flex flex-col rounded-lg border border-border/40 overflow-hidden">
+            {linearSteps.map((step, i) => (
+              <FunnelStepRow
+                key={step.stage}
+                step={step}
+                index={i}
+                impressionsTotal={impressionsTotal}
+                stepByStage={stepByStage}
+              />
+            ))}
+          </div>
+
+          {parallelSteps.length > 0 && (
+            <>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mt-5 mb-3 flex items-center gap-2">
+                <span>Ramas paralelas</span>
+                <span className="text-muted-foreground/50 normal-case tracking-normal text-[10px]">
+                  (no parte del flujo lineal)
+                </span>
               </div>
-            </motion.div>
-          );
-        })}
+              <div className="flex flex-col rounded-lg border border-border/40 border-dashed overflow-hidden">
+                {parallelSteps.map((step, i) => (
+                  <FunnelStepRow
+                    key={step.stage}
+                    step={step}
+                    index={i + linearSteps.length}
+                    impressionsTotal={impressionsTotal}
+                    stepByStage={stepByStage}
+                    isParallel
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </TextureCard>
+  );
+}
+
+/** Una fila del detalle por etapa · usada por el embudo y por las ramas paralelas. */
+function FunnelStepRow({
+  step,
+  index,
+  impressionsTotal,
+  stepByStage,
+  isParallel = false,
+}: {
+  step: JourneyStepData;
+  index: number;
+  impressionsTotal: number;
+  stepByStage: Map<FunnelStage, JourneyStepData>;
+  isParallel?: boolean;
+}) {
+  const isPending = step.value === null;
+  const value = step.value ?? 0;
+  const pctOfImpressions = (value / impressionsTotal) * 100;
+  const parentStage = STAGE_LINEAR_PARENT[step.stage];
+  const parent = parentStage ? stepByStage.get(parentStage) : null;
+  const linearConv =
+    parent && parent.value !== null && parent.value > 0 && step.value !== null
+      ? (step.value / parent.value) * 100
+      : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.05, duration: 0.35 }}
+      className="flex items-center gap-3 px-3 py-2.5 border-b border-border/30 last:border-b-0"
+      style={{
+        background: isPending
+          ? "hsl(var(--muted) / 0.05)"
+          : "transparent",
+      }}
+    >
+      {/* dot color del step */}
+      <div
+        className="size-2 rounded-full shrink-0"
+        style={{
+          background: isPending
+            ? "hsl(var(--muted-foreground) / 0.4)"
+            : `hsl(${step.color})`,
+          boxShadow: isPending ? "none" : `0 0 8px hsl(${step.color} / 0.6)`,
+        }}
+      />
+
+      {/* icon */}
+      <div
+        className="size-8 shrink-0 grid place-items-center rounded-md border"
+        style={{
+          background: isPending
+            ? "hsl(var(--muted) / 0.15)"
+            : `hsl(${step.color} / 0.12)`,
+          borderColor: isPending
+            ? "hsl(var(--muted) / 0.25)"
+            : `hsl(${step.color} / 0.35)`,
+          color: isPending ? "hsl(var(--muted-foreground))" : `hsl(${step.color})`,
+        }}
+      >
+        <step.Icon className="size-3.5" />
+      </div>
+
+      {/* Label + subtext */}
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] font-semibold leading-tight truncate flex items-center gap-1.5">
+          {step.label}
+          {step.isConversion && !isPending && (
+            <Badge variant="lime" className="text-[8px] py-0 px-1.5">
+              conv
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <SourceBadge source={step.source} />
+          {!isPending && (
+            <span className="text-[9px] text-muted-foreground font-mono">
+              {linearConv !== null ? (
+                <>
+                  <span style={{ color: `hsl(${step.color})` }}>
+                    {linearConv.toFixed(linearConv < 1 ? 2 : 1)}%
+                  </span>{" "}
+                  vs paso anterior
+                </>
+              ) : index === 0 ? (
+                "base del embudo"
+              ) : (
+                <>
+                  {pctOfImpressions < 0.01
+                    ? pctOfImpressions.toFixed(4)
+                    : pctOfImpressions.toFixed(2)}
+                  % de impresiones
+                  {isParallel ? " · rama" : ""}
+                </>
+              )}
+            </span>
+          )}
+          {isPending && (
+            <span className="text-[9px] italic text-muted-foreground/70">
+              Analytics pendiente · cargar GA4_PROPERTY_ID
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Valor */}
+      <div className="text-right shrink-0">
+        {isPending ? (
+          <div className="font-mono text-[16px] text-muted-foreground/60 leading-none">
+            —
+          </div>
+        ) : (
+          <div
+            className="font-mono font-bold text-[18px] tabular leading-none"
+            style={{ color: `hsl(${step.color})` }}
+          >
+            <AnimatedNumber value={value} format={fmt.int} />
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 }
 

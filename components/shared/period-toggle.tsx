@@ -30,7 +30,7 @@ export function PeriodToggle({
   return (
     <div
       className={cn(
-        "inline-flex rounded-xl border border-border/40 bg-card/40 p-1 backdrop-blur",
+        "inline-flex rounded-2xl border border-border/60 bg-card/60 p-1.5 backdrop-blur-md shadow-lg",
         className,
       )}
       role="tablist"
@@ -45,18 +45,18 @@ export function PeriodToggle({
             aria-selected={active}
             onClick={() => onChange(opt.id)}
             className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-colors flex flex-col items-center leading-tight",
+              "px-7 py-3 text-sm font-bold rounded-xl transition-all duration-200 flex flex-col items-center leading-tight min-w-[160px]",
               active
-                ? "bg-[hsl(var(--brand-violet))] text-white shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-gradient-to-br from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-violet))]/85 text-white shadow-lg shadow-[hsl(var(--brand-violet))]/30 scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-card/40",
             )}
           >
-            <span>{opt.label}</span>
+            <span className="text-[15px]">{opt.label}</span>
             {opt.hint && (
               <span
                 className={cn(
-                  "text-[9px] font-medium mt-0.5 opacity-80",
-                  active ? "text-white/80" : "text-muted-foreground/70",
+                  "text-[11px] font-medium mt-1 uppercase tracking-wide",
+                  active ? "text-white/85" : "text-muted-foreground/60",
                 )}
               >
                 {opt.hint}

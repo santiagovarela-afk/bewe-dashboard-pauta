@@ -1,10 +1,11 @@
 /**
  * Cliente server-side para Google Analytics 4 · Data API (v1beta).
  *
- * Reutiliza el mismo Service Account JSON usado para Google Search Console
- * (env var GOOGLE_SA_KEY, base64 del JSON). El SA tiene que tener acceso
- * "Viewer" sobre la propiedad GA4 cuyo Property ID se carga en
- * GA4_PROPERTY_ID.
+ * Autentica via OAuth 2.0 user-based (Bewe org bloquea Service Accounts).
+ * Las credenciales viven en GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN
+ * (ver lib/google-oauth.ts). El usuario que generó el refresh_token tiene
+ * que tener acceso "Viewer" o superior sobre la propiedad GA4 cuyo
+ * Property ID se carga en GA4_PROPERTY_ID.
  *
  * Captura el evento de "trial iniciado" definido en GA4 (nombre exacto
  * configurable vía GA4_TRIAL_EVENT_NAME · default `trial_started`).
@@ -12,8 +13,8 @@
  * Docs API: https://developers.google.com/analytics/devguides/reporting/data/v1
  */
 import { google, type analyticsdata_v1beta } from "googleapis";
+import { getAuthenticatedClient, isOAuthAuthenticated } from "./google-oauth";
 
-const SCOPES = ["https://www.googleapis.com/auth/analytics.readonly"];
 const DEFAULT_EVENT_NAME = "trial_started";
 
 export interface GA4Trial {
@@ -31,53 +32,9 @@ export interface GA4TrialsSummary {
   rangeDays: number;
 }
 
-interface ServiceAccountKey {
-  client_email: string;
-  private_key: string;
-  project_id?: string;
-  type?: string;
-}
-
-function decodeServiceAccountKey(): ServiceAccountKey {
-  const raw = process.env.GOOGLE_SA_KEY;
-  if (!raw || raw.trim() === "") {
-    throw new Error("GA4 no configurado · falta GOOGLE_SA_KEY env var");
-  }
-  let decoded: string;
-  try {
-    decoded = Buffer.from(raw, "base64").toString("utf-8");
-  } catch {
-    throw new Error("GA4 no configurado · GOOGLE_SA_KEY no es base64 válido");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(decoded);
-  } catch {
-    throw new Error("GA4 no configurado · GOOGLE_SA_KEY decodificado no es JSON válido");
-  }
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    typeof (parsed as ServiceAccountKey).client_email !== "string" ||
-    typeof (parsed as ServiceAccountKey).private_key !== "string"
-  ) {
-    throw new Error("GA4 no configurado · GOOGLE_SA_KEY JSON sin client_email/private_key");
-  }
-  return parsed as ServiceAccountKey;
-}
-
-let cachedClient: analyticsdata_v1beta.Analyticsdata | null = null;
-
-function getGA4Client(): analyticsdata_v1beta.Analyticsdata {
-  if (cachedClient) return cachedClient;
-  const key = decodeServiceAccountKey();
-  const auth = new google.auth.JWT({
-    email: key.client_email,
-    key: key.private_key,
-    scopes: SCOPES,
-  });
-  cachedClient = google.analyticsdata({ version: "v1beta", auth });
-  return cachedClient;
+export function getGA4Client(): analyticsdata_v1beta.Analyticsdata {
+  const auth = getAuthenticatedClient();
+  return google.analyticsdata({ version: "v1beta", auth });
 }
 
 function getPropertyId(): string {
@@ -128,12 +85,10 @@ function safeInt(v: string | number | null | undefined): number {
 
 export function isGA4Configured(): boolean {
   const propId = process.env.GA4_PROPERTY_ID;
-  const saKey = process.env.GOOGLE_SA_KEY;
   return (
+    isOAuthAuthenticated() &&
     typeof propId === "string" &&
-    propId.trim() !== "" &&
-    typeof saKey === "string" &&
-    saKey.trim() !== ""
+    propId.trim() !== ""
   );
 }
 

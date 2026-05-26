@@ -210,21 +210,17 @@ function NotConfiguredBanner({ message }: { message: string | null }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[12px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--brand-ember))] mb-0.5">
-            Google Search Console no configurado
+            GSC pendiente · admin debe conectar Google
           </div>
           <p className="text-[12px] leading-relaxed text-foreground/85">
-            Conectá tu Service Account en Vercel cargando las env vars{" "}
-            <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-secondary/60">GOOGLE_SA_KEY</code>{" "}
-            y{" "}
-            <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-secondary/60">GSC_SITE_URL</code>{" "}
-            para ver data real.{" "}
+            Conectá tu cuenta Google (OAuth) para traer data real de Search Console.{" "}
             <a
-              href="https://search.google.com/search-console"
+              href="/api/auth/google/start"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-0.5 underline underline-offset-2 text-[hsl(var(--brand-cyan))] hover:opacity-80"
+              className="inline-flex items-center gap-0.5 underline underline-offset-2 text-[hsl(var(--brand-cyan))] hover:opacity-80 font-semibold"
             >
-              Abrir Search Console
+              Conectar ahora
               <ExternalLink className="size-3" />
             </a>
           </p>

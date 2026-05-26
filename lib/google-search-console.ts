@@ -1,15 +1,16 @@
 /**
  * Cliente server-side para Google Search Console.
  *
- * Autentica via Service Account · JSON encoded en base64 en GOOGLE_SA_KEY.
- * El SA tiene que estar dado de alta en Search Console (Owner o Full user)
- * sobre la propiedad `sc-domain:bewe.ai`.
+ * Autentica via OAuth 2.0 user-based (Bewe org bloquea Service Accounts).
+ * Las credenciales viven en GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN
+ * (ver lib/google-oauth.ts). El usuario que generó el refresh_token tiene
+ * que tener acceso a la propiedad `sc-domain:bewe.ai` en Search Console.
  *
  * Docs API: https://developers.google.com/webmaster-tools/v1/searchanalytics/query
  */
 import { google, type searchconsole_v1 } from "googleapis";
+import { getAuthenticatedClient, isOAuthAuthenticated } from "./google-oauth";
 
-const SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 const DEFAULT_SITE_URL = "sc-domain:bewe.ai";
 
 export interface GSCQuery {
@@ -44,53 +45,9 @@ export interface GSCOverview {
   daily: GSCDaily[];
 }
 
-interface ServiceAccountKey {
-  client_email: string;
-  private_key: string;
-  project_id?: string;
-  type?: string;
-}
-
-function decodeServiceAccountKey(): ServiceAccountKey {
-  const raw = process.env.GOOGLE_SA_KEY;
-  if (!raw || raw.trim() === "") {
-    throw new Error("GSC no configurado · falta GOOGLE_SA_KEY env var");
-  }
-  let decoded: string;
-  try {
-    decoded = Buffer.from(raw, "base64").toString("utf-8");
-  } catch {
-    throw new Error("GSC no configurado · GOOGLE_SA_KEY no es base64 válido");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(decoded);
-  } catch {
-    throw new Error("GSC no configurado · GOOGLE_SA_KEY decodificado no es JSON válido");
-  }
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    typeof (parsed as ServiceAccountKey).client_email !== "string" ||
-    typeof (parsed as ServiceAccountKey).private_key !== "string"
-  ) {
-    throw new Error("GSC no configurado · GOOGLE_SA_KEY JSON sin client_email/private_key");
-  }
-  return parsed as ServiceAccountKey;
-}
-
-let cachedClient: searchconsole_v1.Searchconsole | null = null;
-
 export function getGSCClient(): searchconsole_v1.Searchconsole {
-  if (cachedClient) return cachedClient;
-  const key = decodeServiceAccountKey();
-  const auth = new google.auth.JWT({
-    email: key.client_email,
-    key: key.private_key,
-    scopes: SCOPES,
-  });
-  cachedClient = google.searchconsole({ version: "v1", auth });
-  return cachedClient;
+  const auth = getAuthenticatedClient();
+  return google.searchconsole({ version: "v1", auth });
 }
 
 function getSiteUrl(): string {
@@ -293,6 +250,5 @@ export async function fetchKeywordsByPage(args: FetchKeywordsByPageArgs): Promis
 }
 
 export function isGSCConfigured(): boolean {
-  const raw = process.env.GOOGLE_SA_KEY;
-  return typeof raw === "string" && raw.trim() !== "";
+  return isOAuthAuthenticated();
 }

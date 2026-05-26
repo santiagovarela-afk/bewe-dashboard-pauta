@@ -2110,6 +2110,44 @@ function SaasJourneyFunnel() {
         </div>
       </div>
 
+      {!ga4Loading && !ga4Configured && (
+        <div
+          className="rounded-xl border px-4 py-3 flex items-start gap-3 mb-5"
+          style={{
+            background: `hsl(var(--warning) / 0.15)`,
+            borderColor: `hsl(var(--brand-ember) / 0.45)`,
+          }}
+        >
+          <div
+            className="size-9 grid place-items-center rounded-lg shrink-0"
+            style={{
+              background: `hsl(var(--brand-ember) / 0.18)`,
+              border: `1px solid hsl(var(--brand-ember) / 0.45)`,
+              color: `hsl(var(--brand-ember))`,
+            }}
+          >
+            <AlertTriangle className="size-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--brand-ember))] mb-0.5">
+              GA4 pendiente · admin debe conectar Google
+            </div>
+            <p className="text-[12px] leading-relaxed text-foreground/85">
+              Sin GA4 los pasos del funnel (pricing visit, signup, password, trial, subscription) muestran 0.{" "}
+              <a
+                href="/api/auth/google/start"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 underline underline-offset-2 text-[hsl(var(--brand-cyan))] hover:opacity-80 font-semibold"
+              >
+                Conectar ahora
+                <ChevronRight className="size-3" />
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Layout · 2 columnas: SVG funnel + detalle */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6">
         {/* ─── COLUMNA IZQ · SVG TRAPEZOIDAL FUNNEL ───────────────────── */}

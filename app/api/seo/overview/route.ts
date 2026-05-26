@@ -17,7 +17,7 @@ function parseDays(req: NextRequest): number {
 export async function GET(req: NextRequest) {
   if (!isGSCConfigured()) {
     return NextResponse.json(
-      { error: "GSC no configurado · falta GOOGLE_SA_KEY env var", configured: false },
+      { error: "GSC no configurado · admin debe conectar Google en /api/auth/google/start", configured: false },
       { status: 200, headers: CACHE_HEADERS },
     );
   }

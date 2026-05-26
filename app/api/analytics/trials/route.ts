@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   if (!isGA4Configured()) {
     return NextResponse.json(
       {
-        error: "GA4 no configurado · falta GA4_PROPERTY_ID y/o GOOGLE_SA_KEY",
+        error: "GA4 no configurado · falta GA4_PROPERTY_ID o admin debe conectar Google en /api/auth/google/start",
         configured: false,
       },
       { status: 200, headers: CACHE_HEADERS },

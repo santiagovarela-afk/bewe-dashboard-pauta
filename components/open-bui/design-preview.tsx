@@ -14,7 +14,18 @@ interface DesignPreviewProps {
   onSwitchToCanvas?: () => void;
   /** Persona label · para el loading state ("Mark está pensando…"). */
   personaLabel?: string;
+  /** Si viene, preview de imagen pura · Nano Banana modo "image". */
+  imageDataUri?: string | null;
+  /** Aspect ratio para el preview de imagen (ignorado si html). */
+  aspectRatio?: "1:1" | "9:16" | "16:9" | "4:5";
 }
+
+const ASPECT_DIMS: Record<string, { w: number; h: number }> = {
+  "1:1": { w: 1080, h: 1080 },
+  "9:16": { w: 1080, h: 1920 },
+  "16:9": { w: 1920, h: 1080 },
+  "4:5": { w: 1080, h: 1350 },
+};
 
 /**
  * Preview Canva-style con scale-to-fit. El iframe se renderiza a tamaño NATIVO
@@ -25,9 +36,19 @@ interface DesignPreviewProps {
  */
 export const DesignPreview = React.forwardRef<HTMLDivElement, DesignPreviewProps>(
   function DesignPreview(
-    { skill, html, loading, error, onSwitchToCanvas, personaLabel = "Mark OS" },
+    {
+      skill,
+      html,
+      loading,
+      error,
+      onSwitchToCanvas,
+      personaLabel = "Mark OS",
+      imageDataUri,
+      aspectRatio,
+    },
     ref,
   ) {
+    const hasImage = Boolean(imageDataUri);
     return (
       <div
         ref={ref}
@@ -48,16 +69,88 @@ export const DesignPreview = React.forwardRef<HTMLDivElement, DesignPreviewProps
           }}
         />
 
-        {loading && <PreviewLoading personaLabel={personaLabel} />}
+        {loading && <PreviewLoading personaLabel={personaLabel} imageMode={!!imageDataUri || aspectRatio !== undefined} />}
         {!loading && error && (
           <PreviewError msg={error} onSwitchToCanvas={onSwitchToCanvas} />
         )}
-        {!loading && !error && !html && <PreviewEmpty />}
+        {!loading && !error && !html && !hasImage && <PreviewEmpty />}
+        {!loading && !error && !html && hasImage && imageDataUri && (
+          <ScaledImage src={imageDataUri} aspectRatio={aspectRatio ?? "1:1"} />
+        )}
         {!loading && !error && html && <ScaledFrame html={html} skill={skill} />}
       </div>
     );
   },
 );
+
+/** Preview de imagen pura · Nano Banana modo "image". */
+function ScaledImage({
+  src,
+  aspectRatio,
+}: {
+  src: string;
+  aspectRatio: "1:1" | "9:16" | "16:9" | "4:5";
+}) {
+  const dims = ASPECT_DIMS[aspectRatio];
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [scale, setScale] = React.useState(0.4);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    function recalc() {
+      if (!el) return;
+      const padding = 48;
+      const availW = el.clientWidth - padding;
+      const availH = el.clientHeight - padding;
+      if (availW <= 0 || availH <= 0) return;
+      const sx = availW / dims.w;
+      const sy = availH / dims.h;
+      const s = Math.min(sx, sy, 1);
+      setScale(s);
+    }
+    recalc();
+    const ro = new ResizeObserver(recalc);
+    ro.observe(el);
+    window.addEventListener("resize", recalc);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", recalc);
+    };
+  }, [dims.w, dims.h]);
+
+  return (
+    <div ref={containerRef} className="absolute inset-0 grid place-items-center p-6">
+      <motion.div
+        key={src.slice(0, 64)}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        className="relative rounded-xl overflow-hidden bg-white shadow-[0_24px_70px_-20px_hsl(220_50%_15%/0.35),0_8px_22px_-10px_hsl(220_50%_15%/0.2)] ring-1 ring-black/5"
+        style={{
+          width: dims.w * scale,
+          height: dims.h * scale,
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt="Pieza generada por Nano Banana"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      </motion.div>
+
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-2.5 py-1 rounded-full bg-card/90 backdrop-blur border border-border/60 text-[10px] font-mono text-muted-foreground shadow-sm">
+        <Maximize2 className="size-2.5" />
+        {`${dims.w}×${dims.h}`}
+        <span className="text-muted-foreground/40">·</span>
+        <span>{aspectRatio}</span>
+        <span className="text-muted-foreground/40">·</span>
+        <span>{Math.round(scale * 100)}%</span>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Renderiza el iframe a tamaño nativo (skill.width × skill.height) y lo escala
@@ -134,17 +227,32 @@ function ScaledFrame({ html, skill }: { html: string; skill: Skill }) {
   );
 }
 
-function PreviewLoading({ personaLabel }: { personaLabel: string }) {
+function PreviewLoading({
+  personaLabel,
+  imageMode,
+}: {
+  personaLabel: string;
+  imageMode?: boolean;
+}) {
   const [phase, setPhase] = React.useState(0);
   const phases = React.useMemo(
-    () => [
-      `${personaLabel} está pensando`,
-      `Eligiendo paleta brand kit`,
-      `Componiendo jerarquía visual`,
-      `Inyectando tipografía Inter`,
-      `Casi listo`,
-    ],
-    [personaLabel],
+    () =>
+      imageMode
+        ? [
+            `Nano Banana renderizando`,
+            `Aplicando brand kit Bewe`,
+            `Componiendo escena editorial`,
+            `Iluminando y enfocando`,
+            `Casi listo · puede tardar 15-30s`,
+          ]
+        : [
+            `${personaLabel} está pensando`,
+            `Eligiendo paleta brand kit`,
+            `Componiendo jerarquía visual`,
+            `Inyectando tipografía Inter`,
+            `Casi listo`,
+          ],
+    [personaLabel, imageMode],
   );
   React.useEffect(() => {
     const id = window.setInterval(
@@ -175,7 +283,9 @@ function PreviewLoading({ personaLabel }: { personaLabel: string }) {
           </div>
         </motion.div>
         <div className="space-y-1">
-          <div className="text-sm font-bold">Generando tu pieza</div>
+          <div className="text-sm font-bold">
+            {imageMode ? "Generando con Nano Banana" : "Generando tu pieza"}
+          </div>
           <motion.div
             key={phase}
             initial={{ opacity: 0, y: 4 }}

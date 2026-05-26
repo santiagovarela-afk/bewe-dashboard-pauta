@@ -23,10 +23,23 @@ import {
 } from "@/components/open-bui/history";
 import { useDashboard } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import type {
+  OpenDesignAspect,
+  OpenDesignMode,
+} from "@/lib/open-design-templates";
+
+/** Variante de imagen devuelta por Nano Banana en el modo image. */
+interface ImageVariant {
+  dataUri: string;
+  mimeType: string;
+  textResponse?: string;
+}
 
 const STORAGE_KEY_SKILL = "bw_open_design_skill";
 const STORAGE_KEY_BRIEF = "bw_open_design_brief";
 const STORAGE_KEY_QUOTA_UNTIL = "bw_open_design_quota_until";
+const STORAGE_KEY_GEN_MODE = "bw_open_design_gen_mode";
+const STORAGE_KEY_ASPECT = "bw_open_design_aspect";
 const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
 
 /**
@@ -64,6 +77,12 @@ export function TabOpenBui() {
   const [history, setHistory] = React.useState<HistoryEntry[]>([]);
   const [referenceImages, setReferenceImages] = React.useState<string[]>([]);
   const [activeTab, setActiveTab] = React.useState<ControlTab>("idea");
+  // Modo de generación · "html" Gemini text · "image" Nano Banana · "hybrid" mix
+  const [genMode, setGenMode] = React.useState<OpenDesignMode>("html");
+  const [aspectRatio, setAspectRatio] = React.useState<OpenDesignAspect>("1:1");
+  // Resultados modo "image" · Nano Banana puede devolver 1-4 variantes
+  const [images, setImages] = React.useState<ImageVariant[]>([]);
+  const [activeImageIdx, setActiveImageIdx] = React.useState(0);
 
   // Hidratar
   React.useEffect(() => {
@@ -74,6 +93,12 @@ export function TabOpenBui() {
       if (br) setBrief(br);
       const qu = Number(localStorage.getItem(STORAGE_KEY_QUOTA_UNTIL) || "0");
       if (qu > Date.now()) setQuotaUntil(qu);
+      const gm = localStorage.getItem(STORAGE_KEY_GEN_MODE);
+      if (gm === "html" || gm === "image" || gm === "hybrid") setGenMode(gm);
+      const ar = localStorage.getItem(STORAGE_KEY_ASPECT);
+      if (ar === "1:1" || ar === "9:16" || ar === "16:9" || ar === "4:5") {
+        setAspectRatio(ar);
+      }
     } catch {
       /* ignore */
     }
@@ -94,6 +119,20 @@ export function TabOpenBui() {
       /* ignore */
     }
   }, [brief]);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_GEN_MODE, genMode);
+    } catch {
+      /* ignore */
+    }
+  }, [genMode]);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ASPECT, aspectRatio);
+    } catch {
+      /* ignore */
+    }
+  }, [aspectRatio]);
 
   React.useEffect(() => {
     if (quotaUntil <= Date.now()) return;
@@ -116,15 +155,28 @@ export function TabOpenBui() {
     setLoading(true);
     setError(null);
     try {
+      // Construir body según el modo activo
+      const referenceImage = referenceImages[0];
+      const body: Record<string, unknown> = {
+        mode: genMode,
+        skillId,
+        brief,
+        variant: nextVariant,
+        persona: aiPersona,
+      };
+      if (genMode === "image" || genMode === "hybrid") {
+        body.prompt = brief;
+        body.aspectRatio = aspectRatio;
+        if (genMode === "image") {
+          body.variants = Math.min(4, Math.max(1, variantCount));
+        }
+        if (referenceImage) body.referenceImage = referenceImage;
+      }
+
       const r = await fetch("/api/design/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          skillId,
-          brief,
-          variant: nextVariant,
-          persona: aiPersona,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await r.json();
       if (!r.ok) {
@@ -144,20 +196,69 @@ export function TabOpenBui() {
           setError(data?.error || `Error ${r.status}`);
         }
         setHtml(null);
+        setImages([]);
         return;
       }
-      setHtml(data.html as string);
-      setVariant(nextVariant);
-      // Push a historial
-      const entry: HistoryEntry = {
-        id: new Date().toISOString(),
-        skillId,
-        brief,
-        variant: nextVariant,
-        html: data.html as string,
-        persona: aiPersona,
-      };
-      setHistory(pushHistory(entry));
+
+      // Handler por modo
+      if (genMode === "image") {
+        const rawImages = Array.isArray(data.images) ? data.images : [];
+        const next: ImageVariant[] = rawImages
+          .filter(
+            (i: unknown): i is ImageVariant =>
+              typeof i === "object" &&
+              i !== null &&
+              typeof (i as ImageVariant).dataUri === "string",
+          )
+          .map((i: ImageVariant) => ({
+            dataUri: i.dataUri,
+            mimeType: i.mimeType ?? "image/png",
+            textResponse: i.textResponse,
+          }));
+        setImages(next);
+        setActiveImageIdx(0);
+        setHtml(null);
+        setVariant(nextVariant);
+      } else if (genMode === "hybrid") {
+        const hybridHtml = typeof data.html === "string" ? data.html : null;
+        const dataUri = typeof data.dataUri === "string" ? data.dataUri : null;
+        setHtml(hybridHtml);
+        if (dataUri) {
+          setImages([{ dataUri, mimeType: "image/png" }]);
+          setActiveImageIdx(0);
+        } else {
+          setImages([]);
+        }
+        setVariant(nextVariant);
+        if (hybridHtml) {
+          const entry: HistoryEntry = {
+            id: new Date().toISOString(),
+            skillId,
+            brief,
+            variant: nextVariant,
+            html: hybridHtml,
+            persona: aiPersona,
+          };
+          setHistory(pushHistory(entry));
+        }
+      } else {
+        // mode === "html"
+        const htmlOut = typeof data.html === "string" ? data.html : null;
+        setHtml(htmlOut);
+        setImages([]);
+        setVariant(nextVariant);
+        if (htmlOut) {
+          const entry: HistoryEntry = {
+            id: new Date().toISOString(),
+            skillId,
+            brief,
+            variant: nextVariant,
+            html: htmlOut,
+            persona: aiPersona,
+          };
+          setHistory(pushHistory(entry));
+        }
+      }
     } catch (e) {
       setError((e as Error).message || "Falló la generación");
     } finally {
@@ -199,10 +300,14 @@ export function TabOpenBui() {
     brief: string;
     persona: "mark" | "lua";
     title: string;
+    mode?: OpenDesignMode;
+    aspect?: OpenDesignAspect;
   }) {
     setSkillId(tpl.skillId);
     setBrief(tpl.brief);
     setActiveTab("idea");
+    if (tpl.mode) setGenMode(tpl.mode);
+    if (tpl.aspect) setAspectRatio(tpl.aspect);
     setToast(`Plantilla "${tpl.title}" cargada`);
   }
 
@@ -272,11 +377,19 @@ export function TabOpenBui() {
                     error={error}
                     onSwitchToCanvas={() => setMode("canvas")}
                     personaLabel={personaLabel}
+                    imageDataUri={
+                      genMode === "image" && images.length > 0
+                        ? images[activeImageIdx]?.dataUri ?? null
+                        : null
+                    }
+                    aspectRatio={aspectRatio}
                   />
                   <PreviewMeta
                     variant={variant}
                     html={html}
                     skillLabel={skill.label}
+                    genMode={genMode}
+                    imageCount={images.length}
                   />
                 </div>
 
@@ -305,6 +418,13 @@ export function TabOpenBui() {
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
                     toast={setToast}
+                    genMode={genMode}
+                    setGenMode={setGenMode}
+                    aspectRatio={aspectRatio}
+                    setAspectRatio={setAspectRatio}
+                    images={images}
+                    activeImageIdx={activeImageIdx}
+                    setActiveImageIdx={setActiveImageIdx}
                   />
                 </div>
               </div>
@@ -453,21 +573,46 @@ function PreviewMeta({
   variant,
   html,
   skillLabel,
+  genMode,
+  imageCount,
 }: {
   variant: number;
   html: string | null;
   skillLabel: string;
+  genMode: OpenDesignMode;
+  imageCount: number;
 }) {
+  const showMode = genMode !== "html";
+  const modeLabel =
+    genMode === "image" ? "Nano Banana" : genMode === "hybrid" ? "Híbrido" : "HTML";
   return (
     <div className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-card/85 backdrop-blur border border-border/60 text-[10px] font-mono text-muted-foreground shadow-sm">
       <ChevronRight className="size-2.5 text-[hsl(var(--brand-violet))]" />
       <span className="text-foreground font-semibold">{skillLabel}</span>
-      {html && (
+      {showMode && (
+        <>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="text-[hsl(var(--brand-violet))] font-bold">{modeLabel}</span>
+        </>
+      )}
+      {(html || imageCount > 0) && (
         <>
           <span className="text-muted-foreground/40">·</span>
           <span>v{variant}</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span>{Math.round(html.length / 1024)}KB</span>
+          {html && (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span>{Math.round(html.length / 1024)}KB</span>
+            </>
+          )}
+          {!html && imageCount > 0 && (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span>
+                {imageCount} img
+              </span>
+            </>
+          )}
         </>
       )}
     </div>

@@ -1,32 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SKILLS, BRAND } from "@/components/open-bui/skills";
 import { buildCreativeContextBlock } from "@/lib/creative-docs";
+import {
+  generateImage,
+  toDataUri,
+  stripDataUriPrefix,
+  type BrandKitInput,
+  type ImageAspectRatio,
+} from "@/lib/nano-banana";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Nano Banana puede tardar 15-30s.
+
+type Mode = "html" | "image" | "hybrid";
 
 interface Body {
+  /** Default "html" para preservar el comportamiento existente. */
+  mode?: Mode;
+  // ----- modo "html" (legacy)
   skillId?: string;
   brief?: string;
   variant?: number;
   persona?: "mark" | "lua";
+  // ----- modos "image" / "hybrid" (Nano Banana)
+  /** Prompt directo · si viene, se usa tal cual; si no, fallback a `brief`. */
+  prompt?: string;
+  brandKit?: BrandKitInput;
+  aspectRatio?: ImageAspectRatio;
+  /** Imagen referencia opcional · acepta data URI o base64 plano. */
+  referenceImage?: string;
+  /** Cantidad de variantes a generar (image-only) · default 1 · max 4. */
+  variants?: number;
 }
 
 /**
  * POST /api/design/generate
- * Body: { skillId, brief, variant? }
- * Devuelve: { html, skillId, variant, finishReason, usage, truncated }
+ *
+ * 3 modos:
+ *   - "html"   (legacy) · Gemini text → HTML+CSS autocontenido
+ *   - "image"  (Nano Banana) · imagen pura (base64) · 1-4 variantes
+ *   - "hybrid" (Nano Banana + wrapper) · HTML con la imagen como bg
+ *
  * Errores:
- *   - 400 · skillId/brief inválidos
+ *   - 400 · body inválido
  *   - 429 · { quotaExhausted: true, hint } cuando Gemini agotó cuota
  *   - 500/502 · resto
- *
- * Sincronizado con /api/gemini (commit 41eba5c):
- *   - Modelo fijo gemini-2.5-flash (NO el alias "latest" que rota)
- *   - thinkingConfig.thinkingBudget = 0 (evita que se coma el budget)
- *   - maxOutputTokens 4096 (HTML+CSS suele necesitar más)
- *   - Mensajes claros con flag quotaExhausted para que el cliente
- *     muestre instrucciones al usuario y deshabilite el botón.
  */
 export async function POST(req: NextRequest) {
   const key = process.env.GEMINI_API_KEY;
@@ -41,13 +60,110 @@ export async function POST(req: NextRequest) {
   try {
     body = (await req.json()) as Body;
   } catch {
-    body = {};
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  const mode: Mode = body.mode ?? "html";
+
+  if (mode === "html") {
+    return handleHtmlMode(body, key);
+  }
+
+  if (mode === "image" || mode === "hybrid") {
+    const prompt = (body.prompt ?? body.brief ?? "").trim();
+    if (prompt.length < 4) {
+      return NextResponse.json(
+        { error: "El prompt es demasiado corto (min 4 caracteres)." },
+        { status: 400 },
+      );
+    }
+    const variants = Math.min(4, Math.max(1, body.variants ?? 1));
+    const aspectRatio: ImageAspectRatio = body.aspectRatio ?? "1:1";
+    const brandKit = body.brandKit ?? defaultBrandKit();
+    const reference = body.referenceImage
+      ? stripDataUriPrefix(body.referenceImage)
+      : undefined;
+
+    try {
+      if (mode === "image") {
+        const results = await Promise.all(
+          Array.from({ length: variants }, () =>
+            generateImage({
+              prompt,
+              brandKit,
+              aspectRatio,
+              referenceImage: reference,
+              apiKey: key,
+            }),
+          ),
+        );
+        const images = results.map((r) => ({
+          dataUri: toDataUri(r),
+          mimeType: r.mimeType,
+          textResponse: r.textResponse,
+        }));
+        return NextResponse.json({ mode: "image", aspectRatio, images });
+      }
+
+      // mode === "hybrid"
+      const imageResult = await generateImage({
+        prompt,
+        brandKit,
+        aspectRatio,
+        referenceImage: reference,
+        apiKey: key,
+      });
+      const dataUri = toDataUri(imageResult);
+      const dims = aspectToDims(aspectRatio);
+      const fontFamily = brandKit.fontFamily ?? "Inter, system-ui";
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        *,*::before,*::after { box-sizing: border-box }
+        html,body { margin: 0; padding: 0; width: ${dims.w}px; height: ${dims.h}px; font-family: ${fontFamily}, sans-serif; overflow: hidden; }
+        .card { width: 100%; height: 100%; background-image: url('${dataUri}'); background-size: cover; background-position: center; background-repeat: no-repeat; }
+      </style></head><body><div class="card"></div></body></html>`;
+      return NextResponse.json({
+        mode: "hybrid",
+        aspectRatio,
+        html,
+        dataUri,
+        width: dims.w,
+        height: dims.h,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error generando imagen";
+      const isQuota = /quota|rate.?limit|exceeded|resource has been exhausted/i.test(
+        msg,
+      );
+      return NextResponse.json(
+        {
+          error: msg,
+          quotaExhausted: isQuota,
+          hint: isQuota
+            ? "El tier gratuito de Gemini se agotó. Activa billing en Google AI Studio o espera el reset (~24h). Mientras tanto puedes usar el modo HTML o el Canvas manual."
+            : undefined,
+        },
+        { status: isQuota ? 429 : 500 },
+      );
+    }
+  }
+
+  return NextResponse.json(
+    { error: `mode inválido "${String(mode)}" · usa html|image|hybrid` },
+    { status: 400 },
+  );
+}
+
+/* =============================================================== */
+/* MODO HTML (legacy preservado) — implementación original          */
+/* =============================================================== */
+
+async function handleHtmlMode(body: Body, key: string): Promise<NextResponse> {
   const skill = SKILLS.find((s) => s.id === body.skillId);
   if (!skill) {
     return NextResponse.json(
-      { error: `skillId inválido. Disponibles: ${SKILLS.map((s) => s.id).join(", ")}` },
+      {
+        error: `skillId inválido. Disponibles: ${SKILLS.map((s) => s.id).join(", ")}`,
+      },
       { status: 400 },
     );
   }
@@ -62,7 +178,6 @@ export async function POST(req: NextRequest) {
   const persona: "mark" | "lua" = body.persona === "lua" ? "lua" : "mark";
 
   let system = buildSystemPrompt(skill, variant, persona);
-  // Adjuntar contexto creativo (briefs + guías de marca) si existen docs
   try {
     const creative = await buildCreativeContextBlock();
     if (creative) {
@@ -73,7 +188,6 @@ export async function POST(req: NextRequest) {
   }
   const userMsg = `Brief del usuario: "${brief}"\nVariante: ${variant}\n\nDevuelve SOLO el documento HTML completo, sin markdown, sin triple backticks, sin texto antes ni después.`;
 
-  // Modelo fijo · NO usar "gemini-flash-latest" (alias que rota a 2.5+/3.x).
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const maxOutputTokens = Number(process.env.GEMINI_MAX_TOKENS ?? "4096");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
@@ -90,9 +204,6 @@ export async function POST(req: NextRequest) {
           maxOutputTokens,
           temperature: variant > 0 ? 0.95 : 0.7,
           topP: 0.95,
-          // Desactiva tokens de "thinking" internos · si el modelo los
-          // soporta, evita que el presupuesto se consuma antes del HTML.
-          // Modelos antiguos ignoran esta key (no rompe).
           thinkingConfig: { thinkingBudget: 0 },
         },
       }),
@@ -151,6 +262,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
+    mode: "html",
     html,
     skillId: skill.id,
     variant,
@@ -158,6 +270,29 @@ export async function POST(req: NextRequest) {
     usage: data?.usageMetadata,
     truncated: finishReason === "MAX_TOKENS",
   });
+}
+
+function defaultBrandKit(): BrandKitInput {
+  return {
+    primaryColor: BRAND.colors.primary,
+    secondaryColor: BRAND.colors.secondary,
+    accentColor: BRAND.colors.accentAi,
+    fontFamily: BRAND.fonts.display,
+    voice: BRAND.voice,
+  };
+}
+
+function aspectToDims(ar: ImageAspectRatio): { w: number; h: number } {
+  switch (ar) {
+    case "1:1":
+      return { w: 1080, h: 1080 };
+    case "9:16":
+      return { w: 1080, h: 1920 };
+    case "16:9":
+      return { w: 1920, h: 1080 };
+    case "4:5":
+      return { w: 1080, h: 1350 };
+  }
 }
 
 function buildSystemPrompt(
@@ -375,7 +510,7 @@ const MOJIBAKE_MAP: Array<[string, string]> = [
   ["Â¡", "¡"],
   ["Â°", "°"],
   ["Â·", "·"],
-  ["Â", ""], // dangling Â antes de cualquier otro
+  ["Â", ""],
   ["Ã‰", "É"],
   ["Ã®", "î"],
   ["Ã¤", "ä"],
@@ -394,14 +529,6 @@ function fixMojibake(s: string): string {
   return out;
 }
 
-/**
- * Extrae el HTML útil de la respuesta del modelo.
- * - Quita fences ```html ... ``` si vinieron.
- * - Si arranca con <!DOCTYPE o <html, lo deja tal cual.
- * - Si trae <html> embebido en medio, recorta.
- * - Como último recurso, envuelve fragmento en esqueleto mínimo.
- * - Aplica fix de mojibake al final.
- */
 function extractHtml(raw: string, skill: (typeof SKILLS)[number]): string | null {
   let s = raw.trim();
   const fence = s.match(/```(?:html)?\s*\n?([\s\S]*?)```/i);

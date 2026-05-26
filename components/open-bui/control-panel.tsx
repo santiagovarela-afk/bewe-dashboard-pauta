@@ -15,6 +15,8 @@ import {
   Image as ImageIcon,
   X,
   History,
+  FileCode,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,8 +27,19 @@ import { ReferencesPanel } from "./references-panel";
 import { ExportButtons } from "./export-buttons";
 import type { Skill } from "./skills";
 import type { HistoryEntry } from "./history";
+import type {
+  OpenDesignAspect,
+  OpenDesignMode,
+} from "@/lib/open-design-templates";
 
 export type ControlTab = "format" | "idea" | "brand" | "refs" | "export";
+
+/** Variante de imagen para el grid de preview. */
+interface ImageVariant {
+  dataUri: string;
+  mimeType: string;
+  textResponse?: string;
+}
 
 interface ControlPanelProps {
   skillId: string;
@@ -52,6 +65,16 @@ interface ControlPanelProps {
   activeTab: ControlTab;
   setActiveTab: (t: ControlTab) => void;
   toast: (msg: string) => void;
+  /** Modo de generación · html | image | hybrid. */
+  genMode: OpenDesignMode;
+  setGenMode: (m: OpenDesignMode) => void;
+  /** Aspect ratio (solo image/hybrid). */
+  aspectRatio: OpenDesignAspect;
+  setAspectRatio: (a: OpenDesignAspect) => void;
+  /** Variantes de imagen del último generate (modo image). */
+  images: ImageVariant[];
+  activeImageIdx: number;
+  setActiveImageIdx: (i: number) => void;
 }
 
 const QUICK_PROMPTS = [
@@ -84,6 +107,13 @@ export function ControlPanel(props: ControlPanelProps) {
     activeTab,
     setActiveTab,
     toast,
+    genMode,
+    setGenMode,
+    aspectRatio,
+    setAspectRatio,
+    images,
+    activeImageIdx,
+    setActiveImageIdx,
   } = props;
 
   const inCooldown = cooldownRemainingMs > 0;
@@ -191,6 +221,50 @@ export function ControlPanel(props: ControlPanelProps) {
               transition={{ duration: 0.18 }}
               className="space-y-3"
             >
+              {/* Mode selector · HTML/Imagen IA/Híbrido */}
+              <ModeSelector mode={genMode} onChange={setGenMode} loading={loading} />
+
+              {/* Aspect ratio selector · solo image/hybrid */}
+              <AnimatePresence>
+                {(genMode === "image" || genMode === "hybrid") && (
+                  <motion.div
+                    key="aspect"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <AspectRatioSelector
+                      value={aspectRatio}
+                      onChange={setAspectRatio}
+                      loading={loading}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Image variants grid · solo cuando hay imágenes generadas */}
+              <AnimatePresence>
+                {genMode === "image" && images.length > 0 && (
+                  <motion.div
+                    key="imgrid"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <ImageVariantsGrid
+                      images={images}
+                      activeIdx={activeImageIdx}
+                      onPick={setActiveImageIdx}
+                      onEdit={() => {
+                        // Vuelve el foco al textarea sin tocar el brief
+                        toast("Editá el prompt y volvé a generar");
+                      }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <PenLine className="size-3.5 text-[hsl(var(--brand-violet))]" />
@@ -508,4 +582,263 @@ function formatMmSs(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/* ============= Mode selector · HTML / Image / Hybrid ============== */
+
+function ModeSelector({
+  mode,
+  onChange,
+  loading,
+}: {
+  mode: OpenDesignMode;
+  onChange: (m: OpenDesignMode) => void;
+  loading: boolean;
+}) {
+  const options: Array<{
+    id: OpenDesignMode;
+    label: string;
+    sub: string;
+    icon: React.ReactNode;
+    badge?: string;
+  }> = [
+    {
+      id: "html",
+      label: "HTML/CSS",
+      sub: "pieza web",
+      icon: <FileCode className="size-3.5" />,
+    },
+    {
+      id: "image",
+      label: "Imagen IA",
+      sub: "Nano Banana",
+      icon: <Sparkles className="size-3.5" />,
+      badge: "NEW",
+    },
+    {
+      id: "hybrid",
+      label: "Híbrido",
+      sub: "imagen + HTML",
+      icon: <Layers className="size-3.5" />,
+      badge: "NEW",
+    },
+  ];
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">
+        Tipo de pieza
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {options.map((o) => {
+          const active = mode === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onChange(o.id)}
+              disabled={loading}
+              className={cn(
+                "relative rounded-lg border px-2 py-2 text-left transition-all overflow-hidden",
+                active
+                  ? "border-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.1)]"
+                  : "border-border bg-card/40 hover:border-foreground/30",
+                loading && "opacity-50 cursor-not-allowed",
+              )}
+              title={`Modo ${o.label} · ${o.sub}`}
+            >
+              {active && (
+                <motion.div
+                  layoutId="mode-active-bg"
+                  className="absolute inset-0 -z-10"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, hsl(var(--brand-violet)/0.18), hsl(var(--brand-cyan)/0.12))",
+                  }}
+                  transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                />
+              )}
+              {o.badge && (
+                <span
+                  className="absolute top-1 right-1 text-[8px] font-extrabold px-1 py-[1px] rounded text-white"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, #60A5FA 0%, #34D399 50%, #FAD19E 100%)",
+                  }}
+                >
+                  {o.badge}
+                </span>
+              )}
+              <div className="flex items-center gap-1.5 text-[hsl(var(--brand-violet))]">
+                {o.icon}
+                <div className="text-[11px] font-bold text-foreground leading-tight">
+                  {o.label}
+                </div>
+              </div>
+              <div className="text-[9px] text-muted-foreground mt-0.5 leading-tight">
+                {o.sub}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {mode === "image" && (
+        <div className="text-[9.5px] text-muted-foreground/80 leading-snug px-1 italic">
+          Nano Banana puede tardar 15-30s para imágenes detalladas.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============= Aspect ratio selector (image/hybrid) =============== */
+
+function AspectRatioSelector({
+  value,
+  onChange,
+  loading,
+}: {
+  value: OpenDesignAspect;
+  onChange: (a: OpenDesignAspect) => void;
+  loading: boolean;
+}) {
+  const options: Array<{ id: OpenDesignAspect; label: string; hint: string }> = [
+    { id: "1:1", label: "1:1", hint: "Post cuadrado" },
+    { id: "9:16", label: "9:16", hint: "Story/Reel" },
+    { id: "16:9", label: "16:9", hint: "Landscape" },
+    { id: "4:5", label: "4:5", hint: "IG portrait" },
+  ];
+  return (
+    <div className="rounded-lg border border-border/60 bg-card/50 p-2.5 space-y-1.5">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">
+        Formato
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {options.map((o) => {
+          const active = value === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onChange(o.id)}
+              disabled={loading}
+              className={cn(
+                "rounded-md border px-1 py-1.5 transition-all text-center",
+                active
+                  ? "border-[hsl(var(--brand-violet))] bg-[hsl(var(--brand-violet)/0.1)]"
+                  : "border-border bg-card/40 hover:border-foreground/30",
+                loading && "opacity-50 cursor-not-allowed",
+              )}
+              title={`${o.label} · ${o.hint}`}
+            >
+              <div className="text-[11px] font-bold font-mono leading-tight">
+                {o.label}
+              </div>
+              <div className="text-[8.5px] text-muted-foreground mt-0.5 leading-tight">
+                {o.hint}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ============= Image variants grid (image mode) =================== */
+
+function ImageVariantsGrid({
+  images,
+  activeIdx,
+  onPick,
+  onEdit,
+}: {
+  images: ImageVariant[];
+  activeIdx: number;
+  onPick: (i: number) => void;
+  onEdit: () => void;
+}) {
+  function download(idx: number) {
+    const img = images[idx];
+    if (!img) return;
+    const a = document.createElement("a");
+    a.href = img.dataUri;
+    a.download = `bewe-nano-banana-${idx + 1}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+  return (
+    <div className="rounded-lg border border-border/60 bg-card/50 p-2.5 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">
+          <Sparkles className="size-3" />
+          Variantes · {images.length}
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-[9.5px] font-semibold text-[hsl(var(--brand-violet))] hover:underline"
+        >
+          Editar prompt
+        </button>
+      </div>
+      <div
+        className={cn(
+          "grid gap-1.5",
+          images.length === 1
+            ? "grid-cols-1"
+            : images.length === 2
+              ? "grid-cols-2"
+              : "grid-cols-2",
+        )}
+      >
+        {images.map((img, i) => {
+          const active = i === activeIdx;
+          return (
+            <div
+              key={i}
+              className={cn(
+                "relative rounded-md overflow-hidden border-2 transition-all cursor-zoom-in",
+                active
+                  ? "border-[hsl(var(--brand-violet))] shadow-[0_4px_18px_-4px_hsl(var(--brand-violet)/0.5)]"
+                  : "border-border hover:border-foreground/30",
+              )}
+              onClick={() => onPick(i)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={img.dataUri}
+                alt={`Variante ${i + 1}`}
+                className="block w-full aspect-square object-cover"
+              />
+              <div className="absolute top-1 left-1 text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-card/85 backdrop-blur text-foreground">
+                v{i + 1}
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  download(i);
+                }}
+                className="absolute bottom-1 right-1 size-6 grid place-items-center rounded-md bg-card/90 backdrop-blur border border-border text-[hsl(var(--brand-violet))] hover:bg-card opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Descargar PNG"
+              >
+                <Download className="size-3" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {images[activeIdx] && (
+        <button
+          type="button"
+          onClick={() => download(activeIdx)}
+          className="w-full inline-flex items-center justify-center gap-1.5 text-[10.5px] font-semibold px-2 py-1.5 rounded-md border border-border bg-card hover:bg-secondary transition-colors"
+        >
+          <Download className="size-3" />
+          Descargar variante activa (PNG)
+        </button>
+      )}
+    </div>
+  );
 }

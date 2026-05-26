@@ -147,6 +147,21 @@ function TemplateCard({
           {tpl.description}
         </div>
       </div>
+      {tpl.mode === "image" || tpl.mode === "hybrid" ? (
+        <div className="absolute top-2 left-2">
+          <div
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white shadow-sm"
+            style={{
+              background:
+                "linear-gradient(90deg, #60A5FA 0%, #34D399 50%, #FAD19E 100%)",
+            }}
+            title={tpl.mode === "image" ? "Imagen IA · Nano Banana" : "Híbrido · imagen + HTML"}
+          >
+            <Sparkles className="size-2.5" />
+            {tpl.mode === "image" ? "AI" : "Mix"}
+          </div>
+        </div>
+      ) : null}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-card/95 border border-border text-[9px] font-bold text-[hsl(var(--brand-violet))]">
           <Sparkles className="size-2.5" /> Usar

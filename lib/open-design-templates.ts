@@ -18,6 +18,12 @@ export type OpenDesignCategory =
   | "carrusel"
   | "email";
 
+/** Modo de generación · "html" Gemini-text · "image" Nano Banana · "hybrid" mix. */
+export type OpenDesignMode = "html" | "image" | "hybrid";
+
+/** Aspect ratio para los modos image/hybrid. */
+export type OpenDesignAspect = "1:1" | "9:16" | "16:9" | "4:5";
+
 export interface OpenDesignTemplate {
   id: string;
   /** Skill id (debe existir en SKILLS). */
@@ -27,6 +33,10 @@ export interface OpenDesignTemplate {
   description: string;
   brief: string;
   persona: "mark" | "lua";
+  /** Modo de generación recomendado · default "html" para retro-compat. */
+  mode?: OpenDesignMode;
+  /** Aspect ratio sugerido cuando mode es image/hybrid. */
+  aspect?: OpenDesignAspect;
   /** Render del thumbnail · recibe className para tamaño. */
   thumb: (className?: string) => string;
 }
@@ -225,6 +235,114 @@ export const OPEN_DESIGN_TEMPLATES: OpenDesignTemplate[] = [
         <path d="M64 60 Q76 52 88 60 L88 68 L64 68 Z" fill="#0A2540" opacity="0.6"/>
         `,
         "#CCFBF1",
+      ),
+  },
+  /* =============== Nano Banana · Image-only templates =============== */
+  {
+    id: "tpl-img-ig-oferta",
+    skillId: "ig-post",
+    category: "post",
+    title: "Post Instagram · oferta",
+    description: "Imagen IA · anuncio bold con value prop + CTA acento",
+    persona: "mark",
+    mode: "image",
+    aspect: "1:1",
+    brief:
+      "Anuncio bold con el value prop principal en tipografía grande sobre fondo brand color, CTA al pie en color acento. Composición editorial limpia, espacio negativo, sin elementos de stock.",
+    thumb: () =>
+      svg(
+        `
+        <rect x="0" y="0" width="100" height="100" fill="url(#nbg1)"/>
+        <defs><linearGradient id="nbg1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#60A5FA"/>
+          <stop offset="100%" stop-color="#34D399"/>
+        </linearGradient></defs>
+        <text x="14" y="40" font-family="Inter" font-weight="900" font-size="14" fill="#fff">-30%</text>
+        <text x="14" y="55" font-family="Inter" font-weight="700" font-size="6" fill="#fff" opacity="0.9">primer mes</text>
+        <rect x="14" y="78" width="36" height="8" rx="4" fill="#FAD19E"/>
+        <text x="32" y="84" font-family="Inter" font-weight="700" font-size="4.5" fill="#0A2540" text-anchor="middle">Probar →</text>
+        `,
+        "#60A5FA",
+      ),
+  },
+  {
+    id: "tpl-img-reel-cover",
+    skillId: "ig-reel",
+    category: "reel",
+    title: "Reel cover · primer frame",
+    description: "Imagen IA · cover vertical con hook + mockup producto",
+    persona: "lua",
+    mode: "image",
+    aspect: "9:16",
+    brief:
+      "Cover de reel con hook llamativo arriba en tipografía editorial bold, mockup de producto centrado, branding sutil al pie. Mood profesional pero humano. Lighting natural.",
+    thumb: () =>
+      svg(
+        `
+        <rect x="20" y="6" width="60" height="88" rx="4" fill="url(#nbg2)"/>
+        <defs><linearGradient id="nbg2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#FAD19E"/>
+          <stop offset="100%" stop-color="#CCFBF1"/>
+        </linearGradient></defs>
+        <text x="50" y="22" font-family="Inter" font-weight="900" font-size="7" fill="#0A2540" text-anchor="middle">¿Sabías</text>
+        <text x="50" y="30" font-family="Inter" font-weight="900" font-size="7" fill="#0A2540" text-anchor="middle">que…?</text>
+        <rect x="34" y="44" width="32" height="32" rx="4" fill="#60A5FA" opacity="0.85"/>
+        <circle cx="50" cy="60" r="6" fill="#fff"/>
+        <text x="50" y="88" font-family="Inter" font-weight="700" font-size="4" fill="#0A2540" text-anchor="middle">Bewe</text>
+        `,
+        "#FEF3C7",
+      ),
+  },
+  {
+    id: "tpl-img-carrusel-hook",
+    skillId: "ig-carousel-1",
+    category: "carrusel",
+    title: "Carrusel slide 1 · hook",
+    description: "Imagen IA · pregunta provocativa editorial",
+    persona: "mark",
+    mode: "image",
+    aspect: "4:5",
+    brief:
+      "Primera lámina de carrusel con pregunta provocativa en tipografía editorial grande. Composición minimal · respiro vertical · indicador swipe sutil al pie.",
+    thumb: () =>
+      svg(
+        `
+        <rect x="0" y="0" width="100" height="100" fill="#FEF3C7"/>
+        <text x="14" y="32" font-family="Inter" font-weight="900" font-size="10" fill="#0A2540">¿Por qué</text>
+        <text x="14" y="46" font-family="Inter" font-weight="900" font-size="10" fill="#0A2540">perdés</text>
+        <text x="14" y="60" font-family="Inter" font-weight="900" font-size="10" fill="#60A5FA">clientes?</text>
+        <circle cx="78" cy="22" r="4" fill="#34D399"/>
+        <text x="14" y="90" font-family="Inter" font-weight="700" font-size="5" fill="#0A2540" opacity="0.5">Desliza →</text>
+        `,
+        "#FEF3C7",
+      ),
+  },
+  {
+    id: "tpl-img-story-cta",
+    skillId: "ig-story",
+    category: "story",
+    title: "Stories · CTA registro",
+    description: "Imagen IA · vertical con glow brand y espacio CTA",
+    persona: "lua",
+    mode: "image",
+    aspect: "9:16",
+    brief:
+      "Story vertical con texto centrado, glow sutil del brand color desde el centro, espacio inferior reservado para CTA. Mood premium · respiro generoso · sin elementos genéricos.",
+    thumb: () =>
+      svg(
+        `
+        <rect x="20" y="6" width="60" height="88" rx="4" fill="#0A2540"/>
+        <radialGradient id="nbg3" cx="0.5" cy="0.45" r="0.4">
+          <stop offset="0%" stop-color="#60A5FA" stop-opacity="0.55"/>
+          <stop offset="100%" stop-color="#0A2540" stop-opacity="0"/>
+        </radialGradient>
+        <rect x="20" y="6" width="60" height="88" rx="4" fill="url(#nbg3)"/>
+        <text x="50" y="46" font-family="Inter" font-weight="900" font-size="7" fill="#fff" text-anchor="middle">Empezá</text>
+        <text x="50" y="54" font-family="Inter" font-weight="900" font-size="7" fill="#fff" text-anchor="middle">hoy</text>
+        <rect x="32" y="76" width="36" height="8" rx="4" fill="#FAD19E"/>
+        <text x="50" y="82" font-family="Inter" font-weight="700" font-size="4" fill="#0A2540" text-anchor="middle">Registrarme</text>
+        `,
+        "#0A2540",
       ),
   },
 ];

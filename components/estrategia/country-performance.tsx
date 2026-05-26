@@ -3,6 +3,7 @@ import * as React from "react";
 import { Globe2, TrendingUp, TrendingDown } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { PLAN } from "@/lib/config";
+import { CAMPAIGN_LIFECYCLE } from "@/lib/campaign-metadata";
 import { cn, fmt } from "@/lib/utils";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
@@ -91,12 +92,30 @@ export function CountryPerformance() {
       try {
         const u = new URL("/api/meta", window.location.origin);
         u.searchParams.set("endpoint", `${PLAN.meta.accountId}/insights`);
-        u.searchParams.set("date_preset", "this_month");
+        // Usar time_range con la ventana exacta del plan (launchISO → hoy)
+        // en lugar de date_preset=this_month que incluye los primeros días
+        // del mes ANTES del lanzamiento del plan (ej. 1-11 may con spend
+        // de campañas viejas).
+        const launchISO = PLAN.launchISO.slice(0, 10); // YYYY-MM-DD
+        const todayISO = new Date().toISOString().slice(0, 10);
+        u.searchParams.set(
+          "time_range",
+          JSON.stringify({ since: launchISO, until: todayISO }),
+        );
         u.searchParams.set("level", "account");
         u.searchParams.set("breakdowns", "country");
         u.searchParams.set(
           "fields",
           "spend,impressions,clicks,ctr,actions",
+        );
+        // Filtrar solo campañas del plan vigente (CAMPAIGN_LIFECYCLE) para
+        // evitar contaminar el breakdown con campañas viejas o tests.
+        const planCids = Object.keys(CAMPAIGN_LIFECYCLE);
+        u.searchParams.set(
+          "filtering",
+          JSON.stringify([
+            { field: "campaign.id", operator: "IN", value: planCids },
+          ]),
         );
         u.searchParams.set("limit", "500");
         const resp = await fetch(u.toString(), { signal: ctrl.signal });

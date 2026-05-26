@@ -716,30 +716,31 @@ export function TabDashboard() {
       {/* KPI ROW · Costo por lead */}
       <section>
         <SectionHeader
-          title="Métricas clave"
-          sub={`Snapshot agregado · ${ctx.label.toLowerCase()}`}
+          title="Métricas clave del plan"
+          sub={`Snapshot agregado · ${PLAN.monthLabel} · día ${monthly.daysElapsed} de ${PLAN.totalDays}`}
         />
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
           <KpiCard
             label="Gasto total"
-            value={m.spend}
+            value={monthly.spend}
             format={(v) => fmt.eur(v, { decimals: 0 })}
             sub={
               <ExplainedMetric
                 explanation={
                   <div>
-                    <strong>Gasto total</strong>
+                    <strong>Gasto total del plan</strong>
                     <br />
-                    Suma del spend de todas las campañas (activas + pausadas que
-                    gastaron) en el rango seleccionado. Convertido a EUR si la
-                    cuenta opera en otra divisa.
+                    Suma del spend de todas las campañas del plan {PLAN.monthLabel}
+                    {" "}desde {PLAN.launchISO.slice(0, 10)} hasta hoy.
+                    Independiente del filtro de período de arriba (que solo afecta
+                    los números del hero).
                     <br />
                     <br />
                     Target Julián · €{PLAN.budget.toLocaleString("es")} en {PLAN.totalDays} días.
                   </div>
                 }
               >
-                <span className="text-[10px]">{`${Math.round(m.budgetPct)}% · ${fmt.eur(m.remaining, { decimals: 0 })} restante`}</span>
+                <span className="text-[10px]">{`${Math.round(monthly.budgetPct)}% del budget · ${fmt.eur(PLAN.budget - monthly.spend, { decimals: 0 })} restante`}</span>
               </ExplainedMetric>
             }
             tone="default"
@@ -753,16 +754,16 @@ export function TabDashboard() {
           />
           <KpiCard
             label="Costo por lead"
-            value={m.cptReg ?? 0}
-            format={(v) => (m.cptReg === null ? "sin leads" : fmt.eur(v))}
+            value={monthly.cplCR}
+            format={(v) => (monthly.leads === 0 ? "sin leads" : fmt.eur(v))}
             sub={
               <ExplainedMetric
                 explanation={
                   <div>
-                    <strong>Costo por Lead (CPL)</strong>
+                    <strong>Costo por Lead (CPL) · acumulado del plan</strong>
                     <br />
                     Spend total dividido por eventos CompleteRegistration de las
-                    campañas optimizadas a CR (C1, C2, C4).
+                    campañas optimizadas a CR desde {PLAN.launchISO.slice(0, 10)}.
                     <br />
                     <br />
                     <strong>{GLOSSARY.cr.term}</strong> · {GLOSSARY.cr.short}
@@ -771,15 +772,15 @@ export function TabDashboard() {
                   </div>
                 }
               >
-                <span className="text-[10px]">{m.totalConvCR} leads · CR campañas</span>
+                <span className="text-[10px]">{monthly.leads} leads · CR campañas</span>
               </ExplainedMetric>
             }
             tone={
-              m.cptReg === null
+              monthly.cplCR === 0
                 ? "default"
-                : cptTone(m.cptReg) === "success"
+                : cptTone(monthly.cplCR) === "success"
                   ? "success"
-                  : cptTone(m.cptReg) === "warning"
+                  : cptTone(monthly.cplCR) === "warning"
                     ? "warning"
                     : "danger"
             }
@@ -788,31 +789,32 @@ export function TabDashboard() {
           />
           <KpiCard
             label="Costo por IC"
-            value={m.cptIco ?? 0}
-            format={(v) => (m.cptIco === null ? "sin IC" : fmt.eur(v))}
+            value={monthly.cpicIC}
+            format={(v) => (monthly.ic === 0 ? "sin IC" : fmt.eur(v))}
             sub={
               <ExplainedMetric
                 explanation={
                   <div>
-                    <strong>Costo por Initiate Checkout (CPIC)</strong>
+                    <strong>Costo por Initiate Checkout (CPIC) · acumulado</strong>
                     <br />
-                    Spend de campañas IC dividido por sus eventos initiate_checkout.
-                    Excluye C3 (CID 52551556895286) por anomalía de pixel.
+                    Spend de campañas IC dividido por sus eventos initiate_checkout
+                    desde {PLAN.launchISO.slice(0, 10)}.
+                    Excluye MX_SERVICIOS original por anomalía de pixel.
                     <br />
                     <br />
                     <strong>{GLOSSARY.ic.term}</strong> · {GLOSSARY.ic.short}
                   </div>
                 }
               >
-                <span className="text-[10px]">{m.totalConvIC} IC · IC campañas</span>
+                <span className="text-[10px]">{monthly.ic} IC · IC campañas</span>
               </ExplainedMetric>
             }
             tone={
-              m.cptIco === null
+              monthly.cpicIC === 0
                 ? "default"
-                : cptTone(m.cptIco) === "success"
+                : cptTone(monthly.cpicIC) === "success"
                   ? "lime"
-                  : cptTone(m.cptIco) === "warning"
+                  : cptTone(monthly.cpicIC) === "warning"
                     ? "warning"
                     : "danger"
             }

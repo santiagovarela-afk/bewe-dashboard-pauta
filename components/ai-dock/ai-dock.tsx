@@ -470,7 +470,9 @@ export function AiDock() {
               "transition-[width,height] duration-300",
             )}
             style={{
-              touchAction: minimized ? "auto" : "none",
+              // touchAction auto · NO bloquear scroll del cuerpo. El drag se
+              // maneja solo desde el header (onPointerDown → dragControls).
+              touchAction: "auto",
               transformOrigin: "100% 100%",
             }}
           >
@@ -485,11 +487,13 @@ export function AiDock() {
               }}
             />
 
-            {/* Header — drag handle */}
+            {/* Header — drag handle · touch-action none SOLO acá para que el
+                drag no scrollee la página, sin afectar el scroll del cuerpo. */}
             <div
               onPointerDown={(e) => {
                 if (!minimized) dragControls.start(e);
               }}
+              style={{ touchAction: minimized ? "auto" : "none" }}
               className={cn(
                 "relative flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border/60",
                 isMark

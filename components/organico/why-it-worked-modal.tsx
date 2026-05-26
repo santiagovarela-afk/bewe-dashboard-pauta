@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   X,
@@ -310,7 +311,31 @@ export function WhyItWorkedModal({
       ? (engagement / post.video_views) * 100
       : null;
 
-  return (
+  // Bloquear scroll del body cuando el modal está abierto · escape para cerrar.
+  React.useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+
+  // Renderizar via portal a document.body para evitar problemas de
+  // posicionamiento por containers con transform/filter que rompen `fixed`.
+  const [portalRoot, setPortalRoot] = React.useState<HTMLElement | null>(null);
+  React.useEffect(() => {
+    setPortalRoot(document.body);
+  }, []);
+
+  if (!portalRoot) return null;
+
+  const modal = (
     <AnimatePresence>
       {open && (
         <motion.div
@@ -565,6 +590,8 @@ export function WhyItWorkedModal({
       )}
     </AnimatePresence>
   );
+
+  return createPortal(modal, portalRoot);
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────

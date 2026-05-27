@@ -210,6 +210,53 @@ const WEEKLY: WeekRow[] = [
   },
 ];
 
+// ── BLOQUE 3b · Proyección diaria de leads (curva ramp) ──────────
+type RampPhase = "learning" | "push" | "peak" | "taper";
+
+interface DayProjection {
+  day: number; // 1-30
+  leads: number; // leads proyectados ese día
+  phase: RampPhase;
+}
+
+const PHASE_TONE: Record<RampPhase, Tone> = {
+  learning: "warning",
+  push: "cyan",
+  peak: "violet",
+  taper: "success",
+};
+
+const PHASE_LABEL: Record<RampPhase, string> = {
+  learning: "S1 · learning",
+  push: "S2 · push",
+  peak: "S3 · pico",
+  taper: "S4 · taper",
+};
+
+const DAILY_RAMP: DayProjection[] = [
+  // Semana 1 · learning · sube de a poco (total 126)
+  { day: 1, leads: 12, phase: "learning" }, { day: 2, leads: 15, phase: "learning" },
+  { day: 3, leads: 17, phase: "learning" }, { day: 4, leads: 18, phase: "learning" },
+  { day: 5, leads: 19, phase: "learning" }, { day: 6, leads: 21, phase: "learning" },
+  { day: 7, leads: 24, phase: "learning" },
+  // Semana 2 · push (total 203)
+  { day: 8, leads: 27, phase: "push" }, { day: 9, leads: 28, phase: "push" },
+  { day: 10, leads: 29, phase: "push" }, { day: 11, leads: 29, phase: "push" },
+  { day: 12, leads: 30, phase: "push" }, { day: 13, leads: 30, phase: "push" },
+  { day: 14, leads: 30, phase: "push" },
+  // Semana 3 · peak · estabiliza alto (total 217)
+  { day: 15, leads: 32, phase: "peak" }, { day: 16, leads: 32, phase: "peak" },
+  { day: 17, leads: 31, phase: "peak" }, { day: 18, leads: 31, phase: "peak" },
+  { day: 19, leads: 31, phase: "peak" }, { day: 20, leads: 30, phase: "peak" },
+  { day: 21, leads: 30, phase: "peak" },
+  // Semana 4 · taper · baja pero con volumen (total 94, 9 días)
+  { day: 22, leads: 16, phase: "taper" }, { day: 23, leads: 14, phase: "taper" },
+  { day: 24, leads: 13, phase: "taper" }, { day: 25, leads: 11, phase: "taper" },
+  { day: 26, leads: 10, phase: "taper" }, { day: 27, leads: 9, phase: "taper" },
+  { day: 28, leads: 8, phase: "taper" }, { day: 29, leads: 7, phase: "taper" },
+  { day: 30, leads: 6, phase: "taper" },
+];
+
 // ── BLOQUE 4 · Qué pasa cada semana para que baje el CPL ──────────
 interface WeekPlan {
   week: string;
@@ -467,6 +514,337 @@ function tw(tone: Tone, alpha: number): string {
   return `hsl(${TOKEN[tone]} / ${alpha})`;
 }
 
+// ── Sub-componente · Curva diaria de leads (estilo HubSpot) ──────
+function DailyRampChart() {
+  // Geometría del SVG
+  const W = 800;
+  const H = 300;
+  const M = { top: 36, right: 56, bottom: 34, left: 40 };
+  const plotW = W - M.left - M.right;
+  const plotH = H - M.top - M.bottom;
+
+  const days = DAILY_RAMP;
+  const n = days.length;
+
+  // Escala Y izquierda · leads/día (0-35)
+  const yMaxLeads = 35;
+  const yLeads = (v: number): number => M.top + plotH - (v / yMaxLeads) * plotH;
+
+  // Acumulado + escala Y derecha (0-640)
+  let running = 0;
+  const cumulative = days.map((d) => {
+    running += d.leads;
+    return running;
+  });
+  const total = running; // 640
+  const yMaxCum = 640;
+  const yCum = (v: number): number => M.top + plotH - (v / yMaxCum) * plotH;
+
+  // Barras
+  const slot = plotW / n;
+  const barGap = slot * 0.22;
+  const barW = slot - barGap;
+  const barX = (i: number): number => M.left + i * slot + barGap / 2;
+
+  // Línea acumulado · centro de cada barra
+  const cumX = (i: number): number => barX(i) + barW / 2;
+  const cumPath = cumulative
+    .map((c, i) => `${i === 0 ? "M" : "L"} ${cumX(i).toFixed(1)} ${yCum(c).toFixed(1)}`)
+    .join(" ");
+
+  // Punto donde el acumulado cruza 500 (meta mínima)
+  const crossIdx = cumulative.findIndex((c) => c >= 500);
+  const crossDay = crossIdx >= 0 ? days[crossIdx].day : null;
+
+  // Líneas Y guía: meta 500 sobre eje derecho (acumulado)
+  const goalY = yCum(500);
+
+  // Separadores de semana (entre día 7/8, 14/15, 21/22) y etiquetas de fase
+  const weekStarts = [0, 7, 14, 21]; // índices de inicio de cada semana
+  const weekDivX = (startIdx: number): number => M.left + startIdx * slot;
+
+  // Ticks eje X
+  const xTicks = [1, 7, 14, 21, 30];
+
+  // Ticks eje Y izquierdo
+  const yTicks = [0, 10, 20, 30];
+
+  // Mini-stats
+  const peakDay = days.reduce((a, b) => (b.leads > a.leads ? b : a));
+  const day22Cum = cumulative[21]; // día 22 = índice 21
+
+  const stats = [
+    { label: "Pico", value: `${peakDay.leads} leads/día`, note: "sem 3", tone: "violet" as Tone },
+    { label: "Al día 22", value: `~${day22Cum} acum`, note: "supera la meta de 500", tone: "cyan" as Tone },
+    { label: "Cierre", value: `~${total} leads`, note: "total del mes", tone: "success" as Tone },
+  ];
+
+  const legend: { label: string; tone: Tone }[] = [
+    { label: "Sem 1 · learning", tone: PHASE_TONE.learning },
+    { label: "Sem 2 · push", tone: PHASE_TONE.push },
+    { label: "Sem 3 · pico", tone: PHASE_TONE.peak },
+    { label: "Sem 4 · taper", tone: PHASE_TONE.taper },
+  ];
+
+  return (
+    <TextureCard className="p-5">
+      {/* Mini-stats */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            className="rounded-xl border p-3"
+            style={{
+              borderColor: tw(s.tone, 0.35),
+              background: `linear-gradient(135deg, ${tw(s.tone, 0.08)}, hsl(var(--card)))`,
+            }}
+          >
+            <div className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+              {s.label}
+            </div>
+            <div
+              className="font-mono text-xl font-bold tabular-nums leading-tight"
+              style={{ color: `hsl(${TOKEN[s.tone]})` }}
+            >
+              {s.value}
+            </div>
+            <div className="text-[9px] text-muted-foreground mt-0.5">{s.note}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Gráfico SVG */}
+      <div className="w-full">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="w-full h-auto"
+          role="img"
+          aria-label="Proyección diaria de leads durante junio"
+        >
+          {/* Gridlines horizontales + eje Y izquierdo */}
+          {yTicks.map((t) => (
+            <g key={`gy-${t}`}>
+              <line
+                x1={M.left}
+                x2={W - M.right}
+                y1={yLeads(t)}
+                y2={yLeads(t)}
+                stroke="hsl(var(--border) / 0.35)"
+                strokeWidth={1}
+              />
+              <text
+                x={M.left - 6}
+                y={yLeads(t) + 3}
+                textAnchor="end"
+                className="fill-muted-foreground"
+                style={{ fontSize: 9, fontFamily: "var(--font-mono, monospace)" }}
+              >
+                {t}
+              </text>
+            </g>
+          ))}
+
+          {/* Separadores de semana + labels de fase */}
+          {weekStarts.map((startIdx, wi) => {
+            const phase = days[startIdx].phase;
+            const x = weekDivX(startIdx);
+            const labelX = x + (startIdx === 21 ? slot * 4.5 : slot * 3.5);
+            return (
+              <g key={`wk-${wi}`}>
+                {wi > 0 && (
+                  <line
+                    x1={x}
+                    x2={x}
+                    y1={M.top - 8}
+                    y2={M.top + plotH}
+                    stroke="hsl(var(--border) / 0.6)"
+                    strokeWidth={1}
+                    strokeDasharray="2 3"
+                  />
+                )}
+                <text
+                  x={labelX}
+                  y={M.top - 14}
+                  textAnchor="middle"
+                  style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em" }}
+                  fill={`hsl(${TOKEN[PHASE_TONE[phase]]})`}
+                >
+                  {PHASE_LABEL[phase]}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Línea guía meta mínima · 500 leads (dashed) */}
+          <line
+            x1={M.left}
+            x2={W - M.right}
+            y1={goalY}
+            y2={goalY}
+            stroke="hsl(var(--destructive) / 0.7)"
+            strokeWidth={1.25}
+            strokeDasharray="6 4"
+          />
+          <text
+            x={W - M.right - 2}
+            y={goalY - 5}
+            textAnchor="end"
+            style={{ fontSize: 9, fontWeight: 700 }}
+            fill="hsl(var(--destructive))"
+          >
+            Meta mínima · 500 leads
+          </text>
+
+          {/* Barras verticales */}
+          {days.map((d, i) => {
+            const tone = PHASE_TONE[d.phase];
+            const fullY = yLeads(d.leads);
+            const fullH = M.top + plotH - fullY;
+            const showLabel = d.day % 3 === 1 || d.leads === peakDay.leads;
+            return (
+              <g key={`bar-${d.day}`} className="group">
+                <motion.rect
+                  x={barX(i)}
+                  width={barW}
+                  rx={2}
+                  initial={{ height: 0, y: M.top + plotH }}
+                  animate={{ height: fullH, y: fullY }}
+                  transition={{ delay: 0.2 + i * 0.022, duration: 0.5, ease: "easeOut" }}
+                  fill={tw(tone, 0.78)}
+                  className="transition-opacity hover:opacity-100 group-hover:opacity-100"
+                >
+                  <title>{`Día ${d.day} · ${d.leads} leads · ${d.phase}`}</title>
+                </motion.rect>
+                {showLabel && (
+                  <motion.text
+                    x={barX(i) + barW / 2}
+                    y={fullY - 4}
+                    textAnchor="middle"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 + i * 0.022 }}
+                    style={{ fontSize: 8, fontWeight: 700 }}
+                    fill={`hsl(${TOKEN[tone]})`}
+                  >
+                    {d.leads}
+                  </motion.text>
+                )}
+              </g>
+            );
+          })}
+
+          {/* Línea de acumulado (eje derecho) · motion path */}
+          <motion.path
+            d={cumPath}
+            fill="none"
+            stroke="hsl(var(--brand-cyan) / 0.85)"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ delay: 0.4, duration: 1.4, ease: "easeInOut" }}
+          />
+
+          {/* Marca donde el acumulado cruza 500 */}
+          {crossIdx >= 0 && (
+            <g>
+              <motion.circle
+                cx={cumX(crossIdx)}
+                cy={yCum(cumulative[crossIdx])}
+                r={4}
+                fill="hsl(var(--brand-cyan))"
+                stroke="hsl(var(--card))"
+                strokeWidth={1.5}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 1.6, type: "spring", stiffness: 300 }}
+                style={{ transformOrigin: "center", transformBox: "fill-box" }}
+              />
+              <text
+                x={cumX(crossIdx)}
+                y={yCum(cumulative[crossIdx]) - 9}
+                textAnchor="middle"
+                style={{ fontSize: 8.5, fontWeight: 700 }}
+                fill="hsl(var(--brand-cyan))"
+              >
+                {`día ${crossDay} · +500`}
+              </text>
+            </g>
+          )}
+
+          {/* Eje Y derecho · acumulado */}
+          {[0, 160, 320, 480, 640].map((t) => (
+            <text
+              key={`yc-${t}`}
+              x={W - M.right + 6}
+              y={yCum(t) + 3}
+              textAnchor="start"
+              className="fill-muted-foreground"
+              style={{ fontSize: 9, fontFamily: "var(--font-mono, monospace)" }}
+            >
+              {t}
+            </text>
+          ))}
+
+          {/* Eje X · días */}
+          {xTicks.map((dayNum) => {
+            const i = dayNum - 1;
+            return (
+              <text
+                key={`xt-${dayNum}`}
+                x={cumX(i)}
+                y={M.top + plotH + 16}
+                textAnchor="middle"
+                className="fill-muted-foreground"
+                style={{ fontSize: 9, fontFamily: "var(--font-mono, monospace)" }}
+              >
+                {dayNum}
+              </text>
+            );
+          })}
+          <text
+            x={M.left}
+            y={H - 4}
+            textAnchor="start"
+            className="fill-muted-foreground"
+            style={{ fontSize: 8.5, letterSpacing: "0.08em" }}
+          >
+            DÍA DE JUNIO
+          </text>
+        </svg>
+      </div>
+
+      {/* Leyenda */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-border/40">
+        {legend.map((l) => (
+          <div key={l.label} className="flex items-center gap-1.5">
+            <span
+              className="size-2.5 rounded-sm"
+              style={{ background: `hsl(${TOKEN[l.tone]})` }}
+            />
+            <span className="text-[10px] text-muted-foreground">{l.label}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5">
+          <span className="w-4 h-px bg-[hsl(var(--brand-cyan))]" />
+          <span className="text-[10px] text-muted-foreground">Leads acumulados</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="w-4 h-px"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(to right, hsl(var(--destructive)) 0 4px, transparent 4px 8px)",
+            }}
+          />
+          <span className="text-[10px] text-muted-foreground">Meta mínima 500</span>
+        </div>
+      </div>
+    </TextureCard>
+  );
+}
+
 export function JunioPlan() {
   return (
     <div className="space-y-7">
@@ -659,6 +1037,15 @@ export function JunioPlan() {
             </table>
           </div>
         </TextureCard>
+      </section>
+
+      {/* ── BLOQUE 3b · Proyección diaria de leads ── */}
+      <section>
+        <SectionHeader
+          title="Proyección diaria de leads · junio"
+          sub="Cómo arranca, sube, se estabiliza y cierra · línea guía a 500 leads"
+        />
+        <DailyRampChart />
       </section>
 
       {/* ── BLOQUE 4 · Qué pasa cada semana para que baje el CPL ── */}

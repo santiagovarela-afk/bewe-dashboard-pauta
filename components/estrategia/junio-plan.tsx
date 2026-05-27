@@ -479,7 +479,7 @@ export function JunioPlan() {
             <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed max-w-3xl">
               Lead = CompleteRegistration. CPL blend belleza real mayo (12-26)
               = {CPL_BASELINE}. Objetivo: bajar el CPL semana a semana con
-              optimización y más video.
+              optimización y más contenidos rotativos.
             </p>
           </div>
         </div>

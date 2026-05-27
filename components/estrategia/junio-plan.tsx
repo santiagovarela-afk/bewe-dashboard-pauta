@@ -21,6 +21,7 @@ import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/shared/section-header";
 import { StaggerGroup, StaggerItem } from "@/components/fx/reveal";
+import { JunioPlanTable } from "@/components/estrategia/junio-plan-table";
 
 /**
  * Plan Junio 2026 · validado por Santiago contra mayo real (12-26 may).
@@ -1934,6 +1935,9 @@ export function JunioPlan() {
           </div>
         </TextureCard>
       </section>
+
+      {/* ── BLOQUE 10b · Tabla operativa del plan · 3 vistas ── */}
+      <JunioPlanTable />
 
       {/* ── BLOQUE 8 · Mejores anuncios mayo ── */}
       <section>

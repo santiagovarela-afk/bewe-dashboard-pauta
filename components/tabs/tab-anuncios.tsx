@@ -135,6 +135,8 @@ export function TabAnuncios() {
   const [search, setSearch] = React.useState("");
   const [selected, setSelected] = React.useState<MetaAd | null>(null);
   const [groupByCampaign, setGroupByCampaign] = React.useState<boolean>(true);
+  // Oculta ads sin actividad (0 impresiones · borradores/duplicados) por defecto.
+  const [hideInactive, setHideInactive] = React.useState<boolean>(true);
   const { campaigns } = useDashboard();
 
   const { ads, loading, error, refresh, fetchedAt } = useAds();
@@ -165,6 +167,11 @@ export function TabAnuncios() {
   // Filtros aplican a TODAS las sub-tabs salvo "mejores" y "cambios" que tienen lógica propia
   const filteredAds = React.useMemo(() => {
     let out = enriched;
+    // Ocultar ads sin actividad (0 impresiones = borradores/duplicados que
+    // nunca corrieron). Por defecto ON · el toggle "ver todos" los muestra.
+    if (hideInactive) {
+      out = out.filter((e) => e.m.impressions > 0);
+    }
     if (filter !== "all") {
       const c = campaigns.find((x) => x.code === filter);
       if (c) out = out.filter((e) => e.ad.campaign_id === c.cid);
@@ -207,7 +214,13 @@ export function TabAnuncios() {
       alerts: (a, b) => alertWeight(b.alerts) - alertWeight(a.alerts),
     };
     return [...out].sort(sortFn[sortKey]);
-  }, [enriched, filter, statusFilter, mediaFilter, sortKey, search, campaigns]);
+  }, [enriched, filter, statusFilter, mediaFilter, sortKey, search, campaigns, hideInactive]);
+
+  // Cuántos ads se ocultan por no tener actividad (para el toggle)
+  const inactiveCount = React.useMemo(
+    () => enriched.filter((e) => e.m.impressions === 0).length,
+    [enriched],
+  );
 
   // KPI HEADER — basado en el filtro (no en TODOS) para que sea contextual
   const kpis = React.useMemo(() => {
@@ -496,11 +509,29 @@ export function TabAnuncios() {
                 count={mediaBuckets.carousel}
               />
             )}
+            {/* Toggle ocultar/mostrar ads sin actividad */}
+            {inactiveCount > 0 && (
+              <button
+                onClick={() => setHideInactive((v) => !v)}
+                className={cn(
+                  "ml-auto inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full border text-[10px] font-semibold uppercase tracking-[0.07em] transition-colors",
+                  hideInactive
+                    ? "border-border/60 bg-card/60 hover:bg-secondary text-muted-foreground"
+                    : "bg-[hsl(var(--warning)/0.15)] border-[hsl(var(--warning)/0.4)] text-[hsl(var(--warning))]",
+                )}
+                title={`${inactiveCount} anuncios sin gasto ni impresiones (borradores/duplicados)`}
+              >
+                {hideInactive
+                  ? `${inactiveCount} sin actividad ocultos`
+                  : `Mostrando todos · ${inactiveCount} sin actividad`}
+              </button>
+            )}
             {subTab === "activos" && (
               <button
                 onClick={() => setGroupByCampaign((v) => !v)}
                 className={cn(
-                  "ml-auto inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full border text-[10px] font-semibold uppercase tracking-[0.07em] transition-colors",
+                  "inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full border text-[10px] font-semibold uppercase tracking-[0.07em] transition-colors",
+                  inactiveCount === 0 && "ml-auto",
                   groupByCampaign
                     ? "bg-foreground text-background border-foreground"
                     : "border-border/60 bg-card/60 hover:bg-secondary text-muted-foreground",

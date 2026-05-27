@@ -352,21 +352,21 @@ const AB_MODELS: AbModel[] = [
   {
     key: "A",
     name: "Modelo A · Ventas",
-    role: "control",
+    role: "lo nuevo de mayo",
     campaigns: "MX_Belleza + LATAM_Belleza",
-    objetivo: "ODAX Ventas",
-    cplMay: "€7.66 blend",
-    hypothesis: "El objetivo Ventas optimiza calidad de lead pero a CPL más alto.",
+    objetivo: "Ventas",
+    cplMay: "€7.66 registro",
+    hypothesis: "En mayo pasamos belleza a este objetivo (nuevo para nosotros). Trajo registros pero caros (€7-8). ¿Será que la calidad compensa el precio? Eso es lo que vamos a medir.",
     tone: "cyan",
   },
   {
     key: "B",
     name: "Modelo B · Cliente Potencial",
-    role: "experimento",
+    role: "lo de siempre + la prueba que funcionó",
     campaigns: "Belleza_LEADS (nueva) + Servicios",
     objetivo: "Clientes Potenciales",
-    cplMay: "por validar",
-    hypothesis: "Mismo evento CR, objetivo Leads. Hipótesis: trae CR más barato y más cobertura.",
+    cplMay: "€4.32 (servicios)",
+    hypothesis: "Es el objetivo que Bewe usó toda la vida. En mayo lo dejamos solo en Servicios y el registro bajó a €4.32 (mucho más barato que belleza). Ahora probamos si en belleza también baja.",
     tone: "violet",
   },
 ];
@@ -380,21 +380,21 @@ interface AdjustItem {
 
 const CURRENT_CAMPAIGNS: AdjustItem[] = [
   {
-    name: "MX_Belleza (Ventas)",
+    name: "MX Belleza",
     detail:
-      "Refresh creativo: paraguas_v2 fatigado (68K impr) → nuevo video. Agregar adset de interés amplio.",
+      "El anuncio 'paraguas' ya lo vio mucha gente (68 mil veces) y empezó a cansarse → lo reemplazamos por un video nuevo. Sumamos un grupo con audiencia más amplia para llegar a gente nueva.",
     tone: "ember",
   },
   {
-    name: "LATAM_Belleza (Ventas)",
+    name: "LATAM Belleza",
     detail:
-      "Mantener mkt_v1_dol (volumen) + paraguas LATAM (CPL €5.49 bueno). Agregar adset de interés amplio.",
+      "Mantenemos los 2 que funcionan: 'mkt' (trae mucho volumen) y 'paraguas LATAM' (registros baratos a €5.49). Sumamos audiencia más amplia.",
     tone: "cyan",
   },
   {
-    name: "Servicios_Conv (Cliente Potencial)",
+    name: "Servicios",
     detail:
-      "Escalar linda_v1 (mejor performer €3.88). Sumar variantes de video.",
+      "Le metemos más plata a 'linda', que fue el mejor anuncio del mes (registros a €3.88). Le hacemos versiones en video.",
     tone: "success",
   },
 ];
@@ -408,15 +408,15 @@ interface NewCampaign {
 
 const NEW_CAMPAIGNS: NewCampaign[] = [
   {
-    code: "BELLEZA_LEADS_JUN26",
-    objetivo: "Cliente Potencial",
-    load: "Cargar ganadores (mkt_v1_dol, paraguas_v2_asp, linda_v1) + 4 videos nuevos.",
+    code: "Belleza · Clientes Potenciales",
+    objetivo: "la prueba del mes",
+    load: "Campaña nueva de belleza con el objetivo 'Clientes Potenciales' (la prueba A/B). Le cargamos los anuncios ganadores de mayo + 4 videos nuevos.",
     tone: "violet",
   },
   {
-    code: "TOOLS_ACADEMY_JUN26",
-    objetivo: "Tráfico / LPV",
-    load: "Cargar recortes de los 40M COP en videos + perro mocho + 3 tools.",
+    code: "Tools + Academy",
+    objetivo: "atraer gente nueva",
+    load: "Campaña para atraer gente que todavía no nos conoce. Aprovechamos los videos que ya pagamos (40M COP), el del 'perro mocho' y 3 herramientas gratis.",
     tone: "cyan",
   },
 ];
@@ -432,25 +432,25 @@ const PRODUCTION: ProductionItem[] = [
   {
     icon: <Video className="size-3.5" />,
     priority: "URGENTE",
-    text: "12 imágenes refresh belleza + 4 videos 15-20s (mayo tuvo muchas imágenes, pocos videos).",
+    text: "12 imágenes nuevas de belleza + 4 videos cortos (15-20s). En mayo hicimos muchas imágenes y pocos videos · hay que equilibrar porque el video llega a más gente.",
     tone: "destructive",
   },
   {
     icon: <ImageIcon className="size-3.5" />,
     priority: "Servicios",
-    text: "2 conceptos nuevos.",
+    text: "2 conceptos nuevos para la campaña de servicios.",
     tone: "warning",
   },
   {
     icon: <Video className="size-3.5" />,
     priority: "Academy",
-    text: "Recortes de los 40M COP.",
+    text: "Cortar los videos largos que ya pagamos (40M COP) en piezas cortas.",
     tone: "warning",
   },
   {
     icon: <Wrench className="size-3.5" />,
     priority: "Tools",
-    text: "3 piezas: calculadora ROI, auditoría IG, comparador local.",
+    text: "3 herramientas gratis como gancho: calculadora de ROI, auditoría de Instagram, comparador local.",
     tone: "warning",
   },
 ];
@@ -1138,9 +1138,21 @@ export function JunioPlan() {
       {/* ── BLOQUE 6 · A/B Ventas vs Cliente Potencial ── */}
       <section>
         <SectionHeader
-          title="A/B · Ventas vs Cliente Potencial"
-          sub="Mismo evento (CompleteRegistration) · solo cambia el objetivo de campaña"
+          title="La prueba del mes · ¿Ventas o Clientes Potenciales?"
+          sub="Dos formas de configurar las campañas · vamos a validar cuál trae leads de mejor calidad y más baratos"
         />
+        <TextureCard className="p-4 mb-3" style={{ borderColor: tw("warning", 0.3) }}>
+          <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">La historia:</span>{" "}
+            Bewe siempre usó campañas de <span className="text-[hsl(var(--brand-violet))] font-semibold">Clientes Potenciales</span>.
+            En mayo probamos pasar belleza a <span className="text-[hsl(var(--brand-cyan))] font-semibold">Ventas</span> (algo nuevo) —
+            trajo registros pero más caros (€7-8). Al mismo tiempo dejamos la campaña
+            de Servicios en Clientes Potenciales y el registro nos salió a €4.32, mucho
+            más barato. <span className="font-semibold text-foreground">Junio:</span> corremos las dos formas en
+            paralelo para validar de una vez por todas cuál nos trae leads de mejor
+            calidad al menor costo. No asumimos nada · lo probamos con data.
+          </p>
+        </TextureCard>
         <div className="grid md:grid-cols-2 gap-3 mb-3">
           {AB_MODELS.map((m, i) => (
             <motion.div
@@ -1242,15 +1254,15 @@ export function JunioPlan() {
       {/* ── BLOQUE 7 · Plan de assets ── */}
       <section>
         <SectionHeader
-          title="Plan de assets"
-          sub="Campañas actuales · campañas nuevas · producción nueva (más video que mayo)"
+          title="Qué hacemos con los anuncios"
+          sub="Qué ajustamos en lo que ya tenemos · qué creamos nuevo · qué hay que producir"
         />
 
         {/* 7a · Campañas actuales */}
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-2.5">
             <Repeat className="size-3.5 text-[hsl(var(--brand-cyan))]" />
-            <span className="text-[11px] font-bold">7a · Campañas actuales · cómo se ajustan</span>
+            <span className="text-[11px] font-bold">1 · Lo que ya tenemos corriendo · cómo lo ajustamos</span>
           </div>
           <StaggerGroup className="grid md:grid-cols-3 gap-3">
             {CURRENT_CAMPAIGNS.map((c) => (
@@ -1276,7 +1288,7 @@ export function JunioPlan() {
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-2.5">
             <Layers className="size-3.5 text-[hsl(var(--brand-violet))]" />
-            <span className="text-[11px] font-bold">7b · Campañas nuevas · qué se crea + qué se carga</span>
+            <span className="text-[11px] font-bold">2 · Campañas nuevas · qué creamos y qué le cargamos</span>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
             {NEW_CAMPAIGNS.map((c, i) => (
@@ -1315,7 +1327,7 @@ export function JunioPlan() {
         <div>
           <div className="flex items-center gap-1.5 mb-2.5">
             <Video className="size-3.5 text-[hsl(var(--destructive))]" />
-            <span className="text-[11px] font-bold">7c · Producción nueva · prioridad: más video</span>
+            <span className="text-[11px] font-bold">3 · Lo que hay que producir · prioridad: más video</span>
           </div>
           <div className="grid md:grid-cols-2 gap-2.5">
             {PRODUCTION.map((p, i) => (

@@ -2,6 +2,7 @@
 import * as React from "react";
 import { useMetaFetch } from "./use-meta-fetch";
 import { PLAN } from "@/lib/config";
+import { CAMPAIGN_LIFECYCLE } from "@/lib/campaign-metadata";
 
 /**
  * Trae TODOS los ads de la cuenta this_month con creative completo + insights agregados.
@@ -98,8 +99,17 @@ const FIELDS = [
   "insights.date_preset(this_month){spend,impressions,clicks,ctr,cpm,frequency,reach,actions,date_start,date_stop}",
 ].join(",");
 
+// Filtramos por las campañas del plan vigente (CAMPAIGN_LIFECYCLE) + status.
+// Sin esto, Meta intenta traer ads de las 800+ campañas históricas de la
+// cuenta con el creative completo + insights y devuelve "reduce the amount
+// of data". Limitando a ~8 campañas del plan, el request es liviano.
+const PLAN_CIDS = Object.keys(CAMPAIGN_LIFECYCLE);
+
 const FILTERING = JSON.stringify([
-  { field: "effective_status", operator: "IN", value: ["ACTIVE", "PAUSED", "ARCHIVED"] },
+  { field: "effective_status", operator: "IN", value: ["ACTIVE", "PAUSED"] },
+  ...(PLAN_CIDS.length > 0
+    ? [{ field: "campaign.id", operator: "IN", value: PLAN_CIDS }]
+    : []),
 ]);
 
 export function useAds(opts?: { enabled?: boolean }) {
@@ -109,7 +119,7 @@ export function useAds(opts?: { enabled?: boolean }) {
     {
       fields: FIELDS,
       filtering: FILTERING,
-      limit: "200",
+      limit: "60",
       date_preset: "this_month",
     },
     { enabled, ttlMs: 5 * 60 * 1000 },

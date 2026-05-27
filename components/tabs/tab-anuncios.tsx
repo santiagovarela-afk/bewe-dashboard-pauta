@@ -97,6 +97,27 @@ function getEngagementRate(ad: MetaAd, m: DerivedAdMetrics): number {
   return ctrPart + convBonus;
 }
 
+/** Data mínima para que un creativo sea "evaluable" · evita que ads con
+ *  €0 gasto o pocas impresiones se cuelen como "mejores" por un CTR fluke. */
+function hasSignificantData(m: DerivedAdMetrics): boolean {
+  return m.impressions >= 800 && m.spend >= 3;
+}
+
+/**
+ * Score real de "mejor creativo". Prioriza RESULTADOS sobre CTR vacío:
+ *  - conversiones pesan fuerte (cada CR/lead = mucho)
+ *  - eficiencia (CPR bajo) suma
+ *  - CTR aporta pero acotado · no puede ganar solo
+ * Ads sin data significativa → score 0 (quedan fuera del top).
+ */
+function creativeScore(m: DerivedAdMetrics): number {
+  if (!hasSignificantData(m)) return 0;
+  const convScore = m.conversions * 10;
+  const cprScore = m.cpr && m.cpr > 0 ? Math.min(20 / m.cpr, 10) : 0;
+  const ctrScore = Math.min(m.ctr, 8);
+  return convScore + cprScore + ctrScore;
+}
+
 function isLoss(m: DerivedAdMetrics): boolean {
   if (m.cpr === null) return m.spend > 30 && m.conversions === 0;
   return m.cpr > CPR_TARGET * CPR_LOSS_FACTOR;
@@ -244,11 +265,12 @@ export function TabAnuncios() {
     [ads],
   );
 
-  // Top 3 IDs (sobre TODOS los ads, para los pins) por engagement
+  // Top 3 IDs (para los pins TOP) por SCORE real · solo ads con data
+  // significativa · evita pinear ads de €0 con CTR fluke.
   const topIds = React.useMemo(() => {
-    const sorted = [...enriched].sort(
-      (a, b) => b.engagementRate - a.engagementRate,
-    );
+    const sorted = enriched
+      .filter((e) => creativeScore(e.m) > 0)
+      .sort((a, b) => creativeScore(b.m) - creativeScore(a.m));
     return new Map(sorted.slice(0, 3).map((e, i) => [e.ad.id, i + 1] as const));
   }, [enriched]);
 
@@ -909,21 +931,20 @@ function BestCreativesView({
   campaigns: ReturnType<typeof useDashboard>["campaigns"];
   onSelect: (ad: MetaAd) => void;
 }) {
-  // Top 5 por engagement entre ACTIVE primero
+  // Top 5 por SCORE real de creativo · solo ads con data significativa
+  // (≥800 impresiones y ≥€3 gasto). Excluye los €0 que ganaban por CTR fluke.
   const ranked = React.useMemo(() => {
-    const activeFirst = [...enriched].sort((a, b) => {
-      const aActive = (a.ad.effective_status ?? a.ad.status) === "ACTIVE" ? 1 : 0;
-      const bActive = (b.ad.effective_status ?? b.ad.status) === "ACTIVE" ? 1 : 0;
-      if (aActive !== bActive) return bActive - aActive;
-      return b.engagementRate - a.engagementRate;
-    });
-    return activeFirst.slice(0, 5);
+    const qualified = enriched
+      .filter((e) => creativeScore(e.m) > 0)
+      .sort((a, b) => creativeScore(b.m) - creativeScore(a.m));
+    return qualified.slice(0, 5);
   }, [enriched]);
 
   if (ranked.length === 0) {
     return (
       <TextureCard className="p-6 text-center text-[12px] text-muted-foreground">
-        Sin creativos para evaluar.
+        Sin creativos con data suficiente todavía · se necesitan ≥800 impresiones
+        y ≥€3 de gasto para evaluar un anuncio.
       </TextureCard>
     );
   }
@@ -931,8 +952,9 @@ function BestCreativesView({
   return (
     <div className="space-y-3">
       <div className="text-[11px] text-muted-foreground px-1">
-        Top 5 anuncios ordenados por engagement (CTR + bonus por conversiones).
-        Replicá estos conceptos en nuevas variantes.
+        Top 5 anuncios por <span className="text-foreground font-semibold">resultados reales</span> ·
+        conversiones + eficiencia (CPR) + CTR. Solo creativos con data significativa
+        (≥800 impresiones · ≥€3 gasto). Replicá estos conceptos.
       </div>
       <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {ranked.map((e, i) => {

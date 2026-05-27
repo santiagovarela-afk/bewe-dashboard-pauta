@@ -214,53 +214,60 @@ const WEEKLY: WeekRow[] = [
 interface WeekPlan {
   week: string;
   days: string;
-  cplTarget: string;
+  /** Titular en lenguaje simple · lo que entiende cualquiera */
+  headline: string;
+  /** Costo por registro objetivo · en lenguaje claro */
+  costTarget: string;
   actions: string[];
   tone: Tone;
 }
 
 const WEEK_PLANS: WeekPlan[] = [
   {
-    week: "Semana 1",
+    week: "Semana 1 · Arranque",
     days: "1-7 jun",
-    cplTarget: "€7.66 → €7",
+    headline: "Probamos y miramos qué engancha",
+    costTarget: "Costo por registro: ~€7",
     actions: [
-      "Assets nuevos corriendo parejo (mismo budget por adset)",
-      "Identificar ganadores tempranos por CTR y CPM",
-      "NO escalar todavía · dejar madurar el learning",
+      "Lanzamos los anuncios nuevos sin gastar de más",
+      "Vemos cuáles llaman más la atención de la gente",
+      "Todavía no metemos toda la plata · dejamos que Facebook aprenda",
     ],
     tone: "warning",
   },
   {
-    week: "Semana 2",
-    days: "lunes 8 jun",
-    cplTarget: "→ €6",
+    week: "Semana 2 · Limpieza",
+    days: "desde lunes 8",
+    headline: "Apagamos lo caro, alimentamos lo bueno",
+    costTarget: "Bajamos a ~€6 por registro",
     actions: [
-      "APAGAR perdedores: CPL > €9 con ≥30 conversiones",
-      "Escalar ganadores en escalones de +20%",
-      "Empezar a concentrar budget en lo que funciona",
+      "Apagamos los anuncios que salen caros (más de €9 por registro)",
+      "Le metemos más plata a los que están funcionando",
+      "Concentramos el presupuesto en los ganadores",
     ],
     tone: "ember",
   },
   {
-    week: "Semana 3",
+    week: "Semana 3 · Empujón fuerte",
     days: "15-21 jun",
-    cplTarget: "→ €5-5.5",
+    headline: "Máxima inversión · acá traemos el grueso",
+    costTarget: "El mejor costo del mes: €5-5.5",
     actions: [
-      "Solo ganadores corriendo · puja máxima",
-      "Adset de interés amplio ya probado y validado",
-      "Volumen sostenido al mejor CPL del mes",
+      "Solo quedan corriendo los anuncios ganadores",
+      "Probamos una audiencia más amplia para llegar a más gente",
+      "Es la semana donde traemos más registros",
     ],
     tone: "violet",
   },
   {
-    week: "Semana 4",
+    week: "Semana 4 · Cierre tranquilo",
     days: "22-30 jun",
-    cplTarget: "→ €4.5",
+    headline: "Bajamos el gasto, priorizamos calidad",
+    costTarget: "Registros baratos: ~€4.5",
     actions: [
-      "Taper · solo top performers",
-      "Leads baratos pero de calidad (que lleguen a trial)",
-      "Cerrar el mes consolidando el aprendizaje",
+      "Bajamos el presupuesto · dejamos solo lo mejor",
+      "Priorizamos registros de calidad (los que prueban el producto)",
+      "Cerramos el mes sin quemar plata",
     ],
     tone: "success",
   },
@@ -273,13 +280,13 @@ interface Rule {
 }
 
 const RULES: Rule[] = [
-  { text: "Cada adset ≥ €15-20/día. Por debajo, Meta no lo saca de learning.", tone: "cyan" },
-  { text: "No cambiar budget más de 20-25% de un día al otro. Resetea el learning.", tone: "warning" },
-  { text: "Matar CPL > €9 solo con ≥30 conversiones Y después del día 5 (antes el learning infla el CPL).", tone: "ember" },
-  { text: "Belleza 75-80% del budget SIEMPRE. Es el motor de leads.", tone: "success" },
-  { text: "Medir por CR → Trial (PQL), no solo CPL barato. Un lead que no llega a trial no sirve.", tone: "violet" },
-  { text: "Watchpoint día 7: si CPL blend > €6.5 → decidir (aceptar menos leads/día o activar contingencia €400).", tone: "destructive" },
-  { text: "Servicios mínimo 8% · Remarketing + Tools 12%.", tone: "cyan" },
+  { text: "Cada anuncio necesita un mínimo de plata por día (€15-20). Si le damos menos, Facebook no lo muestra bien y no aprende.", tone: "cyan" },
+  { text: "No cambiar el presupuesto de golpe. Subimos de a poco para no romper lo que Facebook ya venía haciendo bien.", tone: "warning" },
+  { text: "Si un anuncio trae registros a más de €9 cada uno (tras unos días de prueba), lo apagamos.", tone: "ember" },
+  { text: "El 75-80% de la plata va a Belleza siempre. Es lo que mejor convierte · es el motor de leads.", tone: "success" },
+  { text: "No miramos solo registros baratos: miramos cuáles llegan a probar el producto. Un registro que no prueba, no sirve.", tone: "violet" },
+  { text: "Chequeo del día 7: si el costo por registro sigue alto (más de €6.5), decidimos: traer menos por día, o pedir el presupuesto extra de €400.", tone: "destructive" },
+  { text: "El resto se reparte: un poco a Servicios (otro nicho) y a recuperar gente que ya nos conoce.", tone: "cyan" },
 ];
 
 // ── BLOQUE 6 · A/B Ventas vs Cliente Potencial ───────────────────
@@ -657,8 +664,8 @@ export function JunioPlan() {
       {/* ── BLOQUE 4 · Qué pasa cada semana para que baje el CPL ── */}
       <section>
         <SectionHeader
-          title="Qué tiene que pasar cada semana para que el CPL baje"
-          sub="La hoja de ruta de optimización · una acción concreta por semana"
+          title="El plan semana a semana · en simple"
+          sub="Qué hacemos cada semana y por qué · sin tecnicismos"
         />
         <StaggerGroup className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
           {WEEK_PLANS.map((p) => (
@@ -670,7 +677,7 @@ export function JunioPlan() {
                   borderTopColor: `hsl(${TOKEN[p.tone]})`,
                 }}
               >
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-2">
                   <span
                     className="text-[11px] font-bold"
                     style={{ color: `hsl(${TOKEN[p.tone]})` }}
@@ -681,8 +688,14 @@ export function JunioPlan() {
                     {p.days}
                   </span>
                 </div>
-                <div className="font-mono text-[12px] font-bold mb-2.5 tabular-nums">
-                  CPL {p.cplTarget}
+                <div className="text-[13px] font-bold leading-snug mb-1.5">
+                  {p.headline}
+                </div>
+                <div
+                  className="text-[10px] font-semibold mb-3 inline-block px-2 py-0.5 rounded"
+                  style={{ background: tw(p.tone, 0.14), color: `hsl(${TOKEN[p.tone]})` }}
+                >
+                  {p.costTarget}
                 </div>
                 <ul className="space-y-1.5">
                   {p.actions.map((a, idx) => (
@@ -704,8 +717,8 @@ export function JunioPlan() {
       {/* ── BLOQUE 5 · Reglas para darle norte a la pauta ── */}
       <section>
         <SectionHeader
-          title="Reglas para darle norte a la pauta"
-          sub="Reglas duras · qué se respeta sí o sí durante el mes"
+          title="Las reglas de oro de la pauta"
+          sub="Qué respetamos sí o sí durante el mes · en palabras simples"
         />
         <div className="grid md:grid-cols-2 gap-2.5">
           {RULES.map((r, i) => (
@@ -730,7 +743,7 @@ export function JunioPlan() {
         <div className="flex items-center gap-1.5 mt-3 px-1">
           <Gauge className="size-3.5 text-muted-foreground" />
           <span className="text-[10px] text-muted-foreground/80 italic">
-            Estas reglas mantienen el learning estable y el budget concentrado en lo que rinde.
+            En resumen: cada anuncio con plata suficiente, cambios graduales, plata concentrada en lo que funciona.
           </span>
         </div>
       </section>

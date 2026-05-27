@@ -106,6 +106,8 @@ interface Scenario {
   improve: string;
   improveNote: string;
   needs: string;
+  /** Explicación concreta de cómo se llega a este número de leads */
+  howTo: string;
   tone: Tone;
 }
 
@@ -120,6 +122,7 @@ const SCENARIOS: Scenario[] = [
     improve: "-19%",
     improveNote: "optimización básica",
     needs: "Apagar perdedores a tiempo y escalar lo que ya rinde. Piso comprometido.",
+    howTo: "Apagando lo caro a tiempo y escalando solo las audiencias similares a clientes (Lookalike), que son las más baratas. Casi sin depender de los videos nuevos.",
     tone: "ember",
   },
   {
@@ -132,6 +135,7 @@ const SCENARIOS: Scenario[] = [
     improve: "-24%",
     improveNote: "optimización media",
     needs: "Refresh de video corriendo + adset interés amplio probado + LATAM escalando barato.",
+    howTo: "Todo lo del conservador + los videos nuevos bajan el costo por registro de belleza + el conjunto de interés amplio rinde y suma volumen.",
     tone: "cyan",
   },
   {
@@ -144,6 +148,7 @@ const SCENARIOS: Scenario[] = [
     improve: "-31%",
     improveNote: "todo funciona",
     needs: "Cliente Potencial gana el A/B, videos nuevos baten a las imágenes y se activa contingencia.",
+    howTo: "Todo lo anterior + la campaña de Clientes Potenciales gana el A/B (registros más baratos) + se activa la contingencia de €400 para escalar a los ganadores.",
     tone: "success",
   },
 ];
@@ -507,6 +512,324 @@ const BEST_ADS: AdRow[] = [
     cpl: "€9.72",
     action: "MEJORAR",
     tone: "ember",
+  },
+];
+
+// ── BLOQUE 9 · Lifecycle (qué se prende / queda / nuevo / apagado) ─
+type LifecycleAction = "activa" | "nueva" | "ajusta" | "apagada";
+
+interface LifecycleItem {
+  name: string;
+  objetivo: string;
+  why: string;
+}
+
+interface LifecycleGroup {
+  action: LifecycleAction;
+  title: string;
+  caption: string;
+  tone: Tone;
+  items: LifecycleItem[];
+}
+
+const LIFECYCLE_LABEL: Record<LifecycleAction, string> = {
+  activa: "QUEDAN ACTIVAS",
+  nueva: "SE PRENDEN NUEVAS",
+  ajusta: "SE AJUSTA",
+  apagada: "QUEDAN APAGADAS",
+};
+
+const LIFECYCLE: LifecycleGroup[] = [
+  {
+    action: "activa",
+    title: "Quedan activas",
+    caption: "sin reiniciar aprendizaje · venían corriendo",
+    tone: "success",
+    items: [
+      {
+        name: "MX Belleza",
+        objetivo: "Ventas",
+        why: "Venía corriendo · no la tocamos para no reiniciar el aprendizaje de Facebook.",
+      },
+      {
+        name: "LATAM Belleza",
+        objetivo: "Ventas",
+        why: "Venía corriendo · es el motor de volumen de leads, se mantiene viva.",
+      },
+      {
+        name: "Servicios",
+        objetivo: "Clientes Potenciales",
+        why: "Venía corriendo y trae el registro más barato de la cuenta. Se mantiene.",
+      },
+    ],
+  },
+  {
+    action: "nueva",
+    title: "Se prenden nuevas",
+    caption: "arrancan lunes 1 jun",
+    tone: "violet",
+    items: [
+      {
+        name: "Belleza · Clientes Potenciales",
+        objetivo: "Clientes Potenciales",
+        why: "Es la prueba A/B del mes: mismo perfil de belleza pero con el objetivo que históricamente sale más barato.",
+      },
+      {
+        name: "Tools + Academy",
+        objetivo: "Tráfico / atracción",
+        why: "Atrae gente nueva que todavía no nos conoce, con videos ya pagados y herramientas gratis de gancho.",
+      },
+    ],
+  },
+  {
+    action: "ajusta",
+    title: "Se ajusta",
+    caption: "cambio de estructura",
+    tone: "cyan",
+    items: [
+      {
+        name: "Retargeting",
+        objetivo: "Ventas",
+        why: "Fusionamos los 2 conjuntos actuales en 1 solo para concentrar el presupuesto y que salga de aprendizaje. En mayo, partido en dos, daba registros caros (€13).",
+      },
+    ],
+  },
+  {
+    action: "apagada",
+    title: "Quedan apagadas",
+    caption: "no rinden · no las prendemos",
+    tone: "ember",
+    items: [
+      {
+        name: "MX Comercio",
+        objetivo: "Ventas",
+        why: "Registro a €25, demasiado caro · no vale la pena el gasto.",
+      },
+      {
+        name: "LATAM Comercio",
+        objetivo: "Ventas",
+        why: "Audiencia saturada · ya no rinde.",
+      },
+      {
+        name: "LATAM Servicios IC",
+        objetivo: "Clientes Potenciales",
+        why: "Audiencia saturada · la pausamos para no quemar plata.",
+      },
+    ],
+  },
+];
+
+// ── BLOQUE 10 · Desglose campaña → conjunto → anuncio ─────────────
+type AdsetAction =
+  | "ESCALAR"
+  | "MANTENER"
+  | "REVISAR"
+  | "NUEVO"
+  | "FUSIONAR";
+
+const ADSET_ACTION_TONE: Record<AdsetAction, Tone> = {
+  ESCALAR: "success",
+  MANTENER: "cyan",
+  REVISAR: "ember",
+  NUEVO: "violet",
+  FUSIONAR: "warning",
+};
+
+type AudienceKind =
+  | "Lookalike"
+  | "Interés"
+  | "Custom"
+  | "Remarketing";
+
+/** Aclaración en español simple de cada tipo de audiencia */
+const AUDIENCE_HINT: Record<AudienceKind, string> = {
+  Lookalike: "audiencia similar a clientes",
+  Interés: "gente por sus intereses",
+  Custom: "lista propia (engagers)",
+  Remarketing: "gente que ya nos conoce",
+};
+
+interface Adset {
+  name: string;
+  audience: AudienceKind;
+  perDay: string;
+  cplMay: string | null;
+  action: AdsetAction;
+  note: string;
+}
+
+interface CampaignBreakdown {
+  code: string;
+  name: string;
+  objetivo: string;
+  objetivoTone: Tone;
+  perDay: string;
+  cplMeta: string;
+  tagline: string;
+  adsets: Adset[];
+  ads: string;
+}
+
+const BREAKDOWN: CampaignBreakdown[] = [
+  {
+    code: "J1",
+    name: "MX Belleza",
+    objetivo: "Ventas",
+    objetivoTone: "cyan",
+    perDay: "€26/día",
+    cplMeta: "meta CPL €4-5",
+    tagline: "Recuperar el conjunto barato que estaba pausado.",
+    adsets: [
+      {
+        name: "A1.1 LOK Belleza",
+        audience: "Lookalike",
+        perDay: "€12/día",
+        cplMay: "€5.03",
+        action: "ESCALAR",
+        note: "Era el mejor de MX y estaba pausado · lo prendemos fuerte.",
+      },
+      {
+        name: "A1.2 CA Engagers",
+        audience: "Custom",
+        perDay: "€6/día",
+        cplMay: "€9.16",
+        action: "REVISAR",
+        note: "El peor ROI de mayo (gastó €293 caro) · bajamos budget + refresh creativo.",
+      },
+      {
+        name: "A1.4 Interés amplio",
+        audience: "Interés",
+        perDay: "€8/día",
+        cplMay: null,
+        action: "NUEVO",
+        note: "Probar cobertura amplia para llegar a gente nueva.",
+      },
+    ],
+    ads: "paraguas (reemplazar por VIDEO nuevo · fatigado 68K impresiones) + mkt + 2 videos nuevos.",
+  },
+  {
+    code: "J2",
+    name: "LATAM Belleza",
+    objetivo: "Ventas",
+    objetivoTone: "cyan",
+    perDay: "€22/día",
+    cplMeta: "meta CPL €3.5-5",
+    tagline: "Mantener el rey del volumen y probar interés amplio.",
+    adsets: [
+      {
+        name: "A4.1 LOK Belleza",
+        audience: "Lookalike",
+        perDay: "€14/día",
+        cplMay: "€7.13",
+        action: "MANTENER",
+        note: "Rey del volumen · es el conjunto que más leads trae.",
+      },
+      {
+        name: "A4.2 Interés amplio",
+        audience: "Interés",
+        perDay: "€8/día",
+        cplMay: null,
+        action: "NUEVO",
+        note: "Reemplaza el conjunto de interés pausado · probar audiencia amplia.",
+      },
+    ],
+    ads: "mkt_v1_dol (volumen 71K impresiones) + paraguas LATAM (€5.49 bueno) + 2 videos.",
+  },
+  {
+    code: "J3",
+    name: "Belleza Clientes Potenciales",
+    objetivo: "Clientes Potenciales",
+    objetivoTone: "violet",
+    perDay: "€20/día",
+    cplMeta: "meta CPL €3 · LA PRUEBA",
+    tagline: "El A/B del mes: mismo perfil que rinde, objetivo más barato.",
+    adsets: [
+      {
+        name: "LOK Belleza LATAM",
+        audience: "Lookalike",
+        perDay: "€12/día",
+        cplMay: null,
+        action: "NUEVO",
+        note: "Mismo perfil Lookalike que funciona en Ventas, ahora con objetivo Leads.",
+      },
+      {
+        name: "Interés amplio",
+        audience: "Interés",
+        perDay: "€8/día",
+        cplMay: null,
+        action: "NUEVO",
+        note: "Cobertura amplia para alimentar la prueba con volumen.",
+      },
+    ],
+    ads: "ganadores de belleza (mkt, paraguas, linda) + 4 videos nuevos.",
+  },
+  {
+    code: "J4",
+    name: "Servicios",
+    objetivo: "Clientes Potenciales",
+    objetivoTone: "violet",
+    perDay: "€14/día",
+    cplMeta: "meta CPL €4",
+    tagline: "Escalar el mejor conjunto de toda la cuenta.",
+    adsets: [
+      {
+        name: "A3.1 LOK Servicios",
+        audience: "Lookalike",
+        perDay: "€9/día",
+        cplMay: "€3.98",
+        action: "ESCALAR",
+        note: "El MEJOR de toda la cuenta · le metemos más plata.",
+      },
+      {
+        name: "A3.2 INT Servicios",
+        audience: "Interés",
+        perDay: "€5/día",
+        cplMay: "€5.49",
+        action: "MANTENER",
+        note: "Rinde bien · lo sostenemos como está.",
+      },
+    ],
+    ads: "linda (€3.88 · el mejor anuncio de todos) + variantes en video.",
+  },
+  {
+    code: "J5",
+    name: "Retargeting",
+    objetivo: "Ventas",
+    objetivoTone: "cyan",
+    perDay: "€12/día",
+    cplMeta: "validar CPL",
+    tagline: "Fusionar todo en un solo conjunto para que salga de aprendizaje.",
+    adsets: [
+      {
+        name: "RMKT Apilado (fusión)",
+        audience: "Remarketing",
+        perDay: "€12/día",
+        cplMay: "€12.97",
+        action: "FUSIONAR",
+        note: "Juntamos Visitantes 30d + Checkout + Engagers + Tool users en 1 solo conjunto · concentrar para salir de aprendizaje. En mayo, partido en 2, daba CPL €13.",
+      },
+    ],
+    ads: "2 piezas de recuperación (\"te extrañamos\", \"seguís a un paso\").",
+  },
+  {
+    code: "J6",
+    name: "Tools + Academy",
+    objetivo: "Tráfico / LPV",
+    objetivoTone: "cyan",
+    perDay: "€6/día",
+    cplMeta: "atracción",
+    tagline: "Atraer gente nueva con contenido ya pagado.",
+    adsets: [
+      {
+        name: "Interés PYME amplio",
+        audience: "Interés",
+        perDay: "€6/día",
+        cplMay: null,
+        action: "NUEVO",
+        note: "Cobertura amplia de pequeñas y medianas empresas.",
+      },
+    ],
+    ads: "recortes 40M COP + perro mocho + 3 tools (calculadora ROI, auditoría IG, comparador).",
   },
 ];
 
@@ -968,6 +1291,24 @@ export function JunioPlan() {
                   Mejora {s.improve} · {s.improveNote}
                 </div>
 
+                <div
+                  className="mt-3 rounded-lg p-2.5"
+                  style={{
+                    background: tw(s.tone, 0.1),
+                    border: `1px solid ${tw(s.tone, 0.3)}`,
+                  }}
+                >
+                  <span
+                    className="text-[9px] uppercase tracking-[0.1em] font-bold block mb-1"
+                    style={{ color: `hsl(${TOKEN[s.tone]})` }}
+                  >
+                    Cómo se logra
+                  </span>
+                  <span className="text-[11px] text-foreground leading-relaxed">
+                    {s.howTo}
+                  </span>
+                </div>
+
                 <div className="mt-auto pt-3 text-[11px] text-foreground leading-relaxed border-t border-border/40 mt-3">
                   <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground block mb-1">
                     Qué necesita
@@ -977,6 +1318,73 @@ export function JunioPlan() {
               </TextureCard>
             </motion.div>
           ))}
+        </div>
+      </section>
+
+      {/* ── BLOQUE 9 · Lifecycle (qué se prende / queda / nuevo / apagado) ── */}
+      <section>
+        <SectionHeader
+          title="Qué se prende, qué queda y qué se apaga"
+          sub="Estado de cada campaña al arrancar junio · lunes 1 jun"
+        />
+        <StaggerGroup className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {LIFECYCLE.map((g) => (
+            <StaggerItem key={g.action}>
+              <TextureCard
+                className="p-4 h-full flex flex-col"
+                style={{
+                  borderColor: tw(g.tone, 0.4),
+                  background: `linear-gradient(135deg, ${tw(g.tone, 0.07)}, hsl(var(--card)))`,
+                }}
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  <CircleDot
+                    className="size-3.5 shrink-0"
+                    style={{ color: `hsl(${TOKEN[g.tone]})` }}
+                  />
+                  <span
+                    className="text-[10px] uppercase tracking-[0.1em] font-bold"
+                    style={{ color: `hsl(${TOKEN[g.tone]})` }}
+                  >
+                    {LIFECYCLE_LABEL[g.action]}
+                  </span>
+                </div>
+                <div className="text-[10px] text-muted-foreground italic mb-3">
+                  {g.caption}
+                </div>
+                <div className="space-y-2.5">
+                  {g.items.map((it) => (
+                    <div
+                      key={it.name}
+                      className="rounded-lg border bg-card/50 p-2.5"
+                      style={{ borderColor: tw(g.tone, 0.25) }}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-[11px] font-bold leading-tight">
+                          {it.name}
+                        </span>
+                        <Badge
+                          variant={BADGE_VARIANT[g.tone]}
+                          className="!text-[8px] normal-case tracking-normal whitespace-nowrap shrink-0"
+                        >
+                          {it.objetivo}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-snug">
+                        {it.why}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </TextureCard>
+            </StaggerItem>
+          ))}
+        </StaggerGroup>
+        <div className="flex items-center gap-1.5 mt-3 px-1">
+          <CircleDot className="size-3.5 text-muted-foreground" />
+          <span className="text-[10px] text-muted-foreground/80 italic">
+            Las que venían corriendo no se tocan para no reiniciar el aprendizaje de Facebook · las nuevas arrancan en learning.
+          </span>
         </div>
       </section>
 
@@ -1361,6 +1769,170 @@ export function JunioPlan() {
             Estilo: producción de oficina con personas reales (como “Bivi anterior”) · formato que ya sabemos que funciona.
           </div>
         </div>
+      </section>
+
+      {/* ── BLOQUE 10 · Desglose campaña → conjunto → anuncio ── */}
+      <section>
+        <SectionHeader
+          title="Desglose completo · campaña → conjunto → anuncio"
+          sub="Las 6 campañas al detalle · presupuesto, audiencia, costo real de mayo y acción de cada conjunto"
+        />
+        <TextureCard className="p-4 mb-3" style={{ borderColor: tw("violet", 0.3) }}>
+          <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">Cómo leer esto:</span>{" "}
+            cada campaña tiene sus <span className="font-semibold text-foreground">conjuntos de anuncios</span> (grupos
+            de audiencia) y cada conjunto tiene su presupuesto, su tipo de audiencia,
+            el costo por registro real de mayo (si ya venía corriendo) y qué vamos a
+            hacer con él. Abajo, los anuncios que le cargamos.
+          </p>
+        </TextureCard>
+        <StaggerGroup className="grid md:grid-cols-2 gap-3">
+          {BREAKDOWN.map((c) => {
+            const total = c.adsets.length;
+            return (
+              <StaggerItem key={c.code}>
+                <TextureCard className="p-4 h-full flex flex-col">
+                  {/* Cabecera */}
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="size-7 grid place-items-center rounded-md shrink-0 font-mono text-[11px] font-bold"
+                        style={{
+                          background: tw(c.objetivoTone, 0.14),
+                          color: `hsl(${TOKEN[c.objetivoTone]})`,
+                        }}
+                      >
+                        {c.code}
+                      </span>
+                      <span className="text-[13px] font-bold leading-tight truncate">
+                        {c.name}
+                      </span>
+                    </div>
+                    <Badge
+                      variant={BADGE_VARIANT[c.objetivoTone]}
+                      className="!text-[8px] normal-case tracking-normal whitespace-nowrap shrink-0"
+                    >
+                      {c.objetivo}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 mb-1 pl-9">
+                    <span className="font-mono text-[11px] font-bold tabular-nums text-foreground">
+                      {c.perDay}
+                    </span>
+                    <span className="text-muted-foreground/50">·</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {c.cplMeta}
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-muted-foreground italic leading-snug mb-3 pl-9">
+                    {c.tagline}
+                  </p>
+
+                  {/* Conjuntos (adsets) */}
+                  <div className="space-y-2">
+                    <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground flex items-center gap-1">
+                      <Layers className="size-3" />
+                      Conjuntos · {total}
+                    </span>
+                    {c.adsets.map((a) => {
+                      const aTone = ADSET_ACTION_TONE[a.action];
+                      return (
+                        <div
+                          key={a.name}
+                          className="rounded-lg border bg-card/50 p-2.5"
+                          style={{ borderLeftWidth: "3px", borderLeftColor: `hsl(${TOKEN[aTone]})` }}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className="text-[11px] font-bold leading-tight">
+                              {a.name}
+                            </span>
+                            <Badge
+                              variant={BADGE_VARIANT[aTone]}
+                              className="!text-[8px] normal-case tracking-normal whitespace-nowrap shrink-0"
+                            >
+                              {a.action}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1 text-[10px]">
+                            <span className="text-muted-foreground">
+                              {a.audience}
+                              <span className="text-muted-foreground/60">
+                                {" "}
+                                ({AUDIENCE_HINT[a.audience]})
+                              </span>
+                            </span>
+                            <span className="text-muted-foreground/50">·</span>
+                            <span className="font-mono tabular-nums font-semibold text-foreground">
+                              {a.perDay}
+                            </span>
+                            {a.cplMay && (
+                              <>
+                                <span className="text-muted-foreground/50">·</span>
+                                <span className="font-mono tabular-nums text-muted-foreground">
+                                  CPL may {a.cplMay}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-snug">
+                            {a.note}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Anuncios */}
+                  <div className="mt-3 pt-3 border-t border-border/40 mt-auto">
+                    <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground flex items-center gap-1 mb-1">
+                      <Video className="size-3" />
+                      Anuncios cargados
+                    </span>
+                    <p className="text-[10.5px] text-foreground leading-snug">
+                      {c.ads}
+                    </p>
+                  </div>
+                </TextureCard>
+              </StaggerItem>
+            );
+          })}
+        </StaggerGroup>
+        <TextureCard
+          className="p-4 mt-3"
+          style={{
+            borderColor: tw("success", 0.4),
+            background: `linear-gradient(135deg, ${tw("success", 0.08)}, hsl(var(--card)))`,
+          }}
+        >
+          <div className="flex items-start gap-2">
+            <Wallet
+              className="size-4 mt-0.5 shrink-0"
+              style={{ color: `hsl(${TOKEN.success})` }}
+            />
+            <div>
+              <div className="text-[12px] font-bold mb-1">
+                Total:{" "}
+                <span
+                  className="font-mono tabular-nums"
+                  style={{ color: `hsl(${TOKEN.success})` }}
+                >
+                  €100/día
+                </span>{" "}
+                base
+                <span className="text-muted-foreground font-normal">
+                  {" "}
+                  (€26 + €22 + €20 + €14 + €12 + €6) · escala a €150/día en semanas
+                  push
+                </span>
+              </div>
+              <p className="text-[10.5px] text-muted-foreground leading-relaxed">
+                Cada conjunto con mínimo €5-6/día y los principales €12-14 para que
+                salgan de aprendizaje. El budget mostrado es el de arranque (semana
+                1) · en semanas 2-3 se sube a los ganadores.
+              </p>
+            </div>
+          </div>
+        </TextureCard>
       </section>
 
       {/* ── BLOQUE 8 · Mejores anuncios mayo ── */}

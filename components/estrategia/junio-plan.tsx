@@ -118,12 +118,25 @@ interface Scenario {
   budget: string;
   cpl: string;
   leads: string;
+  /** Trials = 50% del total de leads (regla operativa fija de Bewe) */
+  trials: string;
+  /** CPT = budget / trials · cost per trial */
+  cpt: string;
   improve: string;
   improveNote: string;
   needs: string;
   howTo: string;
   tone: Tone;
 }
+
+/**
+ * Regla operativa Bewe: del total de leads, 50% deben convertir a trial.
+ * Por eso cada escenario reporta también el nº de trials esperado y el CPT.
+ *  Conservador  500 leads → 250 trials · CPT €12.40
+ *  Base         620 leads → 310 trials · CPT €10.00
+ *  Agresivo     778 leads → 389 trials · CPT €9.00
+ */
+const TRIAL_RATIO = 0.5;
 
 const SCENARIOS: Scenario[] = [
   {
@@ -133,6 +146,8 @@ const SCENARIOS: Scenario[] = [
     budget: "€3.100",
     cpl: "€6.20",
     leads: "500",
+    trials: "250",
+    cpt: "€12.40",
     improve: "-19%",
     improveNote: "optimización básica",
     needs: "Apagar perdedores a tiempo y escalar lo que ya rinde. Piso comprometido.",
@@ -146,6 +161,8 @@ const SCENARIOS: Scenario[] = [
     budget: "€3.100",
     cpl: "€5.00",
     leads: "620",
+    trials: "310",
+    cpt: "€10.00",
     improve: "-35%",
     improveNote: "optimización media",
     needs: "Refresh creativo anti-fatiga + servicios escalando la última semana de mayo + comercio apagado.",
@@ -159,6 +176,8 @@ const SCENARIOS: Scenario[] = [
     budget: "€3.500",
     cpl: "€4.50",
     leads: "778",
+    trials: "389",
+    cpt: "€9.00",
     improve: "-41%",
     improveNote: "todo se alinea",
     needs: "Belleza Clientes Potenciales rinde + 6 videos perro-mucho funcionan + se activa contingencia €400.",
@@ -308,6 +327,10 @@ interface WeekRow {
   leadsDay: string;
   cpl: string;
   perWeekLeads: string;
+  /** Trials esperados (50% de leads de la semana) */
+  perWeekTrials: string;
+  /** CPT semanal = €/sem / trials de la semana */
+  cpt: string;
   perWeek: string;
   tone: Tone;
 }
@@ -315,7 +338,9 @@ interface WeekRow {
 interface WeeklyPlan {
   rows: WeekRow[];
   totalLeads: string;
+  totalTrials: string;
   totalSpend: string;
+  totalCpt: string;
 }
 
 /**
@@ -332,33 +357,39 @@ interface WeeklyPlan {
 const WEEKLY_BY_SCENARIO: Record<ScenarioKey, WeeklyPlan> = {
   conservador: {
     rows: [
-      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "15", cpl: "€7.00", perWeekLeads: "105", perWeek: "€735", tone: "warning" },
-      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "25", cpl: "€6.20", perWeekLeads: "175", perWeek: "€1.085", tone: "cyan" },
-      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "21", cpl: "€5.80", perWeekLeads: "150", perWeek: "€870", tone: "violet" },
-      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "8", cpl: "€5.50", perWeekLeads: "75", perWeek: "€410", tone: "success" },
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "15", cpl: "€7.00", perWeekLeads: "105", perWeekTrials: "52", cpt: "€14.10", perWeek: "€735", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "25", cpl: "€6.20", perWeekLeads: "175", perWeekTrials: "87", cpt: "€12.50", perWeek: "€1.085", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "21", cpl: "€5.80", perWeekLeads: "150", perWeekTrials: "75", cpt: "€11.60", perWeek: "€870", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "8", cpl: "€5.50", perWeekLeads: "75", perWeekTrials: "37", cpt: "€11.10", perWeek: "€410", tone: "success" },
     ],
     totalLeads: "~505 leads",
+    totalTrials: "~250 trials",
     totalSpend: "€3.100",
+    totalCpt: "€12.40",
   },
   base: {
     rows: [
-      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "16", cpl: "€6.50", perWeekLeads: "110", perWeek: "€715", tone: "warning" },
-      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "29", cpl: "€5.00", perWeekLeads: "200", perWeek: "€1.000", tone: "cyan" },
-      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "28", cpl: "€4.50", perWeekLeads: "195", perWeek: "€880", tone: "violet" },
-      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "13", cpl: "€4.40", perWeekLeads: "115", perWeek: "€505", tone: "success" },
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "16", cpl: "€6.50", perWeekLeads: "110", perWeekTrials: "55", cpt: "€13.00", perWeek: "€715", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "29", cpl: "€5.00", perWeekLeads: "200", perWeekTrials: "100", cpt: "€10.00", perWeek: "€1.000", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "28", cpl: "€4.50", perWeekLeads: "195", perWeekTrials: "97", cpt: "€9.10", perWeek: "€880", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "13", cpl: "€4.40", perWeekLeads: "115", perWeekTrials: "57", cpt: "€8.85", perWeek: "€505", tone: "success" },
     ],
     totalLeads: "~620 leads",
+    totalTrials: "~310 trials",
     totalSpend: "€3.100",
+    totalCpt: "€10.00",
   },
   agresivo: {
     rows: [
-      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "20", cpl: "€5.50", perWeekLeads: "140", perWeek: "€770", tone: "warning" },
-      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "38", cpl: "€4.50", perWeekLeads: "265", perWeek: "€1.190", tone: "cyan" },
-      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "35", cpl: "€4.20", perWeekLeads: "245", perWeek: "€1.030", tone: "violet" },
-      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "14", cpl: "€4.00", perWeekLeads: "128", perWeek: "€510", tone: "success" },
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "20", cpl: "€5.50", perWeekLeads: "140", perWeekTrials: "70", cpt: "€11.00", perWeek: "€770", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "38", cpl: "€4.50", perWeekLeads: "265", perWeekTrials: "132", cpt: "€9.00", perWeek: "€1.190", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "35", cpl: "€4.20", perWeekLeads: "245", perWeekTrials: "122", cpt: "€8.45", perWeek: "€1.030", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "14", cpl: "€4.00", perWeekLeads: "128", perWeekTrials: "64", cpt: "€7.95", perWeek: "€510", tone: "success" },
     ],
     totalLeads: "~778 leads",
+    totalTrials: "~389 trials",
     totalSpend: "€3.500",
+    totalCpt: "€9.00",
   },
 };
 
@@ -1439,16 +1470,33 @@ export function JunioPlan() {
                   </Badge>
                 </div>
 
-                <div className="flex items-baseline gap-2">
-                  <span
-                    className="font-mono text-4xl font-bold tabular-nums"
-                    style={{ color: `hsl(${TOKEN[s.tone]})` }}
-                  >
-                    {s.leads}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">leads</span>
+                {/* Leads + Trials side by side · narrativa principal */}
+                <div className="flex items-end justify-between gap-3 mb-1">
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className="font-mono text-4xl font-bold tabular-nums leading-none"
+                      style={{ color: `hsl(${TOKEN[s.tone]})` }}
+                    >
+                      {s.leads}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">leads</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5 text-muted-foreground">
+                    <span className="text-[11px]">→</span>
+                    <span
+                      className="font-mono text-2xl font-bold tabular-nums leading-none"
+                      style={{ color: `hsl(${TOKEN[s.tone]} / 0.85)` }}
+                    >
+                      {s.trials}
+                    </span>
+                    <span className="text-[10px]">trials</span>
+                  </div>
+                </div>
+                <div className="text-[9px] text-muted-foreground/70 italic mb-2">
+                  50% lead → trial · regla operativa Bewe
                 </div>
 
+                {/* 4 KPIs · budget · CPL blend · CPT · mejora */}
                 <div className="grid grid-cols-2 gap-2 mt-3 text-[11px]">
                   <div className="rounded-lg bg-card/60 border border-border/40 p-2">
                     <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
@@ -1462,10 +1510,33 @@ export function JunioPlan() {
                     </div>
                     <div className="font-mono font-bold tabular-nums">{s.cpl}</div>
                   </div>
+                  <div
+                    className="rounded-lg p-2"
+                    style={{
+                      background: tw(s.tone, 0.1),
+                      border: `1px solid ${tw(s.tone, 0.35)}`,
+                    }}
+                  >
+                    <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+                      CPT (costo/trial)
+                    </div>
+                    <div
+                      className="font-mono font-bold tabular-nums"
+                      style={{ color: `hsl(${TOKEN[s.tone]})` }}
+                    >
+                      {s.cpt}
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-card/60 border border-border/40 p-2">
+                    <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+                      Mejora CPL
+                    </div>
+                    <div className="font-mono font-bold tabular-nums">{s.improve}</div>
+                  </div>
                 </div>
 
                 <div className="text-[10px] text-muted-foreground mt-2 font-mono">
-                  Mejora {s.improve} · {s.improveNote}
+                  {s.improveNote}
                 </div>
 
                 <div
@@ -1744,11 +1815,22 @@ export function JunioPlan() {
                 />
                 <span>{s.name}</span>
                 <span className="font-mono text-[10px] opacity-80">
-                  {s.leads} · {s.budget}
+                  {s.leads}L → {s.trials}T · {s.budget}
                 </span>
               </button>
             );
           })}
+        </div>
+
+        {/* Mini-callout · regla 50% lead→trial */}
+        <div
+          className="rounded-lg border px-3 py-2 mb-3 flex items-start gap-2"
+          style={{ borderColor: tw("violet", 0.3), background: tw("violet", 0.05) }}
+        >
+          <Ratio className="size-3.5 mt-0.5 shrink-0 text-[hsl(var(--brand-violet))]" />
+          <p className="text-[10.5px] text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">Regla 50% lead → trial</span>: del total de leads, la mitad debe convertir a trial. El CPT (cost per trial) por escenario es {SCENARIOS.map((s) => `${s.name} ${s.cpt}`).join(" · ")}.
+          </p>
         </div>
 
         <TextureCard className="overflow-hidden">
@@ -1761,6 +1843,8 @@ export function JunioPlan() {
                   <th className="text-right p-3 font-bold">Leads/día</th>
                   <th className="text-right p-3 font-bold">CPL</th>
                   <th className="text-right p-3 font-bold">Leads sem</th>
+                  <th className="text-right p-3 font-bold">Trials sem</th>
+                  <th className="text-right p-3 font-bold">CPT</th>
                   <th className="text-right p-3 font-bold">€/sem</th>
                 </tr>
               </thead>
@@ -1793,6 +1877,13 @@ export function JunioPlan() {
                     >
                       {w.perWeekLeads}
                     </td>
+                    <td
+                      className="p-3 text-right font-mono tabular-nums font-bold"
+                      style={{ color: `hsl(${TOKEN[w.tone]} / 0.85)` }}
+                    >
+                      {w.perWeekTrials}
+                    </td>
+                    <td className="p-3 text-right font-mono tabular-nums font-semibold text-muted-foreground">{w.cpt}</td>
                     <td className="p-3 text-right font-mono tabular-nums">{w.perWeek}</td>
                   </motion.tr>
                 ))}
@@ -1808,6 +1899,17 @@ export function JunioPlan() {
                     style={{ color: `hsl(${TOKEN[activeScenario.tone]})` }}
                   >
                     {activeWeekly.totalLeads}
+                  </td>
+                  <td
+                    className="p-3 text-right font-mono tabular-nums font-bold"
+                    style={{ color: `hsl(${TOKEN[activeScenario.tone]} / 0.85)` }}
+                  >
+                    {activeWeekly.totalTrials}
+                  </td>
+                  <td
+                    className="p-3 text-right font-mono tabular-nums font-bold"
+                  >
+                    {activeWeekly.totalCpt}
                   </td>
                   <td className="p-3 text-right font-mono tabular-nums font-bold">
                     {activeWeekly.totalSpend}

@@ -21,26 +21,41 @@ Si te preguntan por el plan de junio, usa EXCLUSIVAMENTE estos datos. NO invente
 PERÍODO: 1 al 30 de junio (30 días).
 BUDGET: €3.100 techo base + €400 contingencia (autoriza Julián) = €3.500 máximo absoluto.
 LEAD = CompleteRegistration (registro completo). NO contamos Initiate Checkout como lead.
+TRIAL = el 50% de los leads debe convertir a trial (regla operativa fija Bewe).
 CPL REAL DE MAYO (punto de partida): €7.66 blend en belleza.
 
-3 ESCENARIOS (se diferencian por cuánto baja el CPL):
-- CONSERVADOR "500 sí o sí": budget €3.100 · CPL €6.20 · 500 leads · requiere -19% CPL (optimización básica). Se logra apagando lo caro a tiempo y escalando solo audiencias Lookalike (las baratas).
-- BASE: budget €3.300 · CPL €5.79 · 570 leads · requiere -24% CPL. Se logra con lo anterior + videos nuevos bajan el CPL + adset de interés amplio rinde.
-- AGRESIVO: budget €3.500 · CPL €5.25 · 667 leads · requiere -31% CPL. Se logra si Clientes Potenciales gana el A/B + se activa la contingencia.
+3 ESCENARIOS (cada uno reporta budget, CPL blend, leads, trials esperados y CPT):
+- CONSERVADOR "Piso 500": budget €3.100 · CPL €6.20 · 500 leads · 250 trials · CPT €12.40 · requiere -19% CPL (optimización básica). Se logra apagando lo caro a tiempo y escalando solo audiencias Lookalike (las baratas).
+- BASE: budget €3.100 · CPL €5.00 · 620 leads · 310 trials · CPT €10.00 · requiere -35% CPL. Se logra concentrando 75-80% en belleza + refresh creativo anti-fatiga + servicios escala la última semana de mayo.
+- AGRESIVO: budget €3.500 · CPL €4.50 · 778 leads · 389 trials · CPT €9.00 · requiere -41% CPL. Se logra si Belleza Clientes Potenciales rinde + 6 videos perro-mucho funcionan + se activa contingencia €400.
 
-PLAN SEMANAL (front-load → taper):
-- Semana 1 (1-7 jun) ARRANQUE: 15-22 leads/día · CPL ~€7 · €115/día · ~126 leads. No escalar aún, dejar aprender.
-- Semana 2 (8-14) PUSH: 28-30 leads/día · CPL ~€5.50 · €150/día · apagar perdedores, escalar ganadores.
-- Semana 3 (15-21) PICO: 30-32 leads/día · CPL ~€5 · €150/día · máximo volumen. Acumulado ~546.
-- Semana 4 (22-30) TAPER: 10-15 leads/día · CPL ~€4.50 · €55/día · bajar gasto, calidad. Cierre ~640.
+PLAN SEMANAL POR ESCENARIO (front-load → taper · cada escenario suma EXACTO al budget):
 
-6 CAMPAÑAS (€100/día base):
-- J1 MX Belleza · objetivo Ventas · €26/día · meta CPL €4-5 · QUEDA ACTIVA
-- J2 LATAM Belleza · objetivo Ventas · €22/día · meta CPL €3.5-5 · QUEDA ACTIVA
-- J3 Belleza Clientes Potenciales · objetivo Clientes Potenciales · €20/día · meta CPL €3 · NUEVA (la prueba A/B)
-- J4 Servicios · objetivo Clientes Potenciales · €14/día · meta CPL €4 · QUEDA ACTIVA
-- J5 Retargeting · objetivo Ventas · €12/día · QUEDA pero se fusionan los 2 conjuntos en 1
-- J6 Tools + Academy · objetivo Tráfico · €6/día · NUEVA (atracción)
+CONSERVADOR (€3.100 · 505 leads · 250 trials · blend €6.20 · CPT €12.40):
+- Sem 1 (1-7) arranque: 15 lds/día · CPL €7.00 · 105 lds · 52 trials · €735 · CPT €14.10
+- Sem 2 (8-14) push: 25 lds/día · CPL €6.20 · 175 lds · 87 trials · €1.085 · CPT €12.50
+- Sem 3 (15-21) estabilizar: 21 lds/día · CPL €5.80 · 150 lds · 75 trials · €870 · CPT €11.60
+- Sem 4 (22-30) taper: 8 lds/día · CPL €5.50 · 75 lds · 37 trials · €410 · CPT €11.10
+
+BASE (€3.100 · 620 leads · 310 trials · blend €5.00 · CPT €10.00):
+- Sem 1 arranque: 16 lds/día · CPL €6.50 · 110 lds · 55 trials · €715 · CPT €13.00
+- Sem 2 push: 29 lds/día · CPL €5.00 · 200 lds · 100 trials · €1.000 · CPT €10.00
+- Sem 3 estabilizar: 28 lds/día · CPL €4.50 · 195 lds · 97 trials · €880 · CPT €9.10
+- Sem 4 taper: 13 lds/día · CPL €4.40 · 115 lds · 57 trials · €505 · CPT €8.85
+
+AGRESIVO (€3.500 · 778 leads · 389 trials · blend €4.50 · CPT €9.00):
+- Sem 1 arranque: 20 lds/día · CPL €5.50 · 140 lds · 70 trials · €770 · CPT €11.00
+- Sem 2 push: 38 lds/día · CPL €4.50 · 265 lds · 132 trials · €1.190 · CPT €9.00
+- Sem 3 estabilizar: 35 lds/día · CPL €4.20 · 245 lds · 122 trials · €1.030 · CPT €8.45
+- Sem 4 taper: 14 lds/día · CPL €4.00 · 128 lds · 64 trials · €510 · CPT €7.95
+
+6 CAMPAÑAS · €/día y €/mes varían por escenario (Conservador/Base/Agresivo):
+- J1 MX Belleza · objetivo Ventas · €23/€22/€25 día · €690/€660/€750 mes · meta CPL €4-5 · ACTIVA · MOTOR BELLEZA
+- J2 LATAM Belleza · objetivo Ventas · €21/€20/€23 día · €620/€600/€690 mes · meta CPL €3.5-5 · ACTIVA · MOTOR BELLEZA
+- J3 Belleza Clientes Potenciales · objetivo Clientes Potenciales · €18/€20/€23 día · €540/€600/€690 mes · meta CPL €3 · NUEVA · MOTOR BELLEZA
+- J4 Servicios · objetivo Clientes Potenciales · €13/€13/€15 día · €400/€400/€450 mes · meta CPL €4 · ACTIVA · APOYO
+- J5 Remarketing LATAM · objetivo Ventas · €15/€15/€17 día · €450/€450/€510 mes · validar CPL · AJUSTA · APOYO
+- J6 Tools + Academy · objetivo Tráfico · €13/€13/€14 día · €400/€390/€410 mes · tráfico · NUEVA · ATRACCIÓN
 
 QUÉ SE PRENDE/QUEDA/APAGA:
 - Quedan activas (sin reiniciar aprendizaje): MX Belleza, LATAM Belleza, Servicios.

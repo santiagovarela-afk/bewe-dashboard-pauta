@@ -318,36 +318,47 @@ interface WeeklyPlan {
   totalSpend: string;
 }
 
+/**
+ * Distribución semanal · cada escenario suma EXACTO al budget y leads
+ * declarados en SCENARIOS arriba (Conservador 500 · Base 620 · Agresivo 778).
+ *
+ *  Conservador  €3.100 · blend €6.20
+ *    S1 €735  / 105 lds · S2 €1.085 / 175 lds · S3 €870 / 150 lds · S4 €410 / 75 lds
+ *  Base         €3.100 · blend €5.00
+ *    S1 €715  / 110 lds · S2 €1.000 / 200 lds · S3 €880 / 195 lds · S4 €505 / 115 lds
+ *  Agresivo     €3.500 · blend €4.50
+ *    S1 €770  / 140 lds · S2 €1.190 / 265 lds · S3 €1.030 / 245 lds · S4 €510 / 128 lds
+ */
 const WEEKLY_BY_SCENARIO: Record<ScenarioKey, WeeklyPlan> = {
   conservador: {
     rows: [
       { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "15", cpl: "€7.00", perWeekLeads: "105", perWeek: "€735", tone: "warning" },
-      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "25", cpl: "€5.80", perWeekLeads: "175", perWeek: "€1.015", tone: "cyan" },
-      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "22", cpl: "€5.50", perWeekLeads: "154", perWeek: "€847", tone: "violet" },
-      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "8", cpl: "€5.00", perWeekLeads: "72", perWeek: "€503", tone: "success" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "25", cpl: "€6.20", perWeekLeads: "175", perWeek: "€1.085", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "21", cpl: "€5.80", perWeekLeads: "150", perWeek: "€870", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "8", cpl: "€5.50", perWeekLeads: "75", perWeek: "€410", tone: "success" },
     ],
-    totalLeads: "~506 leads",
+    totalLeads: "~505 leads",
     totalSpend: "€3.100",
   },
   base: {
     rows: [
-      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "20", cpl: "€6.50", perWeekLeads: "140", perWeek: "€910", tone: "warning" },
-      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "30", cpl: "€5.50", perWeekLeads: "210", perWeek: "€1.155", tone: "cyan" },
-      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "28", cpl: "€5.00", perWeekLeads: "196", perWeek: "€980", tone: "violet" },
-      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "10", cpl: "€4.50", perWeekLeads: "90", perWeek: "€405", tone: "success" },
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "16", cpl: "€6.50", perWeekLeads: "110", perWeek: "€715", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "29", cpl: "€5.00", perWeekLeads: "200", perWeek: "€1.000", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "28", cpl: "€4.50", perWeekLeads: "195", perWeek: "€880", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "13", cpl: "€4.40", perWeekLeads: "115", perWeek: "€505", tone: "success" },
     ],
-    totalLeads: "~636 leads",
-    totalSpend: "€3.450",
+    totalLeads: "~620 leads",
+    totalSpend: "€3.100",
   },
   agresivo: {
     rows: [
-      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "25-30", cpl: "€6.50", perWeekLeads: "196", perWeek: "€1.274", tone: "warning" },
-      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "35-40", cpl: "€5.00", perWeekLeads: "263", perWeek: "€1.313", tone: "cyan" },
-      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "35", cpl: "€4.50", perWeekLeads: "245", perWeek: "€1.103", tone: "violet" },
-      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "12-15", cpl: "€4.00", perWeekLeads: "119", perWeek: "€475", tone: "success" },
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "20", cpl: "€5.50", perWeekLeads: "140", perWeek: "€770", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "38", cpl: "€4.50", perWeekLeads: "265", perWeek: "€1.190", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "35", cpl: "€4.20", perWeekLeads: "245", perWeek: "€1.030", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "14", cpl: "€4.00", perWeekLeads: "128", perWeek: "€510", tone: "success" },
     ],
-    totalLeads: "~822 leads",
-    totalSpend: "€4.165",
+    totalLeads: "~778 leads",
+    totalSpend: "€3.500",
   },
 };
 
@@ -380,73 +391,73 @@ const PHASE_LABEL: Record<RampPhase, string> = {
  */
 const DAILY_RAMP_BY_SCENARIO: Record<ScenarioKey, DayProjection[]> = {
   conservador: [
-    // Sem 1 arranque · ~105 leads (15/día)
-    { day: 1, leads: 10, phase: "learning" }, { day: 2, leads: 13, phase: "learning" },
+    // Sem 1 · 105 leads · 15/día
+    { day: 1, leads: 10, phase: "learning" }, { day: 2, leads: 12, phase: "learning" },
     { day: 3, leads: 14, phase: "learning" }, { day: 4, leads: 15, phase: "learning" },
-    { day: 5, leads: 16, phase: "learning" }, { day: 6, leads: 17, phase: "learning" },
+    { day: 5, leads: 16, phase: "learning" }, { day: 6, leads: 18, phase: "learning" },
     { day: 7, leads: 20, phase: "learning" },
-    // Sem 2 push · ~175 leads (25/día)
+    // Sem 2 · 175 leads · 25/día
     { day: 8, leads: 22, phase: "push" }, { day: 9, leads: 24, phase: "push" },
     { day: 10, leads: 25, phase: "push" }, { day: 11, leads: 25, phase: "push" },
     { day: 12, leads: 26, phase: "push" }, { day: 13, leads: 26, phase: "push" },
     { day: 14, leads: 27, phase: "push" },
-    // Sem 3 estabilizar · ~154 leads (22/día)
+    // Sem 3 · 150 leads · 21/día
     { day: 15, leads: 24, phase: "peak" }, { day: 16, leads: 23, phase: "peak" },
-    { day: 17, leads: 22, phase: "peak" }, { day: 18, leads: 22, phase: "peak" },
-    { day: 19, leads: 22, phase: "peak" }, { day: 20, leads: 21, phase: "peak" },
-    { day: 21, leads: 20, phase: "peak" },
-    // Sem 4 taper · ~72 leads (8/día)
-    { day: 22, leads: 12, phase: "taper" }, { day: 23, leads: 10, phase: "taper" },
+    { day: 17, leads: 22, phase: "peak" }, { day: 18, leads: 21, phase: "peak" },
+    { day: 19, leads: 21, phase: "peak" }, { day: 20, leads: 20, phase: "peak" },
+    { day: 21, leads: 19, phase: "peak" },
+    // Sem 4 · 75 leads · 8/día (9 días: 22-30)
+    { day: 22, leads: 12, phase: "taper" }, { day: 23, leads: 11, phase: "taper" },
     { day: 24, leads: 9, phase: "taper" }, { day: 25, leads: 8, phase: "taper" },
     { day: 26, leads: 8, phase: "taper" }, { day: 27, leads: 7, phase: "taper" },
-    { day: 28, leads: 6, phase: "taper" }, { day: 29, leads: 6, phase: "taper" },
+    { day: 28, leads: 7, phase: "taper" }, { day: 29, leads: 7, phase: "taper" },
     { day: 30, leads: 6, phase: "taper" },
   ],
   base: [
-    // Sem 1 arranque · ~140 leads (20/día)
-    { day: 1, leads: 14, phase: "learning" }, { day: 2, leads: 17, phase: "learning" },
-    { day: 3, leads: 19, phase: "learning" }, { day: 4, leads: 20, phase: "learning" },
-    { day: 5, leads: 21, phase: "learning" }, { day: 6, leads: 23, phase: "learning" },
-    { day: 7, leads: 26, phase: "learning" },
-    // Sem 2 push · ~210 leads (30/día)
-    { day: 8, leads: 28, phase: "push" }, { day: 9, leads: 29, phase: "push" },
-    { day: 10, leads: 30, phase: "push" }, { day: 11, leads: 30, phase: "push" },
-    { day: 12, leads: 31, phase: "push" }, { day: 13, leads: 31, phase: "push" },
-    { day: 14, leads: 31, phase: "push" },
-    // Sem 3 estabilizar · ~196 leads (28/día)
+    // Sem 1 · 110 leads · 16/día
+    { day: 1, leads: 11, phase: "learning" }, { day: 2, leads: 13, phase: "learning" },
+    { day: 3, leads: 15, phase: "learning" }, { day: 4, leads: 16, phase: "learning" },
+    { day: 5, leads: 17, phase: "learning" }, { day: 6, leads: 18, phase: "learning" },
+    { day: 7, leads: 20, phase: "learning" },
+    // Sem 2 · 200 leads · 29/día
+    { day: 8, leads: 26, phase: "push" }, { day: 9, leads: 27, phase: "push" },
+    { day: 10, leads: 28, phase: "push" }, { day: 11, leads: 29, phase: "push" },
+    { day: 12, leads: 30, phase: "push" }, { day: 13, leads: 30, phase: "push" },
+    { day: 14, leads: 30, phase: "push" },
+    // Sem 3 · 195 leads · 28/día
     { day: 15, leads: 30, phase: "peak" }, { day: 16, leads: 29, phase: "peak" },
-    { day: 17, leads: 29, phase: "peak" }, { day: 18, leads: 28, phase: "peak" },
+    { day: 17, leads: 28, phase: "peak" }, { day: 18, leads: 28, phase: "peak" },
     { day: 19, leads: 28, phase: "peak" }, { day: 20, leads: 27, phase: "peak" },
     { day: 21, leads: 25, phase: "peak" },
-    // Sem 4 taper · ~90 leads (10/día)
-    { day: 22, leads: 14, phase: "taper" }, { day: 23, leads: 12, phase: "taper" },
-    { day: 24, leads: 11, phase: "taper" }, { day: 25, leads: 10, phase: "taper" },
-    { day: 26, leads: 10, phase: "taper" }, { day: 27, leads: 9, phase: "taper" },
-    { day: 28, leads: 9, phase: "taper" }, { day: 29, leads: 8, phase: "taper" },
-    { day: 30, leads: 7, phase: "taper" },
-  ],
-  agresivo: [
-    // Sem 1 arranque · ~196 leads (28/día)
-    { day: 1, leads: 18, phase: "learning" }, { day: 2, leads: 23, phase: "learning" },
-    { day: 3, leads: 26, phase: "learning" }, { day: 4, leads: 28, phase: "learning" },
-    { day: 5, leads: 30, phase: "learning" }, { day: 6, leads: 33, phase: "learning" },
-    { day: 7, leads: 38, phase: "learning" },
-    // Sem 2 push · ~263 leads (37/día)
-    { day: 8, leads: 33, phase: "push" }, { day: 9, leads: 35, phase: "push" },
-    { day: 10, leads: 37, phase: "push" }, { day: 11, leads: 38, phase: "push" },
-    { day: 12, leads: 39, phase: "push" }, { day: 13, leads: 40, phase: "push" },
-    { day: 14, leads: 41, phase: "push" },
-    // Sem 3 estabilizar · ~245 leads (35/día)
-    { day: 15, leads: 40, phase: "peak" }, { day: 16, leads: 38, phase: "peak" },
-    { day: 17, leads: 36, phase: "peak" }, { day: 18, leads: 35, phase: "peak" },
-    { day: 19, leads: 33, phase: "peak" }, { day: 20, leads: 32, phase: "peak" },
-    { day: 21, leads: 31, phase: "peak" },
-    // Sem 4 taper · ~119 leads (13/día)
-    { day: 22, leads: 18, phase: "taper" }, { day: 23, leads: 16, phase: "taper" },
+    // Sem 4 · 115 leads · 13/día
+    { day: 22, leads: 16, phase: "taper" }, { day: 23, leads: 15, phase: "taper" },
     { day: 24, leads: 14, phase: "taper" }, { day: 25, leads: 13, phase: "taper" },
     { day: 26, leads: 13, phase: "taper" }, { day: 27, leads: 12, phase: "taper" },
     { day: 28, leads: 11, phase: "taper" }, { day: 29, leads: 11, phase: "taper" },
-    { day: 30, leads: 11, phase: "taper" },
+    { day: 30, leads: 10, phase: "taper" },
+  ],
+  agresivo: [
+    // Sem 1 · 140 leads · 20/día
+    { day: 1, leads: 14, phase: "learning" }, { day: 2, leads: 17, phase: "learning" },
+    { day: 3, leads: 19, phase: "learning" }, { day: 4, leads: 20, phase: "learning" },
+    { day: 5, leads: 22, phase: "learning" }, { day: 6, leads: 23, phase: "learning" },
+    { day: 7, leads: 25, phase: "learning" },
+    // Sem 2 · 265 leads · 38/día
+    { day: 8, leads: 34, phase: "push" }, { day: 9, leads: 36, phase: "push" },
+    { day: 10, leads: 38, phase: "push" }, { day: 11, leads: 38, phase: "push" },
+    { day: 12, leads: 39, phase: "push" }, { day: 13, leads: 40, phase: "push" },
+    { day: 14, leads: 40, phase: "push" },
+    // Sem 3 · 245 leads · 35/día
+    { day: 15, leads: 38, phase: "peak" }, { day: 16, leads: 37, phase: "peak" },
+    { day: 17, leads: 36, phase: "peak" }, { day: 18, leads: 35, phase: "peak" },
+    { day: 19, leads: 34, phase: "peak" }, { day: 20, leads: 33, phase: "peak" },
+    { day: 21, leads: 32, phase: "peak" },
+    // Sem 4 · 128 leads · 14/día
+    { day: 22, leads: 18, phase: "taper" }, { day: 23, leads: 17, phase: "taper" },
+    { day: 24, leads: 15, phase: "taper" }, { day: 25, leads: 14, phase: "taper" },
+    { day: 26, leads: 14, phase: "taper" }, { day: 27, leads: 13, phase: "taper" },
+    { day: 28, leads: 13, phase: "taper" }, { day: 29, leads: 12, phase: "taper" },
+    { day: 30, leads: 12, phase: "taper" },
   ],
 };
 

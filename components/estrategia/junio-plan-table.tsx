@@ -114,11 +114,37 @@ interface PlanCampaign {
   ads: string;
 }
 
-// ── Budget por escenario · €/día por campaña ─────────────────────
-const BUDGET_BY_SCENARIO: Record<ScenarioKey, Record<string, number>> = {
-  conservador: { J1: 23, J2: 21, J3: 18, J4: 13, J5: 15, J6: 13 },
-  base: { J1: 22, J2: 20, J3: 20, J4: 13, J5: 15, J6: 13 },
-  agresivo: { J1: 25, J2: 23, J3: 23, J4: 15, J5: 17, J6: 15 },
+// ── Budget por escenario · €/día y €/mes por campaña ─────────────
+// Mantenemos perDay y perMonth explícitos porque los totales del plan
+// (€3.100 · €3.100 · €3.500) no son múltiplos exactos de 30 días.
+const BUDGET_BY_SCENARIO: Record<ScenarioKey, Record<string, { perDay: number; perMonth: number }>> = {
+  // Conservador · total €3.100/mes (€103/día promedio)
+  conservador: {
+    J1: { perDay: 23, perMonth: 690 },
+    J2: { perDay: 21, perMonth: 620 },
+    J3: { perDay: 18, perMonth: 540 },
+    J4: { perDay: 13, perMonth: 400 },
+    J5: { perDay: 15, perMonth: 450 },
+    J6: { perDay: 13, perMonth: 400 },
+  },
+  // Base · total €3.100/mes (€103/día promedio)
+  base: {
+    J1: { perDay: 22, perMonth: 660 },
+    J2: { perDay: 20, perMonth: 600 },
+    J3: { perDay: 20, perMonth: 600 },
+    J4: { perDay: 13, perMonth: 400 },
+    J5: { perDay: 15, perMonth: 450 },
+    J6: { perDay: 13, perMonth: 390 },
+  },
+  // Agresivo · total €3.500/mes (€117/día promedio)
+  agresivo: {
+    J1: { perDay: 25, perMonth: 750 },
+    J2: { perDay: 23, perMonth: 690 },
+    J3: { perDay: 23, perMonth: 690 },
+    J4: { perDay: 15, perMonth: 450 },
+    J5: { perDay: 17, perMonth: 510 },
+    J6: { perDay: 14, perMonth: 410 },
+  },
 };
 
 const CPL_META_BY_SCENARIO: Record<ScenarioKey, Record<string, string>> = {
@@ -240,8 +266,9 @@ const PLAN: PlanCampaign[] = [
 
 /** Resuelve el €/día y €/mes de cada campaña según el escenario activo. */
 function resolveCampaign(c: PlanCampaign, scenario: ScenarioKey): PlanCampaign {
-  const perDay = BUDGET_BY_SCENARIO[scenario][c.code] ?? c.perDay;
-  const perMonth = perDay * 30;
+  const budget = BUDGET_BY_SCENARIO[scenario][c.code];
+  const perDay = budget?.perDay ?? c.perDay;
+  const perMonth = budget?.perMonth ?? c.perMonth;
   const cplMeta = CPL_META_BY_SCENARIO[scenario][c.code] ?? c.cplMeta;
   return { ...c, perDay, perMonth, cplMeta };
 }

@@ -4,18 +4,24 @@ import { motion } from "motion/react";
 import {
   Calendar,
   TriangleAlert,
-  FlaskConical,
   ImageIcon,
   Video,
   Wrench,
   Wallet,
   Gauge,
   ListChecks,
-  CalendarDays,
   Layers,
   Repeat,
   ArrowUpRight,
   CircleDot,
+  TrendingDown,
+  Lightbulb,
+  CheckCircle2,
+  RefreshCw,
+  Sparkles,
+  GraduationCap,
+  Target,
+  Ratio,
 } from "lucide-react";
 import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
@@ -24,19 +30,22 @@ import { StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import { JunioPlanTable } from "@/components/estrategia/junio-plan-table";
 
 /**
- * Plan Junio 2026 · validado por Santiago contra mayo real (12-26 may).
+ * Plan Junio 2026 · validado por Santiago contra mayo real (12-28 may).
  * Lead = CompleteRegistration (CR). CPL blend belleza real mayo = €7.66.
- * CERO data inventada: todas las cifras vienen del brief de requisitos finales.
+ * Revisión profunda Santiago: nuevos escenarios, aprendizajes mayo,
+ * plan semanal interactivo por escenario, refresh de assets.
  *
- * 8 bloques:
+ * Bloques:
  *  1. Budget structure (techo €3.100 · contingencia €400 · máx €3.500)
- *  2. 3 escenarios (conservador / base / agresivo)
- *  3. Plan semanal (escenario base 570)
- *  4. Qué tiene que pasar cada semana para que baje el CPL
- *  5. Reglas para darle norte a la pauta
- *  6. A/B Ventas vs Cliente Potencial
- *  7. Plan de assets (actuales · nuevas · producción)
- *  8. Mejores anuncios mayo (replicar vs mejorar)
+ *  2. 3 escenarios (conservador 500 / base 620 / agresivo 778)
+ *  3. Qué pasó en mayo · aprendizajes (nuevo)
+ *  4. Por qué confiamos que el CPL baja
+ *  5. Qué se prende / queda / apaga (lifecycle)
+ *  6. Plan semanal interactivo (selector escenario)
+ *  7. Reglas de learning + reglas operativas
+ *  8. Plan de assets (cantidades exactas + formatos)
+ *  9. Desglose campaña → conjunto → anuncio + tabla operativa
+ *  10. Mejores anuncios mayo
  */
 
 type Tone = "success" | "warning" | "ember" | "violet" | "cyan" | "destructive";
@@ -97,8 +106,10 @@ const BUDGET: BudgetItem[] = [
 ];
 
 // ── BLOQUE 2 · 3 escenarios ──────────────────────────────────────
+type ScenarioKey = "conservador" | "base" | "agresivo";
+
 interface Scenario {
-  key: string;
+  key: ScenarioKey;
   name: string;
   tag: string;
   budget: string;
@@ -107,7 +118,6 @@ interface Scenario {
   improve: string;
   improveNote: string;
   needs: string;
-  /** Explicación concreta de cómo se llega a este número de leads */
   howTo: string;
   tone: Tone;
 }
@@ -116,112 +126,221 @@ const SCENARIOS: Scenario[] = [
   {
     key: "conservador",
     name: "Conservador",
-    tag: "500 sí o sí",
+    tag: "Piso 500",
     budget: "€3.100",
     cpl: "€6.20",
     leads: "500",
     improve: "-19%",
     improveNote: "optimización básica",
     needs: "Apagar perdedores a tiempo y escalar lo que ya rinde. Piso comprometido.",
-    howTo: "Apagando lo caro a tiempo y escalando solo las audiencias similares a clientes (Lookalike), que son las más baratas. Casi sin depender de los videos nuevos.",
+    howTo: "Apagar lo caro a tiempo + escalar solo Lookalike (las baratas). Casi sin depender de los videos nuevos.",
     tone: "ember",
   },
   {
     key: "base",
     name: "Base",
-    tag: "objetivo central",
-    budget: "€3.300",
-    cpl: "€5.79",
-    leads: "570",
-    improve: "-24%",
+    tag: "Objetivo central",
+    budget: "€3.100",
+    cpl: "€5.00",
+    leads: "620",
+    improve: "-35%",
     improveNote: "optimización media",
-    needs: "Refresh de video corriendo + adset interés amplio probado + LATAM escalando barato.",
-    howTo: "Todo lo del conservador + los videos nuevos bajan el costo por registro de belleza + el conjunto de interés amplio rinde y suma volumen.",
+    needs: "Refresh creativo anti-fatiga + servicios escalando la última semana de mayo + comercio apagado.",
+    howTo: "75-80% del budget concentrado en belleza (que ya validamos) + refresh creativo anti-fatiga + servicios escala lo que rindió la última semana de mayo. Comercio queda apagado.",
     tone: "cyan",
   },
   {
     key: "agresivo",
     name: "Agresivo",
-    tag: "todo funciona",
+    tag: "Con contingencia",
     budget: "€3.500",
-    cpl: "€5.25",
-    leads: "667",
-    improve: "-31%",
-    improveNote: "todo funciona",
-    needs: "Cliente Potencial gana el A/B, videos nuevos baten a las imágenes y se activa contingencia.",
-    howTo: "Todo lo anterior + la campaña de Clientes Potenciales gana el A/B (registros más baratos) + se activa la contingencia de €400 para escalar a los ganadores.",
+    cpl: "€4.50",
+    leads: "778",
+    improve: "-41%",
+    improveNote: "todo se alinea",
+    needs: "Belleza Clientes Potenciales rinde + 6 videos perro-mucho funcionan + se activa contingencia €400.",
+    howTo: "Belleza Clientes Potenciales rinde + 6 videos de 'perro mucho' funcionan + se activan €400 de contingencia. Es el escenario si todo se alinea.",
     tone: "success",
   },
 ];
 
 const CPL_BASELINE = "€7.66";
 
-// ── BLOQUE 3 · Plan semanal (base 570) ───────────────────────────
+// ── BLOQUE 2b · Qué pasó en mayo · aprendizajes ──────────────────
+interface LearnNumber {
+  label: string;
+  value: string;
+  note: string;
+  tone: Tone;
+}
+
+const MAY_NUMBERS: LearnNumber[] = [
+  {
+    label: "Gasto acumulado",
+    value: "~€2.070",
+    note: "al 28-may",
+    tone: "cyan",
+  },
+  {
+    label: "Leads en CRM",
+    value: "428",
+    note: "totales",
+    tone: "success",
+  },
+  {
+    label: "Leads en Meta",
+    value: "~190",
+    note: "CR puros",
+    tone: "violet",
+  },
+  {
+    label: "CPL CRM (general)",
+    value: "€4.84",
+    note: "€2.070 / 428",
+    tone: "success",
+  },
+  {
+    label: "CPL Meta (puro)",
+    value: "€10.89",
+    note: "€2.070 / 190",
+    tone: "ember",
+  },
+];
+
+interface LearnRow {
+  text: string;
+  detail?: string;
+}
+
+interface LearnBlock {
+  title: string;
+  icon: React.ReactNode;
+  tone: Tone;
+  rows: LearnRow[];
+}
+
+const MAY_LEARNINGS: LearnBlock[] = [
+  {
+    title: "Qué funcionó · replicar",
+    icon: <CheckCircle2 className="size-3.5" />,
+    tone: "success",
+    rows: [
+      { text: "linda_v1_asp", detail: "CPL €3.88 · CTR 2.20% · el mejor anuncio de toda la cuenta" },
+      { text: "paraguas_v2_asp LATAM", detail: "CPL €5.49 (mismo creativo €9.72 en MX · LATAM más barato)" },
+      { text: "Audiencias Lookalike", detail: "las más baratas (€3.98 - €7.13)" },
+      { text: "Retargeting bajó el CPL blend la última semana" },
+    ],
+  },
+  {
+    title: "Qué pasó · por qué",
+    icon: <Lightbulb className="size-3.5" />,
+    tone: "warning",
+    rows: [
+      { text: "Belleza con objetivo Ventas dio CPL €7-8", detail: "caro para nosotros" },
+      { text: "Servicios con objetivo Clientes Potenciales bajó a €4.32", detail: "señal clara" },
+      { text: "Comercio CPL €25", detail: "pausada definitiva" },
+      { text: "Mayo tuvo MUCHAS imágenes y POCOS videos", detail: "frecuencia subió rápido" },
+    ],
+  },
+  {
+    title: "Qué replicamos en junio",
+    icon: <Repeat className="size-3.5" />,
+    tone: "cyan",
+    rows: [
+      { text: "El ángulo de linda en belleza y servicios" },
+      { text: "Audiencias Lookalike como núcleo" },
+      { text: "Concentración en belleza 75-80%" },
+    ],
+  },
+  {
+    title: "Qué cambiamos",
+    icon: <RefreshCw className="size-3.5" />,
+    tone: "violet",
+    rows: [
+      { text: "Pausar comercio definitivo" },
+      { text: "Refresh creativo (paraguas y mkt fatigados con 68-71K impresiones)" },
+      { text: "Sumar adset de interés amplio" },
+      { text: "Activar videos del perro-mucho (40M COP ya pagados)" },
+    ],
+  },
+  {
+    title: "Qué hacemos diferente",
+    icon: <Sparkles className="size-3.5" />,
+    tone: "ember",
+    rows: [
+      { text: "MÁS VIDEO que mayo", detail: "es lo que falta" },
+      { text: "Formatos: 4:5 para feed/posts · 9:16 para stories y reels", detail: "volvemos al clásico para comparar vs cinematográfico" },
+      { text: "Probar 2 estrategias de landing en paralelo", detail: "(A) seguir por industria · (B) llevar a funcionalidad específica con perro-mucho" },
+    ],
+  },
+];
+
+// ── BLOQUE 2c · Por qué confiamos que el CPL baja ─────────────────
+const WHY_CPL_DROPS: string[] = [
+  "Más push de belleza (75-80%): las 2 activas que rinden + servicios que se destacó la última semana",
+  "Nuevas campañas en Clientes Potenciales (el objetivo histórico de Bewe que mejor convirtió en mayo · CPL €4.32 en servicios)",
+  "Retargeting se ajusta · baja budget para alimentar más a belleza LATAM (más barato)",
+  "Videos del perro-mucho (40M COP ya pagados) refrescan creativos",
+  "Adset de interés amplio + Lookalike = audiencias más eficientes",
+];
+
+// ── BLOQUE 3 · Plan semanal interactivo por escenario ────────────
 interface WeekRow {
   week: string;
   phase: string;
   days: string;
   leadsDay: string;
   cpl: string;
-  perDay: string;
+  perWeekLeads: string;
   perWeek: string;
-  cumulative: string;
   tone: Tone;
 }
 
-const WEEKLY: WeekRow[] = [
-  {
-    week: "Sem 1",
-    phase: "learning",
-    days: "1-7",
-    leadsDay: "15-22",
-    cpl: "€7.00",
-    perDay: "€115",
-    perWeek: "€805",
-    cumulative: "~126",
-    tone: "warning",
-  },
-  {
-    week: "Sem 2",
-    phase: "push",
-    days: "8-14",
-    leadsDay: "28-30",
-    cpl: "€5.50",
-    perDay: "€150",
-    perWeek: "€1.050",
-    cumulative: "~329",
-    tone: "cyan",
-  },
-  {
-    week: "Sem 3",
-    phase: "push max",
-    days: "15-21",
-    leadsDay: "30-32",
-    cpl: "€5.00",
-    perDay: "€150",
-    perWeek: "€1.050",
-    cumulative: "~546",
-    tone: "violet",
-  },
-  {
-    week: "Sem 4",
-    phase: "taper",
-    days: "22-30",
-    leadsDay: "10-15",
-    cpl: "€4.50",
-    perDay: "€55",
-    perWeek: "€495",
-    cumulative: "~640",
-    tone: "success",
-  },
-];
+interface WeeklyPlan {
+  rows: WeekRow[];
+  totalLeads: string;
+  totalSpend: string;
+}
 
-// ── BLOQUE 3b · Proyección diaria de leads (curva ramp) ──────────
+const WEEKLY_BY_SCENARIO: Record<ScenarioKey, WeeklyPlan> = {
+  conservador: {
+    rows: [
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "15", cpl: "€7.00", perWeekLeads: "105", perWeek: "€735", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "25", cpl: "€5.80", perWeekLeads: "175", perWeek: "€1.015", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "22", cpl: "€5.50", perWeekLeads: "154", perWeek: "€847", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "8", cpl: "€5.00", perWeekLeads: "72", perWeek: "€503", tone: "success" },
+    ],
+    totalLeads: "~506 leads",
+    totalSpend: "€3.100",
+  },
+  base: {
+    rows: [
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "20", cpl: "€6.50", perWeekLeads: "140", perWeek: "€910", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "30", cpl: "€5.50", perWeekLeads: "210", perWeek: "€1.155", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "28", cpl: "€5.00", perWeekLeads: "196", perWeek: "€980", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "10", cpl: "€4.50", perWeekLeads: "90", perWeek: "€405", tone: "success" },
+    ],
+    totalLeads: "~636 leads",
+    totalSpend: "€3.450",
+  },
+  agresivo: {
+    rows: [
+      { week: "Sem 1", phase: "arranque", days: "1-7", leadsDay: "25-30", cpl: "€6.50", perWeekLeads: "196", perWeek: "€1.274", tone: "warning" },
+      { week: "Sem 2", phase: "push", days: "8-14", leadsDay: "35-40", cpl: "€5.00", perWeekLeads: "263", perWeek: "€1.313", tone: "cyan" },
+      { week: "Sem 3", phase: "estabilizar", days: "15-21", leadsDay: "35", cpl: "€4.50", perWeekLeads: "245", perWeek: "€1.103", tone: "violet" },
+      { week: "Sem 4", phase: "taper", days: "22-30", leadsDay: "12-15", cpl: "€4.00", perWeekLeads: "119", perWeek: "€475", tone: "success" },
+    ],
+    totalLeads: "~822 leads",
+    totalSpend: "€4.165",
+  },
+};
+
+// ── BLOQUE 3b · Proyección diaria de leads (curva ramp · base) ────
 type RampPhase = "learning" | "push" | "peak" | "taper";
 
 interface DayProjection {
-  day: number; // 1-30
-  leads: number; // leads proyectados ese día
+  day: number;
+  leads: number;
   phase: RampPhase;
 }
 
@@ -233,107 +352,43 @@ const PHASE_TONE: Record<RampPhase, Tone> = {
 };
 
 const PHASE_LABEL: Record<RampPhase, string> = {
-  learning: "S1 · learning",
+  learning: "S1 · arranque",
   push: "S2 · push",
-  peak: "S3 · pico",
+  peak: "S3 · estabilizar",
   taper: "S4 · taper",
 };
 
 const DAILY_RAMP: DayProjection[] = [
-  // Semana 1 · learning · sube de a poco (total 126)
-  { day: 1, leads: 12, phase: "learning" }, { day: 2, leads: 15, phase: "learning" },
-  { day: 3, leads: 17, phase: "learning" }, { day: 4, leads: 18, phase: "learning" },
-  { day: 5, leads: 19, phase: "learning" }, { day: 6, leads: 21, phase: "learning" },
-  { day: 7, leads: 24, phase: "learning" },
-  // Semana 2 · push (total 203)
-  { day: 8, leads: 27, phase: "push" }, { day: 9, leads: 28, phase: "push" },
-  { day: 10, leads: 29, phase: "push" }, { day: 11, leads: 29, phase: "push" },
-  { day: 12, leads: 30, phase: "push" }, { day: 13, leads: 30, phase: "push" },
-  { day: 14, leads: 30, phase: "push" },
-  // Semana 3 · peak · estabiliza alto (total 217)
-  { day: 15, leads: 32, phase: "peak" }, { day: 16, leads: 32, phase: "peak" },
-  { day: 17, leads: 31, phase: "peak" }, { day: 18, leads: 31, phase: "peak" },
-  { day: 19, leads: 31, phase: "peak" }, { day: 20, leads: 30, phase: "peak" },
-  { day: 21, leads: 30, phase: "peak" },
-  // Semana 4 · taper · baja pero con volumen (total 94, 9 días)
-  { day: 22, leads: 16, phase: "taper" }, { day: 23, leads: 14, phase: "taper" },
-  { day: 24, leads: 13, phase: "taper" }, { day: 25, leads: 11, phase: "taper" },
-  { day: 26, leads: 10, phase: "taper" }, { day: 27, leads: 9, phase: "taper" },
-  { day: 28, leads: 8, phase: "taper" }, { day: 29, leads: 7, phase: "taper" },
-  { day: 30, leads: 6, phase: "taper" },
+  // Sem 1 arranque (~140 leads · 20/día)
+  { day: 1, leads: 14, phase: "learning" }, { day: 2, leads: 17, phase: "learning" },
+  { day: 3, leads: 19, phase: "learning" }, { day: 4, leads: 20, phase: "learning" },
+  { day: 5, leads: 21, phase: "learning" }, { day: 6, leads: 23, phase: "learning" },
+  { day: 7, leads: 26, phase: "learning" },
+  // Sem 2 push (~210 leads · 30/día)
+  { day: 8, leads: 28, phase: "push" }, { day: 9, leads: 29, phase: "push" },
+  { day: 10, leads: 30, phase: "push" }, { day: 11, leads: 30, phase: "push" },
+  { day: 12, leads: 31, phase: "push" }, { day: 13, leads: 31, phase: "push" },
+  { day: 14, leads: 31, phase: "push" },
+  // Sem 3 estabilizar (~196 leads · 28/día)
+  { day: 15, leads: 30, phase: "peak" }, { day: 16, leads: 29, phase: "peak" },
+  { day: 17, leads: 29, phase: "peak" }, { day: 18, leads: 28, phase: "peak" },
+  { day: 19, leads: 28, phase: "peak" }, { day: 20, leads: 27, phase: "peak" },
+  { day: 21, leads: 25, phase: "peak" },
+  // Sem 4 taper (~90 leads · 10/día)
+  { day: 22, leads: 14, phase: "taper" }, { day: 23, leads: 12, phase: "taper" },
+  { day: 24, leads: 11, phase: "taper" }, { day: 25, leads: 10, phase: "taper" },
+  { day: 26, leads: 9, phase: "taper" }, { day: 27, leads: 9, phase: "taper" },
+  { day: 28, leads: 8, phase: "taper" }, { day: 29, leads: 9, phase: "taper" },
+  { day: 30, leads: 8, phase: "taper" },
 ];
 
-// ── BLOQUE 4 · Qué pasa cada semana para que baje el CPL ──────────
-interface WeekPlan {
-  week: string;
-  days: string;
-  /** Titular en lenguaje simple · lo que entiende cualquiera */
-  headline: string;
-  /** Costo por registro objetivo · en lenguaje claro */
-  costTarget: string;
-  actions: string[];
-  tone: Tone;
-}
-
-const WEEK_PLANS: WeekPlan[] = [
-  {
-    week: "Semana 1 · Arranque",
-    days: "1-7 jun",
-    headline: "Probamos y miramos qué engancha",
-    costTarget: "Costo por registro: ~€7",
-    actions: [
-      "Lanzamos los anuncios nuevos sin gastar de más",
-      "Vemos cuáles llaman más la atención de la gente",
-      "Todavía no metemos toda la plata · dejamos que Facebook aprenda",
-    ],
-    tone: "warning",
-  },
-  {
-    week: "Semana 2 · Limpieza",
-    days: "desde lunes 8",
-    headline: "Apagamos lo caro, alimentamos lo bueno",
-    costTarget: "Bajamos a ~€6 por registro",
-    actions: [
-      "Apagamos los anuncios que salen caros (más de €9 por registro)",
-      "Le metemos más plata a los que están funcionando",
-      "Concentramos el presupuesto en los ganadores",
-    ],
-    tone: "ember",
-  },
-  {
-    week: "Semana 3 · Empujón fuerte",
-    days: "15-21 jun",
-    headline: "Máxima inversión · acá traemos el grueso",
-    costTarget: "El mejor costo del mes: €5-5.5",
-    actions: [
-      "Solo quedan corriendo los anuncios ganadores",
-      "Probamos una audiencia más amplia para llegar a más gente",
-      "Es la semana donde traemos más registros",
-    ],
-    tone: "violet",
-  },
-  {
-    week: "Semana 4 · Cierre tranquilo",
-    days: "22-30 jun",
-    headline: "Bajamos el gasto, priorizamos calidad",
-    costTarget: "Registros baratos: ~€4.5",
-    actions: [
-      "Bajamos el presupuesto · dejamos solo lo mejor",
-      "Priorizamos registros de calidad (los que prueban el producto)",
-      "Cerramos el mes sin quemar plata",
-    ],
-    tone: "success",
-  },
-];
-
-// ── BLOQUE 5 · Reglas para darle norte a la pauta ────────────────
+// ── BLOQUE 4 · Reglas para darle norte a la pauta ────────────────
 interface Rule {
   text: string;
   tone: Tone;
 }
 
 const RULES: Rule[] = [
-  { text: "Cada anuncio necesita un mínimo de plata por día (€15-20). Si le damos menos, Facebook no lo muestra bien y no aprende.", tone: "cyan" },
   { text: "No cambiar el presupuesto de golpe. Subimos de a poco para no romper lo que Facebook ya venía haciendo bien.", tone: "warning" },
   { text: "Si un anuncio trae registros a más de €9 cada uno (tras unos días de prueba), lo apagamos.", tone: "ember" },
   { text: "El 75-80% de la plata va a Belleza siempre. Es lo que mejor convierte · es el motor de leads.", tone: "success" },
@@ -342,126 +397,98 @@ const RULES: Rule[] = [
   { text: "El resto se reparte: un poco a Servicios (otro nicho) y a recuperar gente que ya nos conoce.", tone: "cyan" },
 ];
 
-// ── BLOQUE 6 · A/B Ventas vs Cliente Potencial ───────────────────
-interface AbModel {
-  key: "A" | "B";
-  name: string;
-  role: string;
-  campaigns: string;
-  objetivo: string;
-  cplMay: string;
-  hypothesis: string;
+// ── BLOQUE 5 · Plan de assets (cantidades exactas) ───────────────
+interface AssetGroup {
+  label: string;
+  tagline: string;
   tone: Tone;
-}
-
-const AB_MODELS: AbModel[] = [
-  {
-    key: "A",
-    name: "Modelo A · Ventas",
-    role: "lo nuevo de mayo",
-    campaigns: "MX_Belleza + LATAM_Belleza",
-    objetivo: "Ventas",
-    cplMay: "€7.66 registro",
-    hypothesis: "En mayo pasamos belleza a este objetivo (nuevo para nosotros). Trajo registros pero caros (€7-8). ¿Será que la calidad compensa el precio? Eso es lo que vamos a medir.",
-    tone: "cyan",
-  },
-  {
-    key: "B",
-    name: "Modelo B · Cliente Potencial",
-    role: "lo de siempre + la prueba que funcionó",
-    campaigns: "Belleza_LEADS (nueva) + Servicios",
-    objetivo: "Clientes Potenciales",
-    cplMay: "€4.32 (servicios)",
-    hypothesis: "Es el objetivo que Bewe usó toda la vida. En mayo lo dejamos solo en Servicios y el registro bajó a €4.32 (mucho más barato que belleza). Ahora probamos si en belleza también baja.",
-    tone: "violet",
-  },
-];
-
-// ── BLOQUE 7 · Plan de assets ────────────────────────────────────
-interface AdjustItem {
-  name: string;
-  detail: string;
-  tone: Tone;
-}
-
-const CURRENT_CAMPAIGNS: AdjustItem[] = [
-  {
-    name: "MX Belleza",
-    detail:
-      "El anuncio 'paraguas' ya lo vio mucha gente (68 mil veces) y empezó a cansarse → lo reemplazamos por un video nuevo. Sumamos un grupo con audiencia más amplia para llegar a gente nueva.",
-    tone: "ember",
-  },
-  {
-    name: "LATAM Belleza",
-    detail:
-      "Mantenemos los 2 que funcionan: 'mkt' (trae mucho volumen) y 'paraguas LATAM' (registros baratos a €5.49). Sumamos audiencia más amplia.",
-    tone: "cyan",
-  },
-  {
-    name: "Servicios",
-    detail:
-      "Le metemos más plata a 'linda', que fue el mejor anuncio del mes (registros a €3.88). Le hacemos versiones en video.",
-    tone: "success",
-  },
-];
-
-interface NewCampaign {
-  code: string;
-  objetivo: string;
-  load: string;
-  tone: Tone;
-}
-
-const NEW_CAMPAIGNS: NewCampaign[] = [
-  {
-    code: "Belleza · Clientes Potenciales",
-    objetivo: "la prueba del mes",
-    load: "Campaña nueva de belleza con el objetivo 'Clientes Potenciales' (la prueba A/B). Le cargamos los anuncios ganadores de mayo + 4 videos nuevos.",
-    tone: "violet",
-  },
-  {
-    code: "Tools + Academy",
-    objetivo: "atraer gente nueva",
-    load: "Campaña para atraer gente que todavía no nos conoce. Aprovechamos los videos que ya pagamos (40M COP), el del 'perro mocho' y 3 herramientas gratis.",
-    tone: "cyan",
-  },
-];
-
-interface ProductionItem {
   icon: React.ReactNode;
-  priority: "URGENTE" | "Servicios" | "Academy" | "Tools";
-  text: string;
-  tone: Tone;
+  items: AssetItem[];
 }
 
-const PRODUCTION: ProductionItem[] = [
+interface AssetItem {
+  count: number;
+  kind: "imagen" | "video";
+  format: string;
+  description: string;
+  highlight?: boolean;
+}
+
+const ASSETS: AssetGroup[] = [
   {
-    icon: <Video className="size-3.5" />,
-    priority: "URGENTE",
-    text: "12 imágenes nuevas de belleza + 4 videos cortos (15-20s). En mayo hicimos muchas imágenes y pocos videos · hay que equilibrar porque el video llega a más gente.",
-    tone: "destructive",
+    label: "Belleza",
+    tagline: "refuerzo aprendizaje + funcionalidad + perro-mucho",
+    tone: "ember",
+    icon: <Sparkles className="size-3.5" />,
+    items: [
+      { count: 12, kind: "imagen", format: "4:5", description: "refresh para TODAS las campañas de belleza (J1 MX, J2 LATAM, J3 Belleza CP)" },
+      { count: 3, kind: "video", format: "9:16", description: "funcionalidad + beneficio en centros de belleza/barberías + linda · stories/reels" },
+      { count: 6, kind: "video", format: "9:16", description: "editados con el contenido del perro-mucho · atribuidos a funcionalidades · stories/reels", highlight: true },
+    ],
   },
   {
-    icon: <ImageIcon className="size-3.5" />,
-    priority: "Servicios",
-    text: "2 conceptos nuevos para la campaña de servicios.",
-    tone: "warning",
+    label: "Servicios",
+    tagline: "refuerzan campaña actual",
+    tone: "success",
+    icon: <Target className="size-3.5" />,
+    items: [
+      { count: 2, kind: "imagen", format: "4:5", description: "imágenes nuevas que refuerzan la campaña actual" },
+    ],
   },
   {
-    icon: <Video className="size-3.5" />,
-    priority: "Academy",
-    text: "Cortar los videos largos que ya pagamos (40M COP) en piezas cortas.",
-    tone: "warning",
-  },
-  {
+    label: "Tools",
+    tagline: "una pieza por tool gratis",
+    tone: "cyan",
     icon: <Wrench className="size-3.5" />,
-    priority: "Tools",
-    text: "3 herramientas gratis como gancho: calculadora de ROI, auditoría de Instagram, comparador local.",
+    items: [
+      { count: 3, kind: "imagen", format: "4:5", description: "una por cada tool (calculadora ROI, auditoría IG, comparador local)" },
+      { count: 3, kind: "video", format: "9:16", description: "alta conversión, llevan a tool específica" },
+    ],
+  },
+  {
+    label: "Remarketing",
+    tagline: "recuperación + onboarding directo",
+    tone: "violet",
+    icon: <RefreshCw className="size-3.5" />,
+    items: [
+      { count: 2, kind: "imagen", format: "4:5", description: "recuperación / cuenta a un paso" },
+      { count: 1, kind: "video", format: "9:16", description: "funcionalidad PII concreta · redirige directo a ONBOARDING (no a registro)", highlight: true },
+    ],
+  },
+  {
+    label: "Academy",
+    tagline: "cortes 40M COP + curso IA PYMES",
     tone: "warning",
+    icon: <GraduationCap className="size-3.5" />,
+    items: [
+      { count: 3, kind: "video", format: "9:16", description: "cortes de los 40M COP en videos ya pagados" },
+      {
+        count: 1,
+        kind: "video",
+        format: "9:16",
+        description: "Curso IA para PYMES · gancho: \"Bienvenidos al primer curso de inteligencia artificial enfocado en pequeños negocios. Búscalo en YouTube o haz click e inicia de 0 a 100 para entender la IA hoy en 2026.\"",
+        highlight: true,
+      },
+    ],
   },
 ];
 
-// ── BLOQUE 8 · Mejores anuncios mayo ─────────────────────────────
+const LANDING_STRATEGIES: { letter: "A" | "B"; title: string; detail: string; tone: Tone }[] = [
+  {
+    letter: "A",
+    title: "Seguir por industria",
+    detail: "UTMs e industria como hoy (belleza, servicios). La estrategia que veníamos usando.",
+    tone: "cyan",
+  },
+  {
+    letter: "B",
+    title: "Llevar a funcionalidad",
+    detail: "Usar videos perro-mucho para llevar a funcionalidades concretas (linda, CRM, agenda, marketing automatizado) y ver cómo convierten esas landings.",
+    tone: "violet",
+  },
+];
+
+// ── BLOQUE 6 · Mejores anuncios mayo ─────────────────────────────
 interface AdRow {
   ad: string;
   campaign: string;
@@ -516,7 +543,7 @@ const BEST_ADS: AdRow[] = [
   },
 ];
 
-// ── BLOQUE 9 · Lifecycle (qué se prende / queda / nuevo / apagado) ─
+// ── BLOQUE 7 · Lifecycle (qué se prende / queda / nuevo / apagado) ─
 type LifecycleAction = "activa" | "nueva" | "ajusta" | "apagada";
 
 interface LifecycleItem {
@@ -573,7 +600,7 @@ const LIFECYCLE: LifecycleGroup[] = [
       {
         name: "Belleza · Clientes Potenciales",
         objetivo: "Clientes Potenciales",
-        why: "Es la prueba A/B del mes: mismo perfil de belleza pero con el objetivo que históricamente sale más barato.",
+        why: "Mismo perfil de belleza con el objetivo histórico de Bewe (Clientes Potenciales) · CBO para que Meta decida qué adset prioriza.",
       },
       {
         name: "Tools + Academy",
@@ -604,7 +631,7 @@ const LIFECYCLE: LifecycleGroup[] = [
       {
         name: "MX Comercio",
         objetivo: "Ventas",
-        why: "Registro a €25, demasiado caro · no vale la pena el gasto.",
+        why: "Registro a €25, demasiado caro · pausada definitiva.",
       },
       {
         name: "LATAM Comercio",
@@ -620,7 +647,7 @@ const LIFECYCLE: LifecycleGroup[] = [
   },
 ];
 
-// ── BLOQUE 10 · Desglose campaña → conjunto → anuncio ─────────────
+// ── BLOQUE 8 · Desglose campaña → conjunto → anuncio ─────────────
 type AdsetAction =
   | "ESCALAR"
   | "MANTENER"
@@ -642,7 +669,6 @@ type AudienceKind =
   | "Custom"
   | "Remarketing";
 
-/** Aclaración en español simple de cada tipo de audiencia */
 const AUDIENCE_HINT: Record<AudienceKind, string> = {
   Lookalike: "audiencia similar a clientes",
   Interés: "gente por sus intereses",
@@ -706,7 +732,7 @@ const BREAKDOWN: CampaignBreakdown[] = [
         note: "Probar cobertura amplia para llegar a gente nueva.",
       },
     ],
-    ads: "paraguas (reemplazar por VIDEO nuevo · fatigado 68K impresiones) + mkt + 2 videos nuevos.",
+    ads: "paraguas (reemplazar por VIDEO nuevo · fatigado 68K impresiones) + mkt + videos nuevos.",
   },
   {
     code: "J2",
@@ -734,7 +760,7 @@ const BREAKDOWN: CampaignBreakdown[] = [
         note: "Reemplaza el conjunto de interés pausado · probar audiencia amplia.",
       },
     ],
-    ads: "mkt_v1_dol (volumen 71K impresiones) + paraguas LATAM (€5.49 bueno) + 2 videos.",
+    ads: "mkt_v1_dol (volumen 71K impresiones) + paraguas LATAM (€5.49 bueno) + videos perro-mucho.",
   },
   {
     code: "J3",
@@ -742,8 +768,8 @@ const BREAKDOWN: CampaignBreakdown[] = [
     objetivo: "Clientes Potenciales",
     objetivoTone: "violet",
     perDay: "€20/día",
-    cplMeta: "meta CPL €3 · LA PRUEBA",
-    tagline: "El A/B del mes: mismo perfil que rinde, objetivo más barato.",
+    cplMeta: "meta CPL €3 · CBO",
+    tagline: "Campaña nueva CBO · Meta decide qué adset prioriza.",
     adsets: [
       {
         name: "LOK Belleza LATAM",
@@ -751,7 +777,7 @@ const BREAKDOWN: CampaignBreakdown[] = [
         perDay: "€12/día",
         cplMay: null,
         action: "NUEVO",
-        note: "Mismo perfil Lookalike que funciona en Ventas, ahora con objetivo Leads.",
+        note: "Mismo perfil Lookalike que funciona en Ventas, ahora con objetivo Clientes Potenciales.",
       },
       {
         name: "Interés amplio",
@@ -759,10 +785,10 @@ const BREAKDOWN: CampaignBreakdown[] = [
         perDay: "€8/día",
         cplMay: null,
         action: "NUEVO",
-        note: "Cobertura amplia para alimentar la prueba con volumen.",
+        note: "Cobertura amplia · CBO decide cuánto le da según rendimiento.",
       },
     ],
-    ads: "ganadores de belleza (mkt, paraguas, linda) + 4 videos nuevos.",
+    ads: "ganadores de belleza (mkt, paraguas, linda) + 6 videos perro-mucho.",
   },
   {
     code: "J4",
@@ -790,7 +816,7 @@ const BREAKDOWN: CampaignBreakdown[] = [
         note: "Rinde bien · lo sostenemos como está.",
       },
     ],
-    ads: "linda (€3.88 · el mejor anuncio de todos) + variantes en video.",
+    ads: "linda (€3.88 · el mejor anuncio de todos) + 3 videos servicios + 2 imágenes nuevas.",
   },
   {
     code: "J5",
@@ -810,7 +836,7 @@ const BREAKDOWN: CampaignBreakdown[] = [
         note: "Juntamos Visitantes 30d + Checkout + Engagers + Tool users en 1 solo conjunto · concentrar para salir de aprendizaje. En mayo, partido en 2, daba CPL €13.",
       },
     ],
-    ads: "2 piezas de recuperación (\"te extrañamos\", \"seguís a un paso\").",
+    ads: "2 imágenes recuperación + 1 video PII a ONBOARDING directo.",
   },
   {
     code: "J6",
@@ -830,7 +856,7 @@ const BREAKDOWN: CampaignBreakdown[] = [
         note: "Cobertura amplia de pequeñas y medianas empresas.",
       },
     ],
-    ads: "recortes 40M COP + perro mocho + 3 tools (calculadora ROI, auditoría IG, comparador).",
+    ads: "3 cortes 40M COP + 1 video curso IA PYMES + 3 tools (calculadora ROI, auditoría IG, comparador).",
   },
 ];
 
@@ -838,9 +864,8 @@ function tw(tone: Tone, alpha: number): string {
   return `hsl(${TOKEN[tone]} / ${alpha})`;
 }
 
-// ── Sub-componente · Curva diaria de leads (estilo HubSpot) ──────
+// ── Sub-componente · Curva diaria de leads ───────────────────────
 function DailyRampChart() {
-  // Geometría del SVG
   const W = 800;
   const H = 300;
   const M = { top: 36, right: 56, bottom: 34, left: 40 };
@@ -850,69 +875,57 @@ function DailyRampChart() {
   const days = DAILY_RAMP;
   const n = days.length;
 
-  // Escala Y izquierda · leads/día (0-35)
   const yMaxLeads = 35;
   const yLeads = (v: number): number => M.top + plotH - (v / yMaxLeads) * plotH;
 
-  // Acumulado + escala Y derecha (0-640)
   let running = 0;
   const cumulative = days.map((d) => {
     running += d.leads;
     return running;
   });
-  const total = running; // 640
-  const yMaxCum = 640;
+  const total = running;
+  const yMaxCum = Math.max(640, total);
   const yCum = (v: number): number => M.top + plotH - (v / yMaxCum) * plotH;
 
-  // Barras
   const slot = plotW / n;
   const barGap = slot * 0.22;
   const barW = slot - barGap;
   const barX = (i: number): number => M.left + i * slot + barGap / 2;
 
-  // Línea acumulado · centro de cada barra
   const cumX = (i: number): number => barX(i) + barW / 2;
   const cumPath = cumulative
     .map((c, i) => `${i === 0 ? "M" : "L"} ${cumX(i).toFixed(1)} ${yCum(c).toFixed(1)}`)
     .join(" ");
 
-  // Punto donde el acumulado cruza 500 (meta mínima)
   const crossIdx = cumulative.findIndex((c) => c >= 500);
   const crossDay = crossIdx >= 0 ? days[crossIdx].day : null;
 
-  // Líneas Y guía: meta 500 sobre eje derecho (acumulado)
   const goalY = yCum(500);
 
-  // Separadores de semana (entre día 7/8, 14/15, 21/22) y etiquetas de fase
-  const weekStarts = [0, 7, 14, 21]; // índices de inicio de cada semana
+  const weekStarts = [0, 7, 14, 21];
   const weekDivX = (startIdx: number): number => M.left + startIdx * slot;
 
-  // Ticks eje X
   const xTicks = [1, 7, 14, 21, 30];
-
-  // Ticks eje Y izquierdo
   const yTicks = [0, 10, 20, 30];
 
-  // Mini-stats
   const peakDay = days.reduce((a, b) => (b.leads > a.leads ? b : a));
-  const day22Cum = cumulative[21]; // día 22 = índice 21
+  const day22Cum = cumulative[21];
 
   const stats = [
-    { label: "Pico", value: `${peakDay.leads} leads/día`, note: "sem 3", tone: "violet" as Tone },
+    { label: "Pico", value: `${peakDay.leads} leads/día`, note: "sem 2-3", tone: "violet" as Tone },
     { label: "Al día 22", value: `~${day22Cum} acum`, note: "supera la meta de 500", tone: "cyan" as Tone },
-    { label: "Cierre", value: `~${total} leads`, note: "total del mes", tone: "success" as Tone },
+    { label: "Cierre", value: `~${total} leads`, note: "total del mes (base)", tone: "success" as Tone },
   ];
 
   const legend: { label: string; tone: Tone }[] = [
-    { label: "Sem 1 · learning", tone: PHASE_TONE.learning },
+    { label: "Sem 1 · arranque", tone: PHASE_TONE.learning },
     { label: "Sem 2 · push", tone: PHASE_TONE.push },
-    { label: "Sem 3 · pico", tone: PHASE_TONE.peak },
+    { label: "Sem 3 · estabilizar", tone: PHASE_TONE.peak },
     { label: "Sem 4 · taper", tone: PHASE_TONE.taper },
   ];
 
   return (
     <TextureCard className="p-5">
-      {/* Mini-stats */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         {stats.map((s) => (
           <div
@@ -937,15 +950,13 @@ function DailyRampChart() {
         ))}
       </div>
 
-      {/* Gráfico SVG */}
       <div className="w-full">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="w-full h-auto"
           role="img"
-          aria-label="Proyección diaria de leads durante junio"
+          aria-label="Proyección diaria de leads durante junio · escenario base"
         >
-          {/* Gridlines horizontales + eje Y izquierdo */}
           {yTicks.map((t) => (
             <g key={`gy-${t}`}>
               <line
@@ -968,7 +979,6 @@ function DailyRampChart() {
             </g>
           ))}
 
-          {/* Separadores de semana + labels de fase */}
           {weekStarts.map((startIdx, wi) => {
             const phase = days[startIdx].phase;
             const x = weekDivX(startIdx);
@@ -999,7 +1009,6 @@ function DailyRampChart() {
             );
           })}
 
-          {/* Línea guía meta mínima · 500 leads (dashed) */}
           <line
             x1={M.left}
             x2={W - M.right}
@@ -1019,7 +1028,6 @@ function DailyRampChart() {
             Meta mínima · 500 leads
           </text>
 
-          {/* Barras verticales */}
           {days.map((d, i) => {
             const tone = PHASE_TONE[d.phase];
             const fullY = yLeads(d.leads);
@@ -1057,7 +1065,6 @@ function DailyRampChart() {
             );
           })}
 
-          {/* Línea de acumulado (eje derecho) · motion path */}
           <motion.path
             d={cumPath}
             fill="none"
@@ -1070,8 +1077,7 @@ function DailyRampChart() {
             transition={{ delay: 0.4, duration: 1.4, ease: "easeInOut" }}
           />
 
-          {/* Marca donde el acumulado cruza 500 */}
-          {crossIdx >= 0 && (
+          {crossIdx >= 0 && crossDay !== null && (
             <g>
               <motion.circle
                 cx={cumX(crossIdx)}
@@ -1097,7 +1103,6 @@ function DailyRampChart() {
             </g>
           )}
 
-          {/* Eje Y derecho · acumulado */}
           {[0, 160, 320, 480, 640].map((t) => (
             <text
               key={`yc-${t}`}
@@ -1111,7 +1116,6 @@ function DailyRampChart() {
             </text>
           ))}
 
-          {/* Eje X · días */}
           {xTicks.map((dayNum) => {
             const i = dayNum - 1;
             return (
@@ -1139,7 +1143,6 @@ function DailyRampChart() {
         </svg>
       </div>
 
-      {/* Leyenda */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-border/40">
         {legend.map((l) => (
           <div key={l.label} className="flex items-center gap-1.5">
@@ -1170,6 +1173,22 @@ function DailyRampChart() {
 }
 
 export function JunioPlan() {
+  const [selectedScenario, setSelectedScenario] =
+    React.useState<ScenarioKey>("base");
+
+  const activeScenario =
+    SCENARIOS.find((s) => s.key === selectedScenario) ?? SCENARIOS[1];
+  const activeWeekly = WEEKLY_BY_SCENARIO[selectedScenario];
+
+  const totalImages = ASSETS.reduce(
+    (sum, g) => sum + g.items.filter((i) => i.kind === "imagen").reduce((a, b) => a + b.count, 0),
+    0,
+  );
+  const totalVideos = ASSETS.reduce(
+    (sum, g) => sum + g.items.filter((i) => i.kind === "video").reduce((a, b) => a + b.count, 0),
+    0,
+  );
+
   return (
     <div className="space-y-7">
       {/* ── BLOQUE 1 · Budget structure (header) ── */}
@@ -1180,15 +1199,16 @@ export function JunioPlan() {
           </div>
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-[0.16em] font-bold text-[hsl(var(--brand-violet))] mb-0.5">
-              Plan Junio 2026 · validado por Santiago
+              Plan Junio 2026 · revisión profunda Santiago
             </div>
             <h2 className="text-base font-bold leading-tight">
               Techo €3.100 · contingencia €400 · máximo absoluto €3.500
             </h2>
             <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed max-w-3xl">
-              Lead = CompleteRegistration. CPL blend belleza real mayo (12-26)
+              Lead = CompleteRegistration. CPL blend belleza real mayo (12-28)
               = {CPL_BASELINE}. Objetivo: bajar el CPL semana a semana con
-              optimización y más contenidos rotativos.
+              concentración en belleza (75-80%) + refresh creativo anti-fatiga
+              + más video.
             </p>
           </div>
         </div>
@@ -1322,7 +1342,153 @@ export function JunioPlan() {
         </div>
       </section>
 
-      {/* ── BLOQUE 9 · Lifecycle (qué se prende / queda / nuevo / apagado) ── */}
+      {/* ── BLOQUE 2b · QUÉ PASÓ EN MAYO · APRENDIZAJES ── */}
+      <section>
+        <SectionHeader
+          title="Qué pasó en mayo · aprendizajes"
+          sub="La foto cerrada del mes para entender por qué junio se planea así"
+        />
+        <TextureCard
+          className="p-5"
+          style={{
+            borderColor: tw("violet", 0.4),
+            background: `linear-gradient(135deg, ${tw("violet", 0.07)}, hsl(var(--card)))`,
+          }}
+        >
+          {/* Sub 1 · los números del mes */}
+          <div className="mb-5">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Ratio className="size-3.5 text-[hsl(var(--brand-violet))]" />
+              <span className="text-[11px] uppercase tracking-[0.1em] font-bold text-[hsl(var(--brand-violet))]">
+                Los números del mes · al 28-may
+              </span>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+              {MAY_NUMBERS.map((n) => (
+                <div
+                  key={n.label}
+                  className="rounded-lg border bg-card/50 p-3"
+                  style={{ borderColor: tw(n.tone, 0.3) }}
+                >
+                  <div className="text-[9px] uppercase tracking-[0.08em] text-muted-foreground font-bold mb-0.5">
+                    {n.label}
+                  </div>
+                  <div
+                    className="font-mono text-xl font-bold tabular-nums leading-tight"
+                    style={{ color: `hsl(${TOKEN[n.tone]})` }}
+                  >
+                    {n.value}
+                  </div>
+                  <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
+                    {n.note}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-start gap-1.5 mt-3 px-1">
+              <TriangleAlert className="size-3.5 text-[hsl(var(--warning))] mt-px shrink-0" />
+              <span className="text-[10.5px] text-muted-foreground/90 italic leading-relaxed">
+                El CPL real depende de cuál fuente cuentes. Junio bajamos AMBOS.
+              </span>
+            </div>
+          </div>
+
+          {/* Sub 2-6 · learnings en grid */}
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {MAY_LEARNINGS.map((b) => (
+              <div
+                key={b.title}
+                className="rounded-lg border bg-card/40 p-3.5"
+                style={{
+                  borderColor: tw(b.tone, 0.3),
+                  borderLeftWidth: "3px",
+                  borderLeftColor: `hsl(${TOKEN[b.tone]})`,
+                }}
+              >
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span style={{ color: `hsl(${TOKEN[b.tone]})` }}>{b.icon}</span>
+                  <span
+                    className="text-[11px] uppercase tracking-[0.08em] font-bold"
+                    style={{ color: `hsl(${TOKEN[b.tone]})` }}
+                  >
+                    {b.title}
+                  </span>
+                </div>
+                <ul className="space-y-2">
+                  {b.rows.map((r, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-[11px]">
+                      <CircleDot
+                        className="size-3 mt-px shrink-0"
+                        style={{ color: `hsl(${TOKEN[b.tone]})` }}
+                      />
+                      <div className="min-w-0">
+                        <span className="text-foreground leading-snug">{r.text}</span>
+                        {r.detail && (
+                          <span className="text-muted-foreground leading-snug">
+                            {" · "}
+                            {r.detail}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </TextureCard>
+      </section>
+
+      {/* ── BLOQUE 2c · Por qué confiamos que el CPL va a bajar ── */}
+      <section>
+        <TextureCard
+          className="p-5"
+          style={{
+            borderColor: tw("success", 0.4),
+            background: `linear-gradient(135deg, ${tw("success", 0.08)}, hsl(var(--card)))`,
+          }}
+        >
+          <div className="flex items-start gap-3 mb-4">
+            <div className="size-10 grid place-items-center rounded-xl bg-[hsl(var(--success)/0.18)] text-[hsl(var(--success))] shrink-0">
+              <TrendingDown className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-[0.16em] font-bold text-[hsl(var(--success))] mb-0.5">
+                Por qué confiamos
+              </div>
+              <h3 className="text-[14px] font-bold leading-tight">
+                Por qué el CPL va a bajar de {CPL_BASELINE} a €5-6 en junio
+              </h3>
+            </div>
+          </div>
+          <ol className="space-y-2">
+            {WHY_CPL_DROPS.map((reason, i) => (
+              <motion.li
+                key={i}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="flex items-start gap-3"
+              >
+                <span
+                  className="size-6 rounded-md grid place-items-center shrink-0 font-mono text-[11px] font-bold"
+                  style={{
+                    background: tw("success", 0.14),
+                    color: "hsl(var(--success))",
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <span className="text-[11.5px] text-foreground leading-relaxed pt-0.5">
+                  {reason}
+                </span>
+              </motion.li>
+            ))}
+          </ol>
+        </TextureCard>
+      </section>
+
+      {/* ── BLOQUE 7 · Lifecycle ── */}
       <section>
         <SectionHeader
           title="Qué se prende, qué queda y qué se apaga"
@@ -1389,12 +1555,46 @@ export function JunioPlan() {
         </div>
       </section>
 
-      {/* ── BLOQUE 3 · Plan semanal (base 570) ── */}
+      {/* ── BLOQUE 3 · Plan semanal INTERACTIVO ── */}
       <section>
         <SectionHeader
-          title="Plan semanal"
-          sub="Escenario base 570 leads como referencia · ramp learning → push → taper"
+          title="Plan semanal · interactivo"
+          sub="Selecciona un escenario · la tabla se ajusta a sus números"
         />
+
+        {/* Pills selector */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {SCENARIOS.map((s) => {
+            const active = selectedScenario === s.key;
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setSelectedScenario(s.key)}
+                aria-pressed={active}
+                className="group inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-[11px] font-bold transition-all"
+                style={{
+                  borderColor: active ? `hsl(${TOKEN[s.tone]})` : "hsl(var(--border) / 0.5)",
+                  background: active ? tw(s.tone, 0.14) : "transparent",
+                  color: active ? `hsl(${TOKEN[s.tone]})` : "hsl(var(--muted-foreground))",
+                }}
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{
+                    background: `hsl(${TOKEN[s.tone]})`,
+                    opacity: active ? 1 : 0.45,
+                  }}
+                />
+                <span>{s.name}</span>
+                <span className="font-mono text-[10px] opacity-80">
+                  {s.leads} · {s.budget}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         <TextureCard className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
@@ -1404,15 +1604,14 @@ export function JunioPlan() {
                   <th className="text-left p-3 font-bold">Días</th>
                   <th className="text-right p-3 font-bold">Leads/día</th>
                   <th className="text-right p-3 font-bold">CPL</th>
-                  <th className="text-right p-3 font-bold">€/día</th>
+                  <th className="text-right p-3 font-bold">Leads sem</th>
                   <th className="text-right p-3 font-bold">€/sem</th>
-                  <th className="text-right p-3 font-bold">Acumulado</th>
                 </tr>
               </thead>
               <tbody>
-                {WEEKLY.map((w, i) => (
+                {activeWeekly.rows.map((w, i) => (
                   <motion.tr
-                    key={w.week}
+                    key={`${selectedScenario}-${w.week}`}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04 }}
@@ -1432,16 +1631,32 @@ export function JunioPlan() {
                     <td className="p-3 font-mono text-muted-foreground">{w.days}</td>
                     <td className="p-3 text-right font-mono tabular-nums">{w.leadsDay}</td>
                     <td className="p-3 text-right font-mono tabular-nums font-semibold">{w.cpl}</td>
-                    <td className="p-3 text-right font-mono tabular-nums">{w.perDay}</td>
-                    <td className="p-3 text-right font-mono tabular-nums">{w.perWeek}</td>
                     <td
                       className="p-3 text-right font-mono tabular-nums font-bold"
                       style={{ color: `hsl(${TOKEN[w.tone]})` }}
                     >
-                      {w.cumulative}
+                      {w.perWeekLeads}
                     </td>
+                    <td className="p-3 text-right font-mono tabular-nums">{w.perWeek}</td>
                   </motion.tr>
                 ))}
+                <tr
+                  className="border-t-2 bg-secondary/30"
+                  style={{ borderTopColor: tw(activeScenario.tone, 0.5) }}
+                >
+                  <td className="p-3 font-bold text-[11px]" colSpan={4}>
+                    Total {activeScenario.name.toLowerCase()}
+                  </td>
+                  <td
+                    className="p-3 text-right font-mono tabular-nums font-bold"
+                    style={{ color: `hsl(${TOKEN[activeScenario.tone]})` }}
+                  >
+                    {activeWeekly.totalLeads}
+                  </td>
+                  <td className="p-3 text-right font-mono tabular-nums font-bold">
+                    {activeWeekly.totalSpend}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1451,71 +1666,70 @@ export function JunioPlan() {
       {/* ── BLOQUE 3b · Proyección diaria de leads ── */}
       <section>
         <SectionHeader
-          title="Proyección diaria de leads · junio"
+          title="Proyección diaria de leads · junio (base 620)"
           sub="Cómo arranca, sube, se estabiliza y cierra · línea guía a 500 leads"
         />
         <DailyRampChart />
       </section>
 
-      {/* ── BLOQUE 4 · Qué pasa cada semana para que baje el CPL ── */}
+      {/* ── BLOQUE 4 · Reglas de learning + reglas operativas ── */}
       <section>
         <SectionHeader
-          title="El plan semana a semana · en simple"
-          sub="Qué hacemos cada semana y por qué · sin tecnicismos"
+          title="Reglas de learning · darle norte a la pauta"
+          sub="Cómo cuidamos el aprendizaje de Facebook · cero adsets famélicos"
         />
-        <StaggerGroup className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
-          {WEEK_PLANS.map((p) => (
-            <StaggerItem key={p.week}>
-              <TextureCard
-                className="p-4 h-full"
-                style={{
-                  borderTopWidth: "3px",
-                  borderTopColor: `hsl(${TOKEN[p.tone]})`,
-                }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span
-                    className="text-[11px] font-bold"
-                    style={{ color: `hsl(${TOKEN[p.tone]})` }}
-                  >
-                    {p.week}
-                  </span>
-                  <span className="text-[9px] font-mono text-muted-foreground">
-                    {p.days}
-                  </span>
-                </div>
-                <div className="text-[13px] font-bold leading-snug mb-1.5">
-                  {p.headline}
-                </div>
-                <div
-                  className="text-[10px] font-semibold mb-3 inline-block px-2 py-0.5 rounded"
-                  style={{ background: tw(p.tone, 0.14), color: `hsl(${TOKEN[p.tone]})` }}
-                >
-                  {p.costTarget}
-                </div>
-                <ul className="space-y-1.5">
-                  {p.actions.map((a, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5 text-[10.5px] text-muted-foreground leading-snug">
-                      <CircleDot
-                        className="size-3 mt-px shrink-0"
-                        style={{ color: `hsl(${TOKEN[p.tone]})` }}
-                      />
-                      <span>{a}</span>
-                    </li>
-                  ))}
-                </ul>
-              </TextureCard>
-            </StaggerItem>
-          ))}
-        </StaggerGroup>
-      </section>
 
-      {/* ── BLOQUE 5 · Reglas para darle norte a la pauta ── */}
-      <section>
-        <SectionHeader
-          title="Las reglas de oro de la pauta"
-          sub="Qué respetamos sí o sí durante el mes · en palabras simples"
-        />
+        {/* Cards destacadas de learning */}
+        <div className="grid md:grid-cols-2 gap-3 mb-4">
+          <TextureCard
+            className="p-4"
+            style={{
+              borderColor: tw("destructive", 0.4),
+              background: `linear-gradient(135deg, ${tw("destructive", 0.08)}, hsl(var(--card)))`,
+            }}
+          >
+            <div className="flex items-start gap-2.5">
+              <div className="size-9 grid place-items-center rounded-lg bg-[hsl(var(--destructive)/0.14)] text-[hsl(var(--destructive))] shrink-0">
+                <Gauge className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-[hsl(var(--destructive))] mb-1">
+                  Mínimo por adset · €11-15/día
+                </div>
+                <p className="text-[11.5px] text-foreground leading-relaxed">
+                  Cada conjunto de anuncios necesita mínimo €11-15/día para
+                  salir de aprendizaje. No vamos a tener adsets de €6 o €8 ·
+                  sería tirar plata.
+                </p>
+              </div>
+            </div>
+          </TextureCard>
+          <TextureCard
+            className="p-4"
+            style={{
+              borderColor: tw("violet", 0.4),
+              background: `linear-gradient(135deg, ${tw("violet", 0.08)}, hsl(var(--card)))`,
+            }}
+          >
+            <div className="flex items-start gap-2.5">
+              <div className="size-9 grid place-items-center rounded-lg bg-[hsl(var(--brand-violet)/0.14)] text-[hsl(var(--brand-violet))] shrink-0">
+                <Layers className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-[hsl(var(--brand-violet))] mb-1">
+                  Belleza · Clientes Potenciales con CBO
+                </div>
+                <p className="text-[11.5px] text-foreground leading-relaxed">
+                  La campaña nueva va con presupuesto por CAMPAÑA (CBO), no
+                  por adset. Meta decide qué adset prioriza · es lo que mejor
+                  nos funcionó meses atrás.
+                </p>
+              </div>
+            </div>
+          </TextureCard>
+        </div>
+
+        {/* Reglas operativas */}
         <div className="grid md:grid-cols-2 gap-2.5">
           {RULES.map((r, i) => (
             <motion.div
@@ -1539,170 +1753,136 @@ export function JunioPlan() {
         <div className="flex items-center gap-1.5 mt-3 px-1">
           <Gauge className="size-3.5 text-muted-foreground" />
           <span className="text-[10px] text-muted-foreground/80 italic">
-            En resumen: cada anuncio con plata suficiente, cambios graduales, plata concentrada en lo que funciona.
+            En resumen: cada adset con plata suficiente para aprender, cambios graduales, plata concentrada en lo que funciona.
           </span>
         </div>
       </section>
 
-      {/* ── BLOQUE 6 · A/B Ventas vs Cliente Potencial ── */}
+      {/* ── BLOQUE 5 · Plan de assets ── */}
       <section>
         <SectionHeader
-          title="La prueba del mes · ¿Ventas o Clientes Potenciales?"
-          sub="Dos formas de configurar las campañas · vamos a validar cuál trae leads de mejor calidad y más baratos"
+          title="Plan de assets · cantidades exactas"
+          sub={`Total junio: ${totalImages} imágenes + ${totalVideos} videos = ${totalImages + totalVideos} piezas · MÁS VIDEO que mayo`}
         />
-        <TextureCard className="p-4 mb-3" style={{ borderColor: tw("warning", 0.3) }}>
-          <p className="text-[11.5px] text-muted-foreground leading-relaxed">
-            <span className="font-semibold text-foreground">La historia:</span>{" "}
-            Bewe siempre usó campañas de <span className="text-[hsl(var(--brand-violet))] font-semibold">Clientes Potenciales</span>.
-            En mayo probamos pasar belleza a <span className="text-[hsl(var(--brand-cyan))] font-semibold">Ventas</span> (algo nuevo) —
-            trajo registros pero más caros (€7-8). Al mismo tiempo dejamos la campaña
-            de Servicios en Clientes Potenciales y el registro nos salió a €4.32, mucho
-            más barato. <span className="font-semibold text-foreground">Junio:</span> corremos las dos formas en
-            paralelo para validar de una vez por todas cuál nos trae leads de mejor
-            calidad al menor costo. No asumimos nada · lo probamos con data.
-          </p>
-        </TextureCard>
-        <div className="grid md:grid-cols-2 gap-3 mb-3">
-          {AB_MODELS.map((m, i) => (
-            <motion.div
-              key={m.key}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06 }}
-            >
-              <TextureCard
-                className="p-4 h-full"
-                style={{
-                  borderLeftWidth: "3px",
-                  borderLeftColor: `hsl(${TOKEN[m.tone]})`,
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="size-9 grid place-items-center rounded-lg shrink-0 font-mono text-base font-bold"
-                    style={{ background: tw(m.tone, 0.14), color: `hsl(${TOKEN[m.tone]})` }}
-                  >
-                    {m.key}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[12px] font-bold">{m.name}</span>
-                      <Badge variant={BADGE_VARIANT[m.tone]} className="!text-[9px] normal-case tracking-normal">
-                        {m.role}
-                      </Badge>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground leading-relaxed">
-                      {m.hypothesis}
-                    </div>
-                  </div>
-                </div>
-              </TextureCard>
-            </motion.div>
-          ))}
-        </div>
 
-        <TextureCard className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
-              <thead className="bg-secondary/40 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                <tr>
-                  <th className="text-left p-3 font-bold">Modelo</th>
-                  <th className="text-left p-3 font-bold">Campañas</th>
-                  <th className="text-left p-3 font-bold">Objetivo</th>
-                  <th className="text-left p-3 font-bold">CPL may</th>
-                  <th className="text-left p-3 font-bold">Hipótesis</th>
-                </tr>
-              </thead>
-              <tbody>
-                {AB_MODELS.map((m) => (
-                  <tr key={m.key} className="border-t border-border/40 hover:bg-secondary/20">
-                    <td className="p-3 font-bold" style={{ color: `hsl(${TOKEN[m.tone]})` }}>
-                      {m.name}
-                    </td>
-                    <td className="p-3 font-mono text-[10px] text-foreground">{m.campaigns}</td>
-                    <td className="p-3 text-muted-foreground">{m.objetivo}</td>
-                    <td className="p-3 font-mono tabular-nums">{m.cplMay}</td>
-                    <td className="p-3 text-muted-foreground leading-snug max-w-[260px]">
-                      {m.hypothesis}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Formatos destacados */}
+        <TextureCard className="p-4 mb-3" style={{ borderColor: tw("ember", 0.3) }}>
+          <div className="flex items-start gap-3">
+            <div className="size-9 grid place-items-center rounded-lg bg-[hsl(var(--brand-ember)/0.14)] text-[hsl(var(--brand-ember))] shrink-0">
+              <Video className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-[hsl(var(--brand-ember))] mb-1">
+                Formatos importantes
+              </div>
+              <p className="text-[11.5px] text-foreground leading-relaxed">
+                <span className="font-mono font-bold">4:5</span> para posts /
+                feed · <span className="font-mono font-bold">9:16</span> para
+                stories / reels. Volvemos a los formatos clásicos para
+                comparar contra los videos cinematográficos · veremos cuál
+                convierte mejor.
+              </p>
+            </div>
           </div>
         </TextureCard>
 
-        <div className="grid sm:grid-cols-2 gap-3 mt-3">
-          <TextureCard className="p-4" style={{ borderColor: tw("violet", 0.35) }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <FlaskConical className="size-3.5 text-[hsl(var(--brand-violet))]" />
-              <span className="text-[10px] uppercase tracking-[0.1em] font-bold text-[hsl(var(--brand-violet))]">
-                Qué medimos
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              ¿Cuál trae el CR más barato? ¿Cuál convierte mejor a trial? El A/B
-              compara CPL y calidad de lead entre los dos objetivos.
-            </p>
-          </TextureCard>
-          <TextureCard className="p-4" style={{ borderColor: tw("success", 0.35) }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <CalendarDays className="size-3.5 text-[hsl(var(--success))]" />
-              <span className="text-[10px] uppercase tracking-[0.1em] font-bold text-[hsl(var(--success))]">
-                Lectura día 7
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Si Cliente Potencial gana → julio migra todo a ese modelo para más
-              cobertura de leads.
-            </p>
-          </TextureCard>
-        </div>
-      </section>
-
-      {/* ── BLOQUE 7 · Plan de assets ── */}
-      <section>
-        <SectionHeader
-          title="Qué hacemos con los anuncios"
-          sub="Qué ajustamos en lo que ya tenemos · qué creamos nuevo · qué hay que producir"
-        />
-
-        {/* 7a · Campañas actuales */}
-        <div className="mb-4">
-          <div className="flex items-center gap-1.5 mb-2.5">
-            <Repeat className="size-3.5 text-[hsl(var(--brand-cyan))]" />
-            <span className="text-[11px] font-bold">1 · Lo que ya tenemos corriendo · cómo lo ajustamos</span>
-          </div>
-          <StaggerGroup className="grid md:grid-cols-3 gap-3">
-            {CURRENT_CAMPAIGNS.map((c) => (
-              <StaggerItem key={c.name}>
+        {/* Grupos de assets */}
+        <StaggerGroup className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {ASSETS.map((g) => {
+            const groupTotal = g.items.reduce((s, i) => s + i.count, 0);
+            return (
+              <StaggerItem key={g.label}>
                 <TextureCard
-                  className="p-4 h-full"
-                  style={{ borderLeftWidth: "3px", borderLeftColor: `hsl(${TOKEN[c.tone]})` }}
+                  className="p-4 h-full flex flex-col"
+                  style={{
+                    borderLeftWidth: "3px",
+                    borderLeftColor: `hsl(${TOKEN[g.tone]})`,
+                  }}
                 >
-                  <div
-                    className="text-[12px] font-bold mb-1.5"
-                    style={{ color: `hsl(${TOKEN[c.tone]})` }}
-                  >
-                    {c.name}
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span style={{ color: `hsl(${TOKEN[g.tone]})` }}>{g.icon}</span>
+                      <span
+                        className="text-[12.5px] font-bold leading-tight"
+                        style={{ color: `hsl(${TOKEN[g.tone]})` }}
+                      >
+                        {g.label}
+                      </span>
+                    </div>
+                    <Badge
+                      variant={BADGE_VARIANT[g.tone]}
+                      className="!text-[8px] normal-case tracking-normal whitespace-nowrap shrink-0"
+                    >
+                      {groupTotal} piezas
+                    </Badge>
                   </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">{c.detail}</p>
+                  <div className="text-[10px] text-muted-foreground italic mb-3">
+                    {g.tagline}
+                  </div>
+                  <div className="space-y-2">
+                    {g.items.map((it, i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border bg-card/50 p-2.5"
+                        style={{
+                          borderColor: it.highlight
+                            ? tw(g.tone, 0.45)
+                            : "hsl(var(--border) / 0.4)",
+                          background: it.highlight ? tw(g.tone, 0.06) : undefined,
+                        }}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className="size-6 grid place-items-center rounded-md shrink-0"
+                            style={{
+                              background: tw(g.tone, 0.14),
+                              color: `hsl(${TOKEN[g.tone]})`,
+                            }}
+                          >
+                            {it.kind === "imagen" ? (
+                              <ImageIcon className="size-3" />
+                            ) : (
+                              <Video className="size-3" />
+                            )}
+                          </span>
+                          <span
+                            className="font-mono font-bold text-[12px] tabular-nums"
+                            style={{ color: `hsl(${TOKEN[g.tone]})` }}
+                          >
+                            {it.count}
+                          </span>
+                          <span className="text-[10.5px] text-foreground capitalize">
+                            {it.kind}
+                            {it.count > 1 ? "es" : ""}
+                          </span>
+                          <span className="ml-auto font-mono text-[9px] text-muted-foreground px-1.5 py-0.5 rounded border border-border/40">
+                            {it.format}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] text-muted-foreground leading-snug">
+                          {it.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </TextureCard>
               </StaggerItem>
-            ))}
-          </StaggerGroup>
-        </div>
+            );
+          })}
+        </StaggerGroup>
 
-        {/* 7b · Campañas nuevas */}
-        <div className="mb-4">
+        {/* 2 estrategias de landing en paralelo */}
+        <div className="mt-5">
           <div className="flex items-center gap-1.5 mb-2.5">
-            <Layers className="size-3.5 text-[hsl(var(--brand-violet))]" />
-            <span className="text-[11px] font-bold">2 · Campañas nuevas · qué creamos y qué le cargamos</span>
+            <Target className="size-3.5 text-[hsl(var(--brand-violet))]" />
+            <span className="text-[11px] font-bold">
+              2 estrategias de landing en paralelo · decisión pendiente
+            </span>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            {NEW_CAMPAIGNS.map((c, i) => (
+            {LANDING_STRATEGIES.map((l, i) => (
               <motion.div
-                key={c.code}
+                key={l.letter}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
@@ -1710,69 +1890,71 @@ export function JunioPlan() {
                 <TextureCard
                   className="p-4 h-full"
                   style={{
-                    borderColor: tw(c.tone, 0.4),
-                    background: `linear-gradient(135deg, ${tw(c.tone, 0.07)}, hsl(var(--card)))`,
+                    borderLeftWidth: "3px",
+                    borderLeftColor: `hsl(${TOKEN[l.tone]})`,
                   }}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span
-                      className="font-mono text-[12px] font-bold"
-                      style={{ color: `hsl(${TOKEN[c.tone]})` }}
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="size-9 grid place-items-center rounded-lg shrink-0 font-mono text-base font-bold"
+                      style={{
+                        background: tw(l.tone, 0.14),
+                        color: `hsl(${TOKEN[l.tone]})`,
+                      }}
                     >
-                      {c.code}
-                    </span>
-                    <Badge variant={BADGE_VARIANT[c.tone]} className="!text-[9px] normal-case tracking-normal">
-                      {c.objetivo}
-                    </Badge>
+                      {l.letter}
+                    </div>
+                    <div className="min-w-0">
+                      <div
+                        className="text-[12px] font-bold mb-1"
+                        style={{ color: `hsl(${TOKEN[l.tone]})` }}
+                      >
+                        Opción {l.letter} · {l.title}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {l.detail}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">{c.load}</p>
                 </TextureCard>
               </motion.div>
             ))}
           </div>
         </div>
 
-        {/* 7c · Producción nueva */}
-        <div>
-          <div className="flex items-center gap-1.5 mb-2.5">
-            <Video className="size-3.5 text-[hsl(var(--destructive))]" />
-            <span className="text-[11px] font-bold">3 · Lo que hay que producir · prioridad: más video</span>
-          </div>
-          <div className="grid md:grid-cols-2 gap-2.5">
-            {PRODUCTION.map((p, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className="rounded-lg border bg-card/50 p-3 flex items-start gap-2.5"
-                style={{ borderColor: tw(p.tone, 0.3) }}
-              >
-                <div
-                  className="size-7 rounded-md grid place-items-center shrink-0"
-                  style={{ background: tw(p.tone, 0.14), color: `hsl(${TOKEN[p.tone]})` }}
+        {/* Total / nota */}
+        <TextureCard
+          className="p-4 mt-4"
+          style={{
+            borderColor: tw("success", 0.4),
+            background: `linear-gradient(135deg, ${tw("success", 0.08)}, hsl(var(--card)))`,
+          }}
+        >
+          <div className="flex items-start gap-3">
+            <div className="size-10 grid place-items-center rounded-lg bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))] shrink-0">
+              <Video className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-bold mb-0.5">
+                Total piezas junio:{" "}
+                <span
+                  className="font-mono tabular-nums"
+                  style={{ color: `hsl(${TOKEN.success})` }}
                 >
-                  {p.icon}
-                </div>
-                <div className="min-w-0">
-                  <Badge
-                    variant={BADGE_VARIANT[p.tone]}
-                    className="!text-[8px] normal-case tracking-normal mb-1"
-                  >
-                    {p.priority}
-                  </Badge>
-                  <div className="text-[11px] text-foreground leading-relaxed">{p.text}</div>
-                </div>
-              </motion.div>
-            ))}
+                  {totalImages} imágenes + {totalVideos} videos = {totalImages + totalVideos} piezas
+                </span>
+              </div>
+              <p className="text-[10.5px] text-muted-foreground leading-relaxed">
+                Producción de oficina con personas reales · refrescamos los
+                creativos fatigados (paraguas, mkt con 68-71K impresiones) y
+                volvemos a formatos clásicos 4:5 y 9:16.
+              </p>
+            </div>
           </div>
-          <div className="text-[10px] text-muted-foreground/80 italic leading-relaxed mt-3 px-1">
-            Estilo: producción de oficina con personas reales (como “Bivi anterior”) · formato que ya sabemos que funciona.
-          </div>
-        </div>
+        </TextureCard>
       </section>
 
-      {/* ── BLOQUE 10 · Desglose campaña → conjunto → anuncio ── */}
+      {/* ── BLOQUE 8 · Desglose campaña → conjunto → anuncio ── */}
       <section>
         <SectionHeader
           title="Desglose completo · campaña → conjunto → anuncio"
@@ -1793,7 +1975,6 @@ export function JunioPlan() {
             return (
               <StaggerItem key={c.code}>
                 <TextureCard className="p-4 h-full flex flex-col">
-                  {/* Cabecera */}
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="flex items-center gap-2 min-w-0">
                       <span
@@ -1829,7 +2010,6 @@ export function JunioPlan() {
                     {c.tagline}
                   </p>
 
-                  {/* Conjuntos (adsets) */}
                   <div className="space-y-2">
                     <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground flex items-center gap-1">
                       <Layers className="size-3" />
@@ -1883,7 +2063,6 @@ export function JunioPlan() {
                     })}
                   </div>
 
-                  {/* Anuncios */}
                   <div className="mt-3 pt-3 border-t border-border/40 mt-auto">
                     <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground flex items-center gap-1 mb-1">
                       <Video className="size-3" />
@@ -1922,28 +2101,29 @@ export function JunioPlan() {
                 base
                 <span className="text-muted-foreground font-normal">
                   {" "}
-                  (€26 + €22 + €20 + €14 + €12 + €6) · escala a €150/día en semanas
-                  push
+                  (€26 + €22 + €20 + €14 + €12 + €6) · escala según escenario
+                  seleccionado arriba
                 </span>
               </div>
               <p className="text-[10.5px] text-muted-foreground leading-relaxed">
-                Cada conjunto con mínimo €5-6/día y los principales €12-14 para que
-                salgan de aprendizaje. El budget mostrado es el de arranque (semana
-                1) · en semanas 2-3 se sube a los ganadores.
+                Cada conjunto con mínimo €11-15/día para que salga de
+                aprendizaje (regla nueva · sin adsets famélicos). El budget
+                mostrado es el de arranque (semana 1) · en semanas 2-3 se sube
+                a los ganadores.
               </p>
             </div>
           </div>
         </TextureCard>
       </section>
 
-      {/* ── BLOQUE 10b · Tabla operativa del plan · 3 vistas ── */}
+      {/* ── BLOQUE 9 · Tabla operativa del plan · 3 vistas ── */}
       <JunioPlanTable />
 
-      {/* ── BLOQUE 8 · Mejores anuncios mayo ── */}
+      {/* ── BLOQUE 10 · Mejores anuncios mayo ── */}
       <section>
         <SectionHeader
           title="Mejores anuncios mayo · qué replicar vs mejorar"
-          sub="CPL real 12-26 may · linda (Linda 24/7) es el mejor performer"
+          sub="CPL real 12-28 may · linda (Linda 24/7) es el mejor performer"
         />
         <div className="rounded-lg border border-border/50 bg-card/40 p-3 mb-3 flex items-start gap-2">
           <TriangleAlert className="size-3.5 text-[hsl(var(--warning))] mt-px shrink-0" />

@@ -30,7 +30,7 @@ import { StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import { JunioPlanTable } from "@/components/estrategia/junio-plan-table";
 import { useDashboard } from "@/lib/store";
 import { computeMonthlyTotals } from "@/lib/selectors";
-import { fmt } from "@/lib/utils";
+import { fmt, cn } from "@/lib/utils";
 
 /**
  * Plan Junio 2026 · validado por Santiago contra mayo real (12-28 may).
@@ -764,17 +764,58 @@ interface Adset {
   note: string;
 }
 
+type CampaignRole = "motor" | "apoyo" | "atraccion";
+
 interface CampaignBreakdown {
   code: string;
   name: string;
   objetivo: string;
   objetivoTone: Tone;
+  /** perDay/cplMeta legacy · ya no se renderizan en desglose
+   * (los números viven en la tabla operativa scenario-aware) */
   perDay: string;
   cplMeta: string;
   tagline: string;
   adsets: Adset[];
   ads: string;
+  /** Rol estratégico · agrupa el desglose por función */
+  role: CampaignRole;
+  /** Status de lifecycle · activa/nueva/ajusta */
+  status: "Activa" | "Nueva" | "Ajusta";
 }
+
+const ROLE_META: Record<
+  CampaignRole,
+  { title: string; sub: string; share: string; tone: Tone; icon: React.ReactNode }
+> = {
+  motor: {
+    title: "Motor de leads · BELLEZA",
+    sub: "75-80% del budget · el vertical que ya validamos en mayo",
+    share: "75-80%",
+    tone: "ember",
+    icon: <Sparkles className="size-3.5" />,
+  },
+  apoyo: {
+    title: "Apoyos · SERVICIOS + REMARKETING",
+    sub: "15-20% del budget · diversificación con CPL bajo + recuperación",
+    share: "15-20%",
+    tone: "cyan",
+    icon: <Target className="size-3.5" />,
+  },
+  atraccion: {
+    title: "Atracción nueva · TOOLS + ACADEMY",
+    sub: "5-10% del budget · gente nueva con contenido ya pagado",
+    share: "5-10%",
+    tone: "violet",
+    icon: <Wrench className="size-3.5" />,
+  },
+};
+
+const STATUS_TONE: Record<CampaignBreakdown["status"], Tone> = {
+  Activa: "success",
+  Nueva: "violet",
+  Ajusta: "cyan",
+};
 
 const BREAKDOWN: CampaignBreakdown[] = [
   {
@@ -812,6 +853,8 @@ const BREAKDOWN: CampaignBreakdown[] = [
       },
     ],
     ads: "paraguas (reemplazar por VIDEO nuevo · fatigado 68K impresiones) + mkt + videos nuevos.",
+    role: "motor",
+    status: "Activa",
   },
   {
     code: "J2",
@@ -840,6 +883,8 @@ const BREAKDOWN: CampaignBreakdown[] = [
       },
     ],
     ads: "mkt_v1_dol (volumen 71K impresiones) + paraguas LATAM (€5.49 bueno) + videos perro-mucho.",
+    role: "motor",
+    status: "Activa",
   },
   {
     code: "J3",
@@ -868,6 +913,8 @@ const BREAKDOWN: CampaignBreakdown[] = [
       },
     ],
     ads: "ganadores de belleza (mkt, paraguas, linda) + 6 videos perro-mucho.",
+    role: "motor",
+    status: "Nueva",
   },
   {
     code: "J4",
@@ -896,6 +943,8 @@ const BREAKDOWN: CampaignBreakdown[] = [
       },
     ],
     ads: "linda (€3.88 · el mejor anuncio de todos) + 3 videos servicios + 2 imágenes nuevas.",
+    role: "apoyo",
+    status: "Activa",
   },
   {
     code: "J5",
@@ -916,6 +965,8 @@ const BREAKDOWN: CampaignBreakdown[] = [
       },
     ],
     ads: "2 imágenes recuperación + 1 video PII a ONBOARDING directo.",
+    role: "apoyo",
+    status: "Ajusta",
   },
   {
     code: "J6",
@@ -936,6 +987,8 @@ const BREAKDOWN: CampaignBreakdown[] = [
       },
     ],
     ads: "3 cortes 40M COP + 1 video curso IA PYMES + 3 tools (calculadora ROI, auditoría IG, comparador).",
+    role: "atraccion",
+    status: "Nueva",
   },
 ];
 
@@ -2060,162 +2113,196 @@ export function JunioPlan() {
       {/* ── BLOQUE 8 · Desglose campaña → conjunto → anuncio ── */}
       <section>
         <SectionHeader
-          title="Desglose completo · campaña → conjunto → anuncio"
-          sub="Las 6 campañas al detalle · presupuesto, audiencia, costo real de mayo y acción de cada conjunto"
+          title="Por qué cada campaña · qué hace cada conjunto"
+          sub="Agrupado por rol estratégico · narrativa de mayo + acción de junio · los €/día viven en la tabla operativa de abajo"
         />
-        <TextureCard className="p-4 mb-3" style={{ borderColor: tw("violet", 0.3) }}>
+        <TextureCard className="p-4 mb-4" style={{ borderColor: tw("violet", 0.3) }}>
           <p className="text-[11.5px] text-muted-foreground leading-relaxed">
             <span className="font-semibold text-foreground">Cómo leer esto:</span>{" "}
-            cada campaña tiene sus <span className="font-semibold text-foreground">conjuntos de anuncios</span> (grupos
-            de audiencia) y cada conjunto tiene su presupuesto, su tipo de audiencia,
-            el costo por registro real de mayo (si ya venía corriendo) y qué vamos a
-            hacer con él. Abajo, los anuncios que le cargamos.
+            3 grupos · <span className="font-semibold text-[hsl(var(--brand-ember))]">Motor de leads (Belleza)</span>,{" "}
+            <span className="font-semibold text-[hsl(var(--brand-cyan))]">Apoyos (Servicios + Remarketing)</span> y{" "}
+            <span className="font-semibold text-[hsl(var(--brand-violet))]">Atracción nueva (Tools + Academy)</span>.
+            Cada conjunto trae el CPL real de mayo (si venía corriendo) + la
+            acción de junio (ESCALAR/MANTENER/REVISAR/NUEVO/FUSIONAR).
           </p>
         </TextureCard>
-        <StaggerGroup className="grid md:grid-cols-2 gap-3">
-          {BREAKDOWN.map((c) => {
-            const total = c.adsets.length;
-            return (
-              <StaggerItem key={c.code}>
-                <TextureCard className="p-4 h-full flex flex-col">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="size-7 grid place-items-center rounded-md shrink-0 font-mono text-[11px] font-bold"
-                        style={{
-                          background: tw(c.objetivoTone, 0.14),
-                          color: `hsl(${TOKEN[c.objetivoTone]})`,
-                        }}
-                      >
-                        {c.code}
-                      </span>
-                      <span className="text-[13px] font-bold leading-tight truncate">
-                        {c.name}
-                      </span>
-                    </div>
-                    <Badge
-                      variant={BADGE_VARIANT[c.objetivoTone]}
-                      className="!text-[8px] normal-case tracking-normal whitespace-nowrap shrink-0"
-                    >
-                      {c.objetivo}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 mb-1 pl-9">
-                    <span className="font-mono text-[11px] font-bold tabular-nums text-foreground">
-                      {c.perDay}
-                    </span>
-                    <span className="text-muted-foreground/50">·</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {c.cplMeta}
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] text-muted-foreground italic leading-snug mb-3 pl-9">
-                    {c.tagline}
-                  </p>
 
-                  <div className="space-y-2">
-                    <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground flex items-center gap-1">
-                      <Layers className="size-3" />
-                      Conjuntos · {total}
+        <div className="space-y-6">
+          {(["motor", "apoyo", "atraccion"] as const).map((role) => {
+            const group = BREAKDOWN.filter((b) => b.role === role);
+            const meta = ROLE_META[role];
+            return (
+              <div key={role}>
+                {/* Header del grupo */}
+                <div
+                  className="flex items-center justify-between mb-2 pb-2 border-b"
+                  style={{ borderColor: tw(meta.tone, 0.35) }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="size-7 grid place-items-center rounded-md shrink-0"
+                      style={{
+                        background: tw(meta.tone, 0.16),
+                        color: `hsl(${TOKEN[meta.tone]})`,
+                      }}
+                    >
+                      {meta.icon}
                     </span>
-                    {c.adsets.map((a) => {
-                      const aTone = ADSET_ACTION_TONE[a.action];
-                      return (
-                        <div
-                          key={a.name}
-                          className="rounded-lg border bg-card/50 p-2.5"
-                          style={{ borderLeftWidth: "3px", borderLeftColor: `hsl(${TOKEN[aTone]})` }}
+                    <div className="min-w-0">
+                      <div
+                        className="text-[12px] font-extrabold leading-tight tracking-tight uppercase"
+                        style={{ color: `hsl(${TOKEN[meta.tone]})` }}
+                      >
+                        {meta.title}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground leading-tight">
+                        {meta.sub}
+                      </div>
+                    </div>
+                  </div>
+                  <Badge variant={BADGE_VARIANT[meta.tone]} className="!text-[9px] font-mono shrink-0">
+                    {meta.share} budget · {group.length} {group.length === 1 ? "campaña" : "campañas"}
+                  </Badge>
+                </div>
+
+                {/* Campañas del grupo · 1 columna · full width */}
+                <StaggerGroup className="space-y-3">
+                  {group.map((c) => {
+                    const sTone = STATUS_TONE[c.status];
+                    return (
+                      <StaggerItem key={c.code}>
+                        <TextureCard
+                          className="p-4"
+                          style={{ borderLeft: `3px solid hsl(${TOKEN[meta.tone]} / 0.65)` }}
                         >
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <span className="text-[11px] font-bold leading-tight">
-                              {a.name}
+                          {/* Header campaña */}
+                          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                            <span
+                              className="font-mono text-[11px] px-1.5 py-0.5 rounded font-bold shrink-0"
+                              style={{
+                                background: tw(c.objetivoTone, 0.14),
+                                color: `hsl(${TOKEN[c.objetivoTone]})`,
+                              }}
+                            >
+                              {c.code}
+                            </span>
+                            <span className="text-[14px] font-extrabold tracking-tight">
+                              {c.name}
                             </span>
                             <Badge
-                              variant={BADGE_VARIANT[aTone]}
-                              className="!text-[8px] normal-case tracking-normal whitespace-nowrap shrink-0"
+                              variant={BADGE_VARIANT[c.objetivoTone]}
+                              className="!text-[8px] normal-case tracking-normal"
                             >
-                              {a.action}
+                              {c.objetivo}
+                            </Badge>
+                            <Badge
+                              variant={BADGE_VARIANT[sTone]}
+                              className="!text-[8px]"
+                            >
+                              {c.status}
                             </Badge>
                           </div>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1 text-[10px]">
-                            <span className="text-muted-foreground">
-                              {a.audience}
-                              <span className="text-muted-foreground/60">
-                                {" "}
-                                ({AUDIENCE_HINT[a.audience]})
-                              </span>
-                            </span>
-                            <span className="text-muted-foreground/50">·</span>
-                            <span className="font-mono tabular-nums font-semibold text-foreground">
-                              {a.perDay}
-                            </span>
-                            {a.cplMay && (
-                              <>
-                                <span className="text-muted-foreground/50">·</span>
-                                <span className="font-mono tabular-nums text-muted-foreground">
-                                  CPL may {a.cplMay}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-muted-foreground leading-snug">
-                            {a.note}
+                          <p className="text-[11px] text-muted-foreground italic leading-snug mb-3">
+                            “{c.tagline}”
                           </p>
-                        </div>
-                      );
-                    })}
-                  </div>
 
-                  <div className="mt-3 pt-3 border-t border-border/40 mt-auto">
-                    <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground flex items-center gap-1 mb-1">
-                      <Video className="size-3" />
-                      Anuncios cargados
-                    </span>
-                    <p className="text-[10.5px] text-foreground leading-snug">
-                      {c.ads}
-                    </p>
-                  </div>
-                </TextureCard>
-              </StaggerItem>
+                          {/* Adsets · tabla compacta */}
+                          <div className="rounded-md border border-border/40 overflow-hidden mb-3">
+                            <div className="grid grid-cols-[auto_1fr_auto] gap-x-3 px-3 py-1.5 bg-secondary/40 text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground border-b border-border/40">
+                              <span>Acción · conjunto</span>
+                              <span>Audiencia · estrategia</span>
+                              <span className="text-right">CPL mayo</span>
+                            </div>
+                            {c.adsets.map((a) => {
+                              const aTone = ADSET_ACTION_TONE[a.action];
+                              return (
+                                <div
+                                  key={a.name}
+                                  className="grid grid-cols-[auto_1fr_auto] gap-x-3 px-3 py-2.5 border-b border-border/30 last:border-b-0 hover:bg-secondary/20 transition-colors"
+                                  style={{ borderLeft: `2px solid hsl(${TOKEN[aTone]} / 0.6)` }}
+                                >
+                                  <div className="flex flex-col gap-0.5 min-w-[140px]">
+                                    <Badge
+                                      variant={BADGE_VARIANT[aTone]}
+                                      className="!text-[8px] w-fit"
+                                    >
+                                      {a.action}
+                                    </Badge>
+                                    <span className="text-[11px] font-bold leading-tight">
+                                      {a.name}
+                                    </span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-[10px] text-foreground/90 font-semibold">
+                                      {a.audience}
+                                      <span className="text-muted-foreground/70 font-normal">
+                                        {" "}· {AUDIENCE_HINT[a.audience]}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10.5px] text-muted-foreground leading-snug mt-0.5">
+                                      {a.note}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    {a.cplMay ? (
+                                      <span
+                                        className={cn(
+                                          "font-mono tabular-nums text-[11px] font-bold",
+                                          parseFloat(a.cplMay.replace("€", "")) <= 5 &&
+                                            "text-[hsl(var(--success))]",
+                                          parseFloat(a.cplMay.replace("€", "")) > 5 &&
+                                            parseFloat(a.cplMay.replace("€", "")) <= 9 &&
+                                            "text-[hsl(var(--warning))]",
+                                          parseFloat(a.cplMay.replace("€", "")) > 9 &&
+                                            "text-[hsl(var(--destructive))]",
+                                        )}
+                                      >
+                                        {a.cplMay}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground/50 italic">
+                                        sin data
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Anuncios */}
+                          <div className="flex items-start gap-2">
+                            <Video className="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                            <div className="min-w-0">
+                              <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+                                Anuncios cargados
+                              </span>
+                              <p className="text-[11px] text-foreground leading-snug">
+                                {c.ads}
+                              </p>
+                            </div>
+                          </div>
+                        </TextureCard>
+                      </StaggerItem>
+                    );
+                  })}
+                </StaggerGroup>
+              </div>
             );
           })}
-        </StaggerGroup>
+        </div>
+
+        {/* Pie · pointer a la tabla operativa */}
         <TextureCard
-          className="p-4 mt-3"
-          style={{
-            borderColor: tw("success", 0.4),
-            background: `linear-gradient(135deg, ${tw("success", 0.08)}, hsl(var(--card)))`,
-          }}
+          className="p-3 mt-4 flex items-start gap-2"
+          style={{ borderColor: tw("cyan", 0.3) }}
         >
-          <div className="flex items-start gap-2">
-            <Wallet
-              className="size-4 mt-0.5 shrink-0"
-              style={{ color: `hsl(${TOKEN.success})` }}
-            />
-            <div>
-              <div className="text-[12px] font-bold mb-1">
-                Total:{" "}
-                <span
-                  className="font-mono tabular-nums"
-                  style={{ color: `hsl(${TOKEN.success})` }}
-                >
-                  €100/día
-                </span>{" "}
-                base
-                <span className="text-muted-foreground font-normal">
-                  {" "}
-                  (€26 + €22 + €20 + €14 + €12 + €6) · escala según escenario
-                  seleccionado arriba
-                </span>
-              </div>
-              <p className="text-[10.5px] text-muted-foreground leading-relaxed">
-                Cada conjunto con mínimo €11-15/día para que salga de
-                aprendizaje (regla nueva · sin adsets famélicos). El budget
-                mostrado es el de arranque (semana 1) · en semanas 2-3 se sube
-                a los ganadores.
-              </p>
-            </div>
-          </div>
+          <Wallet className="size-3.5 mt-0.5 shrink-0 text-[hsl(var(--brand-cyan))]" />
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">Para ver los €/día y €/mes por campaña</span>{" "}
+            mirá la tabla operativa abajo · cambia automáticamente al escenario
+            que selecciones arriba (Conservador / Base / Agresivo).
+          </p>
         </TextureCard>
       </section>
 

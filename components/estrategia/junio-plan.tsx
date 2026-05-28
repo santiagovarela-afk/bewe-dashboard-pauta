@@ -109,7 +109,7 @@ const BUDGET: BudgetItem[] = [
 ];
 
 // ── BLOQUE 2 · 3 escenarios ──────────────────────────────────────
-type ScenarioKey = "conservador" | "base" | "agresivo";
+export type ScenarioKey = "conservador" | "base" | "agresivo";
 
 interface Scenario {
   key: ScenarioKey;
@@ -2209,7 +2209,7 @@ export function JunioPlan() {
       </section>
 
       {/* ── BLOQUE 9 · Tabla operativa del plan · 3 vistas ── */}
-      <JunioPlanTable />
+      <JunioPlanTable scenario={selectedScenario} />
 
       {/* ── BLOQUE 10 · Mejores anuncios mayo ── */}
       <section>

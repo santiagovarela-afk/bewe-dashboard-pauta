@@ -17,14 +17,15 @@ import { TextureCard } from "@/components/fx/texture-card";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/shared/section-header";
 import { cn } from "@/lib/utils";
+import { type ScenarioKey } from "./junio-plan";
 
 /**
  * Tabla operativa del plan junio · 3 vistas (campaña · etapa · conjunto).
- * Versión tabular densa del desglose campaña → conjunto → anuncio.
+ * Reactiva al escenario seleccionado en JunioPlan (conservador/base/agresivo).
  * Estilo: idéntico a "Estado completo" de tab-campanas.tsx (TextureCard,
  * thead sticky, filas clickeables, mono tabular, badges del sistema).
- * CERO data inventada salvo el front-load por etapa (estimaciones razonables
- * que respetan los totales semanales del brief: 115 / 150 / 55).
+ * Vistas 1 y 2 cambian sus €/día y €/mes según escenario.
+ * Vista 3 (por conjunto) es referencia histórica de CPL mayo · invariante.
  */
 
 type Tone = "success" | "warning" | "ember" | "violet" | "cyan" | "destructive";
@@ -90,7 +91,8 @@ const AUDIENCE_HINT: Record<AudienceKind, string> = {
 interface PlanAdset {
   name: string;
   audience: AudienceKind;
-  perDay: number;
+  /** proporción del budget de la campaña (0-1) · suma 1 dentro de cada campaña */
+  share: number;
   cplMay: number | null;
   action: AdsetAction;
   campaignCode: string;
@@ -104,16 +106,40 @@ interface PlanCampaign {
   geo: string;
   objetivo: Objetivo;
   estado: EstadoPlan;
+  /** €/día base · se sustituye por el del escenario activo */
   perDay: number;
   perMonth: number;
   cplMeta: string;
-  /** presupuesto €/día por etapa: [sem1 arranque, sem2-3 push, sem4 taper] */
-  stage: [number, number, number];
   adsets: PlanAdset[];
   ads: string;
 }
 
-// ── Data del plan junio (exacta · del brief) ─────────────────────
+// ── Budget por escenario · €/día por campaña ─────────────────────
+const BUDGET_BY_SCENARIO: Record<ScenarioKey, Record<string, number>> = {
+  conservador: { J1: 23, J2: 21, J3: 18, J4: 13, J5: 15, J6: 13 },
+  base: { J1: 22, J2: 20, J3: 20, J4: 13, J5: 15, J6: 13 },
+  agresivo: { J1: 25, J2: 23, J3: 23, J4: 15, J5: 17, J6: 15 },
+};
+
+const CPL_META_BY_SCENARIO: Record<ScenarioKey, Record<string, string>> = {
+  conservador: { J1: "€5-6", J2: "€4-5", J3: "€4", J4: "€4", J5: "validar", J6: "tráfico" },
+  base: { J1: "€4-5", J2: "€3.5-5", J3: "€3", J4: "€4", J5: "validar", J6: "tráfico" },
+  agresivo: { J1: "€4-5", J2: "€3.5-5", J3: "€3", J4: "€4", J5: "validar", J6: "tráfico" },
+};
+
+const SCENARIO_LABEL: Record<ScenarioKey, string> = {
+  conservador: "Conservador",
+  base: "Base",
+  agresivo: "Agresivo",
+};
+
+const SCENARIO_TONE: Record<ScenarioKey, Tone> = {
+  conservador: "ember",
+  base: "cyan",
+  agresivo: "success",
+};
+
+// ── Data del plan junio · estructura base ────────────────────────
 const PLAN: PlanCampaign[] = [
   {
     code: "J1",
@@ -122,14 +148,13 @@ const PLAN: PlanCampaign[] = [
     geo: "MX",
     objetivo: "Ventas",
     estado: "Activa",
-    perDay: 26,
-    perMonth: 780,
+    perDay: 22,
+    perMonth: 660,
     cplMeta: "€4-5",
-    stage: [26, 33, 20],
     adsets: [
-      { name: "A1.1 Lookalike Belleza", audience: "Lookalike", perDay: 12, cplMay: 5.03, action: "ESCALAR", campaignCode: "J1", campaignName: "MX · Belleza" },
-      { name: "A1.2 Custom Engagers", audience: "Custom", perDay: 6, cplMay: 9.16, action: "REVISAR", campaignCode: "J1", campaignName: "MX · Belleza" },
-      { name: "A1.4 Interés amplio", audience: "Interés", perDay: 8, cplMay: null, action: "NUEVO", campaignCode: "J1", campaignName: "MX · Belleza" },
+      { name: "A1.1 Lookalike Belleza", audience: "Lookalike", share: 0.5, cplMay: 5.03, action: "ESCALAR", campaignCode: "J1", campaignName: "MX · Belleza" },
+      { name: "A1.2 Custom Engagers", audience: "Custom", share: 0.22, cplMay: 9.16, action: "REVISAR", campaignCode: "J1", campaignName: "MX · Belleza" },
+      { name: "A1.4 Interés amplio", audience: "Interés", share: 0.28, cplMay: null, action: "NUEVO", campaignCode: "J1", campaignName: "MX · Belleza" },
     ],
     ads: "paraguas (reemplazar por VIDEO · fatigado 68K impr) + mkt + 2 videos nuevos.",
   },
@@ -140,13 +165,12 @@ const PLAN: PlanCampaign[] = [
     geo: "CR+PA+CL+CO",
     objetivo: "Ventas",
     estado: "Activa",
-    perDay: 22,
-    perMonth: 660,
+    perDay: 20,
+    perMonth: 600,
     cplMeta: "€3.5-5",
-    stage: [22, 30, 12],
     adsets: [
-      { name: "A4.1 Lookalike Belleza", audience: "Lookalike", perDay: 14, cplMay: 7.13, action: "MANTENER", campaignCode: "J2", campaignName: "LATAM · Belleza" },
-      { name: "A4.2 Interés amplio", audience: "Interés", perDay: 8, cplMay: null, action: "NUEVO", campaignCode: "J2", campaignName: "LATAM · Belleza" },
+      { name: "A4.1 Lookalike Belleza", audience: "Lookalike", share: 0.63, cplMay: 7.13, action: "MANTENER", campaignCode: "J2", campaignName: "LATAM · Belleza" },
+      { name: "A4.2 Interés amplio", audience: "Interés", share: 0.37, cplMay: null, action: "NUEVO", campaignCode: "J2", campaignName: "LATAM · Belleza" },
     ],
     ads: "mkt_v1_dol (volumen 71K) + paraguas LATAM (CPL €5.49) + 2 videos.",
   },
@@ -160,10 +184,9 @@ const PLAN: PlanCampaign[] = [
     perDay: 20,
     perMonth: 600,
     cplMeta: "€3",
-    stage: [20, 30, 8],
     adsets: [
-      { name: "Lookalike Belleza LATAM", audience: "Lookalike", perDay: 12, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
-      { name: "Interés amplio", audience: "Interés", perDay: 8, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
+      { name: "Lookalike Belleza LATAM", audience: "Lookalike", share: 0.6, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
+      { name: "Interés amplio", audience: "Interés", share: 0.4, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
     ],
     ads: "ganadores belleza (mkt, paraguas, linda) + 4 videos nuevos.",
   },
@@ -174,13 +197,12 @@ const PLAN: PlanCampaign[] = [
     geo: "MX",
     objetivo: "Clientes Potenciales",
     estado: "Activa",
-    perDay: 14,
-    perMonth: 420,
+    perDay: 13,
+    perMonth: 390,
     cplMeta: "€4",
-    stage: [14, 18, 10],
     adsets: [
-      { name: "A3.1 Lookalike Servicios", audience: "Lookalike", perDay: 9, cplMay: 3.98, action: "ESCALAR", campaignCode: "J4", campaignName: "MX · Servicios" },
-      { name: "A3.2 Interés Servicios", audience: "Interés", perDay: 5, cplMay: 5.49, action: "MANTENER", campaignCode: "J4", campaignName: "MX · Servicios" },
+      { name: "A3.1 Lookalike Servicios", audience: "Lookalike", share: 0.64, cplMay: 3.98, action: "ESCALAR", campaignCode: "J4", campaignName: "MX · Servicios" },
+      { name: "A3.2 Interés Servicios", audience: "Interés", share: 0.36, cplMay: 5.49, action: "MANTENER", campaignCode: "J4", campaignName: "MX · Servicios" },
     ],
     ads: "linda (mejor de la cuenta €3.88) + variantes video.",
   },
@@ -191,12 +213,11 @@ const PLAN: PlanCampaign[] = [
     geo: "LATAM",
     objetivo: "Ventas",
     estado: "Ajusta",
-    perDay: 12,
-    perMonth: 360,
+    perDay: 15,
+    perMonth: 450,
     cplMeta: "validar",
-    stage: [12, 24, 5],
     adsets: [
-      { name: "RMKT Apilado (fusión de 2)", audience: "Remarketing", perDay: 12, cplMay: 12.97, action: "FUSIONAR", campaignCode: "J5", campaignName: "Remarketing LATAM" },
+      { name: "RMKT Apilado (fusión de 2)", audience: "Remarketing", share: 1, cplMay: 12.97, action: "FUSIONAR", campaignCode: "J5", campaignName: "Remarketing LATAM" },
     ],
     ads: "2 piezas de recuperación (\"te extrañamos\", \"estás a un paso\").",
   },
@@ -207,22 +228,32 @@ const PLAN: PlanCampaign[] = [
     geo: "MX+LATAM",
     objetivo: "Tráfico",
     estado: "Nueva",
-    perDay: 6,
-    perMonth: 180,
+    perDay: 13,
+    perMonth: 390,
     cplMeta: "tráfico",
-    stage: [6, 15, 0],
     adsets: [
-      { name: "Interés PYME amplio", audience: "Interés", perDay: 6, cplMay: null, action: "NUEVO", campaignCode: "J6", campaignName: "Tools + Academy" },
+      { name: "Interés PYME amplio", audience: "Interés", share: 1, cplMay: null, action: "NUEVO", campaignCode: "J6", campaignName: "Tools + Academy" },
     ],
     ads: "recortes 40M COP + perro mocho + 3 tools (calculadora ROI, auditoría IG, comparador).",
   },
 ];
 
-const TOTAL_DAY = PLAN.reduce((s, c) => s + c.perDay, 0); // 100
-const TOTAL_MONTH = PLAN.reduce((s, c) => s + c.perMonth, 0); // 3000
-const STAGE_TOTALS: [number, number, number] = [115, 150, 55];
+/** Resuelve el €/día y €/mes de cada campaña según el escenario activo. */
+function resolveCampaign(c: PlanCampaign, scenario: ScenarioKey): PlanCampaign {
+  const perDay = BUDGET_BY_SCENARIO[scenario][c.code] ?? c.perDay;
+  const perMonth = perDay * 30;
+  const cplMeta = CPL_META_BY_SCENARIO[scenario][c.code] ?? c.cplMeta;
+  return { ...c, perDay, perMonth, cplMeta };
+}
 
-// Conjuntos planos · ordenados por CPL may ascendente · los sin CPL al final
+/** Devuelve [Sem 1 arranque, Sem 2-3 push, Sem 4 taper] en €/día. */
+function stageFor(perDay: number): [number, number, number] {
+  // Sem 1 ~85% · Sem 2-3 ~130% · Sem 4 ~50%
+  return [Math.round(perDay * 0.85), Math.round(perDay * 1.3), Math.round(perDay * 0.5)];
+}
+
+// Conjuntos planos · ordenados por CPL may ascendente · referencia histórica
+// invariable (no depende de escenario).
 const ALL_ADSETS: PlanAdset[] = PLAN.flatMap((c) => c.adsets).slice().sort((a, b) => {
   const av = a.cplMay ?? Number.POSITIVE_INFINITY;
   const bv = b.cplMay ?? Number.POSITIVE_INFINITY;
@@ -233,6 +264,7 @@ const ALL_ADSETS: PlanAdset[] = PLAN.flatMap((c) => c.adsets).slice().sort((a, b
 const eur = (n: number): string => `€${n.toLocaleString("es-ES")}`;
 const eurDay = (n: number): string => `€${n}/día`;
 const eurCpl = (n: number | null): string => (n === null ? "—" : `€${n.toFixed(2)}`);
+const pct = (n: number): string => `${Math.round(n * 100)}%`;
 
 type ViewKey = "campaign" | "stage" | "adset";
 
@@ -267,18 +299,35 @@ function Th({
   );
 }
 
-export function JunioPlanTable() {
+export function JunioPlanTable({ scenario = "base" }: { scenario?: ScenarioKey } = {}) {
   const [view, setView] = React.useState<ViewKey>("campaign");
   const [expanded, setExpanded] = React.useState<string | null>(null);
+
+  const resolved = React.useMemo<PlanCampaign[]>(
+    () => PLAN.map((c) => resolveCampaign(c, scenario)),
+    [scenario],
+  );
+
+  const totalDay = resolved.reduce((s, c) => s + c.perDay, 0);
+  const totalMonth = resolved.reduce((s, c) => s + c.perMonth, 0);
+  const stageTotals: [number, number, number] = resolved.reduce<[number, number, number]>(
+    (acc, c) => {
+      const st = stageFor(c.perDay);
+      return [acc[0] + st[0], acc[1] + st[1], acc[2] + st[2]];
+    },
+    [0, 0, 0],
+  );
+
+  const sTone = SCENARIO_TONE[scenario];
 
   return (
     <section>
       <SectionHeader
         title="Tabla operativa del plan · todas las vistas"
-        sub="Campañas, conjuntos y anuncios · presupuesto diario y mensual · cómo evoluciona por etapa"
+        sub={`Vista operativa · escenario ${SCENARIO_LABEL[scenario]} · ${eur(totalMonth)}/mes (${eurDay(totalDay)})`}
         right={
-          <Badge variant="outline" className="font-mono">
-            {PLAN.length} campañas · {ALL_ADSETS.length} conjuntos
+          <Badge variant={BADGE_VARIANT[sTone]} className="font-mono">
+            {PLAN.length} campañas · {ALL_ADSETS.length} conjuntos · {SCENARIO_LABEL[scenario]}
           </Badge>
         }
       />
@@ -309,16 +358,25 @@ export function JunioPlanTable() {
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={view}
+          key={`${view}-${scenario}`}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
           {view === "campaign" && (
-            <CampaignView expanded={expanded} setExpanded={setExpanded} />
+            <CampaignView
+              expanded={expanded}
+              setExpanded={setExpanded}
+              campaigns={resolved}
+              totalDay={totalDay}
+              totalMonth={totalMonth}
+              scenario={scenario}
+            />
           )}
-          {view === "stage" && <StageView />}
+          {view === "stage" && (
+            <StageView campaigns={resolved} stageTotals={stageTotals} scenario={scenario} />
+          )}
           {view === "adset" && <AdsetView />}
         </motion.div>
       </AnimatePresence>
@@ -330,10 +388,19 @@ export function JunioPlanTable() {
 function CampaignView({
   expanded,
   setExpanded,
+  campaigns,
+  totalDay,
+  totalMonth,
+  scenario,
 }: {
   expanded: string | null;
   setExpanded: React.Dispatch<React.SetStateAction<string | null>>;
+  campaigns: PlanCampaign[];
+  totalDay: number;
+  totalMonth: number;
+  scenario: ScenarioKey;
 }) {
+  const sTone = SCENARIO_TONE[scenario];
   return (
     <TextureCard className="overflow-hidden">
       <div className="overflow-x-auto">
@@ -351,7 +418,7 @@ function CampaignView({
             </tr>
           </thead>
           <tbody>
-            {PLAN.map((c, i) => (
+            {campaigns.map((c, i) => (
               <CampaignRows
                 key={c.code}
                 c={c}
@@ -363,16 +430,22 @@ function CampaignView({
             {/* Fila total */}
             <tr className="border-t-2 border-border/70 bg-secondary/30">
               <td className="px-3 py-3 font-bold text-[11px] uppercase tracking-[0.08em]" colSpan={4}>
-                Total · 6 campañas
+                Total · {campaigns.length} campañas · {SCENARIO_LABEL[scenario]}
               </td>
-              <td className="px-3 py-3 text-right font-mono font-bold text-[12px] tabular text-[hsl(var(--success))]">
-                {eurDay(TOTAL_DAY)}
+              <td
+                className="px-3 py-3 text-right font-mono font-bold text-[12px] tabular"
+                style={{ color: `hsl(${TOKEN[sTone]})` }}
+              >
+                {eurDay(totalDay)}
               </td>
-              <td className="px-3 py-3 text-right font-mono font-bold text-[12px] tabular text-[hsl(var(--success))]">
-                {eur(TOTAL_MONTH)}
+              <td
+                className="px-3 py-3 text-right font-mono font-bold text-[12px] tabular"
+                style={{ color: `hsl(${TOKEN[sTone]})` }}
+              >
+                {eur(totalMonth)}
               </td>
               <td className="px-3 py-3 text-right text-[10px] text-muted-foreground" colSpan={2}>
-                base · escala a {eur(3500)} en push
+                escenario {SCENARIO_LABEL[scenario].toLowerCase()}
               </td>
             </tr>
           </tbody>
@@ -462,6 +535,7 @@ function CampaignRows({
                   <div className="space-y-1.5">
                     {c.adsets.map((a) => {
                       const aTone = ADSET_ACTION_TONE[a.action];
+                      const adsetDay = Math.max(1, Math.round(c.perDay * a.share));
                       return (
                         <div
                           key={a.name}
@@ -473,7 +547,9 @@ function CampaignRows({
                             {a.audience}
                             <span className="text-muted-foreground/60"> ({AUDIENCE_HINT[a.audience]})</span>
                           </span>
-                          <span className="font-mono tabular text-[11px] font-semibold">{eurDay(a.perDay)}</span>
+                          <span className="font-mono tabular text-[11px] font-semibold">
+                            {eurDay(adsetDay)} <span className="text-muted-foreground font-normal">· {pct(a.share)}</span>
+                          </span>
                           {a.cplMay !== null && (
                             <span className="font-mono tabular text-[10px] text-muted-foreground">
                               CPL may {eurCpl(a.cplMay)}
@@ -515,16 +591,26 @@ function StageTrend({ from, to }: { from: number; to: number }) {
   return <Minus className="size-3 inline text-muted-foreground/50" />;
 }
 
-function StageView() {
+function StageView({
+  campaigns,
+  stageTotals,
+  scenario,
+}: {
+  campaigns: PlanCampaign[];
+  stageTotals: [number, number, number];
+  scenario: ScenarioKey;
+}) {
   return (
     <>
       <TextureCard className="p-3 mb-3" style={{ borderColor: tw("cyan", 0.3) }}>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          <span className="font-semibold text-foreground">Cómo leer esto:</span> el presupuesto
-          arranca equilibrado (Sem 1 · {eurDay(STAGE_TOTALS[0])}), sube fuerte a los ganadores
-          de belleza y servicios en el push (Sem 2-3 · {eurDay(STAGE_TOTALS[1])}) y baja a solo
-          top performers en el cierre (Sem 4 · {eurDay(STAGE_TOTALS[2])}). Las flechas marcan si
-          la campaña sube, se mantiene o baja respecto a la etapa previa.
+          <span className="font-semibold text-foreground">
+            Cómo leer esto · escenario {SCENARIO_LABEL[scenario].toLowerCase()}:
+          </span>{" "}
+          el presupuesto arranca al 85% del base (Sem 1 · {eurDay(stageTotals[0])}), sube ~30% a
+          los ganadores en el push (Sem 2-3 · {eurDay(stageTotals[1])}) y baja al 50% en el cierre
+          (Sem 4 · {eurDay(stageTotals[2])}). Las flechas marcan si la campaña sube, se mantiene o
+          baja respecto a la etapa previa.
         </p>
       </TextureCard>
       <TextureCard className="overflow-hidden">
@@ -540,9 +626,10 @@ function StageView() {
               </tr>
             </thead>
             <tbody>
-              {PLAN.map((c, i) => {
+              {campaigns.map((c, i) => {
                 const estadoTone = ESTADO_TONE[c.estado];
                 const objetivoTone = OBJETIVO_TONE[c.objetivo];
+                const stage = stageFor(c.perDay);
                 return (
                   <motion.tr
                     key={c.code}
@@ -570,12 +657,12 @@ function StageView() {
                         {c.objetivo}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-[12px] tabular">{eurDay(c.stage[0])}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-[12px] tabular">{eurDay(stage[0])}</td>
                     <td className="px-3 py-2.5 text-right font-mono font-bold text-[12px] tabular">
-                      {eurDay(c.stage[1])} <StageTrend from={c.stage[0]} to={c.stage[1]} />
+                      {eurDay(stage[1])} <StageTrend from={stage[0]} to={stage[1]} />
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-[12px] tabular text-muted-foreground">
-                      {c.stage[2] === 0 ? "off" : eurDay(c.stage[2])} <StageTrend from={c.stage[1]} to={c.stage[2]} />
+                      {stage[2] === 0 ? "off" : eurDay(stage[2])} <StageTrend from={stage[1]} to={stage[2]} />
                     </td>
                   </motion.tr>
                 );
@@ -586,13 +673,13 @@ function StageView() {
                   Total por etapa
                 </td>
                 <td className="px-3 py-3 text-right font-mono font-bold text-[12px] tabular text-[hsl(var(--warning))]">
-                  {eurDay(STAGE_TOTALS[0])}
+                  {eurDay(stageTotals[0])}
                 </td>
                 <td className="px-3 py-3 text-right font-mono font-bold text-[12px] tabular text-[hsl(var(--brand-cyan))]">
-                  {eurDay(STAGE_TOTALS[1])}
+                  {eurDay(stageTotals[1])}
                 </td>
                 <td className="px-3 py-3 text-right font-mono font-bold text-[12px] tabular text-[hsl(var(--success))]">
-                  {eurDay(STAGE_TOTALS[2])}
+                  {eurDay(stageTotals[2])}
                 </td>
               </tr>
             </tbody>
@@ -609,9 +696,12 @@ function AdsetView() {
     <>
       <TextureCard className="p-3 mb-3" style={{ borderColor: tw("success", 0.3) }}>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          <span className="font-semibold text-foreground">Los Lookalike son los más baratos</span>{" "}
-          (audiencia similar a clientes) · priorizar escalar esos. Lista ordenada por costo por
-          registro real de mayo · los conjuntos nuevos (sin CPL aún) van al final.
+          <span className="font-semibold text-foreground">
+            CPLs reales de mayo · referencia histórica · independiente del escenario.
+          </span>{" "}
+          Los Lookalike son los más baratos (audiencia similar a clientes) · priorizar escalar
+          esos. Lista ordenada por costo por registro real de mayo · los conjuntos nuevos (sin
+          CPL aún) van al final.
         </p>
       </TextureCard>
       <TextureCard className="overflow-hidden">
@@ -622,7 +712,7 @@ function AdsetView() {
                 <Th>Conjunto</Th>
                 <Th>Campaña</Th>
                 <Th>Tipo audiencia</Th>
-                <Th align="right">€/día</Th>
+                <Th align="right">% campaña</Th>
                 <Th align="right">CPL may</Th>
                 <Th>Acción</Th>
               </tr>
@@ -651,7 +741,7 @@ function AdsetView() {
                       <div className="text-[11px] text-foreground/90">{a.audience}</div>
                       <div className="text-[9px] text-muted-foreground/70">{AUDIENCE_HINT[a.audience]}</div>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono font-bold text-[12px] tabular">{eurDay(a.perDay)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-[12px] tabular">{pct(a.share)}</td>
                     <td
                       className={cn(
                         "px-3 py-2.5 text-right font-mono font-bold text-[12px] tabular",

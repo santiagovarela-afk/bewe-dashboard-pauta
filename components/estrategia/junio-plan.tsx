@@ -28,6 +28,9 @@ import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/shared/section-header";
 import { StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import { JunioPlanTable } from "@/components/estrategia/junio-plan-table";
+import { useDashboard } from "@/lib/store";
+import { computeMonthlyTotals } from "@/lib/selectors";
+import { fmt } from "@/lib/utils";
 
 /**
  * Plan Junio 2026 · validado por Santiago contra mayo real (12-28 may).
@@ -174,38 +177,51 @@ interface LearnNumber {
   tone: Tone;
 }
 
-const MAY_NUMBERS: LearnNumber[] = [
-  {
-    label: "Gasto acumulado",
-    value: "~€2.070",
-    note: "al 28-may",
-    tone: "cyan",
-  },
-  {
-    label: "Leads en CRM",
-    value: "428",
-    note: "totales",
-    tone: "success",
-  },
-  {
-    label: "Leads en Meta",
-    value: "~190",
-    note: "CR puros",
-    tone: "violet",
-  },
-  {
-    label: "CPL CRM (general)",
-    value: "€4.84",
-    note: "€2.070 / 428",
-    tone: "success",
-  },
-  {
-    label: "CPL Meta (puro)",
-    value: "€10.89",
-    note: "€2.070 / 190",
-    tone: "ember",
-  },
-];
+/** Total CRM (PostHog) · hardcodeado hasta conectar la API real. */
+const CRM_LEADS_TOTAL = 428;
+
+/**
+ * Computa los números reales del mes desde el store live (Meta API).
+ * Antes estaban hardcodeados · ahora reflejan el dashboard en vivo.
+ */
+function buildMayNumbers(monthly: ReturnType<typeof computeMonthlyTotals>): LearnNumber[] {
+  const spend = monthly.spend;
+  const metaLeads = monthly.leads;
+  const cplCRM = CRM_LEADS_TOTAL > 0 ? spend / CRM_LEADS_TOTAL : 0;
+  const cplMeta = metaLeads > 0 ? spend / metaLeads : 0;
+  return [
+    {
+      label: "Gasto acumulado",
+      value: fmt.eur(spend, { decimals: 0 }),
+      note: `día ${monthly.daysElapsed} del plan`,
+      tone: "cyan",
+    },
+    {
+      label: "Leads en CRM",
+      value: String(CRM_LEADS_TOTAL),
+      note: "totales (PostHog)",
+      tone: "success",
+    },
+    {
+      label: "Leads en Meta",
+      value: String(metaLeads),
+      note: "CompleteRegistration",
+      tone: "violet",
+    },
+    {
+      label: "CPL CRM (general)",
+      value: cplCRM > 0 ? fmt.eur(cplCRM) : "—",
+      note: `${fmt.eur(spend, { decimals: 0 })} / ${CRM_LEADS_TOTAL}`,
+      tone: "success",
+    },
+    {
+      label: "CPL Meta (puro)",
+      value: cplMeta > 0 ? fmt.eur(cplMeta) : "—",
+      note: `${fmt.eur(spend, { decimals: 0 })} / ${metaLeads}`,
+      tone: "ember",
+    },
+  ];
+}
 
 interface LearnRow {
   text: string;
@@ -1176,6 +1192,14 @@ export function JunioPlan() {
   const [selectedScenario, setSelectedScenario] =
     React.useState<ScenarioKey>("base");
 
+  // Datos LIVE del store · "Qué pasó en mayo" usa estos en lugar de hardcoded.
+  const { rawCampaigns, daily } = useDashboard();
+  const monthly = React.useMemo(
+    () => computeMonthlyTotals(daily, rawCampaigns),
+    [daily, rawCampaigns],
+  );
+  const mayNumbers = React.useMemo(() => buildMayNumbers(monthly), [monthly]);
+
   const activeScenario =
     SCENARIOS.find((s) => s.key === selectedScenario) ?? SCENARIOS[1];
   const activeWeekly = WEEKLY_BY_SCENARIO[selectedScenario];
@@ -1360,11 +1384,11 @@ export function JunioPlan() {
             <div className="flex items-center gap-1.5 mb-3">
               <Ratio className="size-3.5 text-[hsl(var(--brand-violet))]" />
               <span className="text-[11px] uppercase tracking-[0.1em] font-bold text-[hsl(var(--brand-violet))]">
-                Los números del mes · al 28-may
+                Los números del mes · live de Meta API
               </span>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-              {MAY_NUMBERS.map((n) => (
+              {mayNumbers.map((n) => (
                 <div
                   key={n.label}
                   className="rounded-lg border bg-card/50 p-3"

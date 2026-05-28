@@ -49,13 +49,22 @@ AGRESIVO (€3.500 · 778 leads · 389 trials · blend €4.50 · CPT €9.00):
 - Sem 3 estabilizar: 35 lds/día · CPL €4.20 · 245 lds · 122 trials · €1.030 · CPT €8.45
 - Sem 4 taper: 14 lds/día · CPL €4.00 · 128 lds · 64 trials · €510 · CPT €7.95
 
-6 CAMPAÑAS · €/día y €/mes varían por escenario (Conservador/Base/Agresivo):
-- J1 MX Belleza · objetivo Ventas · €23/€22/€25 día · €690/€660/€750 mes · meta CPL €4-5 · ACTIVA · MOTOR BELLEZA
-- J2 LATAM Belleza · objetivo Ventas · €21/€20/€23 día · €620/€600/€690 mes · meta CPL €3.5-5 · ACTIVA · MOTOR BELLEZA
-- J3 Belleza Clientes Potenciales · objetivo Clientes Potenciales · €18/€20/€23 día · €540/€600/€690 mes · meta CPL €3 · NUEVA · MOTOR BELLEZA
-- J4 Servicios · objetivo Clientes Potenciales · €13/€13/€15 día · €400/€400/€450 mes · meta CPL €4 · ACTIVA · APOYO
-- J5 Remarketing LATAM · objetivo Ventas · €15/€15/€17 día · €450/€450/€510 mes · validar CPL · AJUSTA · APOYO
-- J6 Tools + Academy · objetivo Tráfico · €13/€13/€14 día · €400/€390/€410 mes · tráfico · NUEVA · ATRACCIÓN
+CONVERSIÓN REAL lead → trial · PostHog últimos 12 días (May 16-28):
+- conv_mx_belleza_may26: 38 leads → 19 trials (50% conv) → MEJOR · escalar → J1
+- conv_latam_belleza_may26: 31 leads → 14 trials (45% conv) → MANTENER/subir → J2
+- conv_mx_servicios_may26: 19 leads → 8 trials (42% conv) → ESCALAR → J4
+- conv_mx_comercio_may26: 10 leads → 4 trials (40% conv) → APAGADA (volumen bajo + CPL €25)
+- conv_latam_retargeting_may26: 60 leads → 16 trials (27% conv) → AJUSTA (mucho volumen pero PEOR conv) → J5 baja €90/mes
+- conv_latam_comercio_may26: 3 leads → 0 trials (0%) → APAGADA definitiva
+- BLEND real mayo: 161 leads → 61 trials = 38% (meta es 50%, llegamos concentrando más en belleza)
+
+6 CAMPAÑAS · €/día y €/mes ajustados según conversión real (Conservador/Base/Agresivo):
+- J1 MX Belleza · objetivo Ventas · €23/€22/€26 día · €690/€660/€780 mes · top converter 50% · ACTIVA · MOTOR
+- J2 LATAM Belleza · objetivo Ventas · €22/€22/€25 día · €660/€660/€750 mes · 2do mejor 45% · ACTIVA · MOTOR
+- J3 Belleza Clientes Potenciales · objetivo Clientes Potenciales · €20/€21/€23 día · €600/€630/€690 mes · NUEVA · MOTOR
+- J4 Servicios · objetivo Clientes Potenciales · €14/€14/€16 día · €420/€420/€480 mes · 42% conv · ACTIVA · APOYO
+- J5 Remarketing LATAM · objetivo Ventas · €12/€12/€14 día · €360/€360/€420 mes · BAJÓ €90/mes por 27% conv · AJUSTA
+- J6 Tools + Academy · objetivo Tráfico · €12/€12/€13 día · €370/€370/€380 mes · NUEVA · ATRACCIÓN
 
 ESTRUCTURA DE ADSETS (regla nueva fija):
 - MÍNIMO €9/día por adset · ningún conjunto puede quedar por debajo de ese piso.

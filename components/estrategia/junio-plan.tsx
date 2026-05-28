@@ -319,6 +319,93 @@ const WHY_CPL_DROPS: string[] = [
   "Adset de interés amplio + Lookalike = audiencias más eficientes",
 ];
 
+// ── BLOQUE 2d · Conversión real lead → trial · últimos 12 días ────
+type ConvAction = "ESCALAR" | "MANTENER" | "AJUSTA" | "APAGADA";
+
+interface MayConvRow {
+  postHogName: string; // identificador en PostHog
+  displayName: string;
+  juneMap: string | null; // "J1" si tiene equivalente en junio
+  leads: number;
+  trials: number;
+  action: ConvAction;
+  decisionWhy: string;
+}
+
+/**
+ * Data REAL de PostHog · período May 16-28 (12 días) · CRM events
+ * de pauta filtrados por campaña. Es el insumo que decidió las
+ * subidas/bajadas de budget vs el plan anterior:
+ *  - MX Belleza 50% → escalar
+ *  - LATAM Belleza 45% → subir
+ *  - MX Servicios 42% → subir
+ *  - LATAM RMKT 27% → BAJAR (mucho volumen, mala conv)
+ *  - Comercio pausadas
+ */
+const MAY_CONV_REAL: MayConvRow[] = [
+  {
+    postHogName: "conv_mx_belleza_may26",
+    displayName: "MX Belleza",
+    juneMap: "J1",
+    leads: 38,
+    trials: 19,
+    action: "ESCALAR",
+    decisionWhy: "Mejor conv de la cuenta (50%) · sube budget en los 3 escenarios.",
+  },
+  {
+    postHogName: "conv_latam_belleza_may26",
+    displayName: "LATAM Belleza",
+    juneMap: "J2",
+    leads: 31,
+    trials: 14,
+    action: "MANTENER",
+    decisionWhy: "2da mejor conv (45%) + volumen sólido · sube budget en base/agresivo.",
+  },
+  {
+    postHogName: "conv_mx_servicios_may26",
+    displayName: "MX Servicios",
+    juneMap: "J4",
+    leads: 19,
+    trials: 8,
+    action: "ESCALAR",
+    decisionWhy: "Conv decente (42%) + CPL bajo (€3.98 en linda) · concentrar en LOK ganador.",
+  },
+  {
+    postHogName: "conv_latam_retargeting_may26",
+    displayName: "LATAM Retargeting",
+    juneMap: "J5",
+    leads: 60,
+    trials: 16,
+    action: "AJUSTA",
+    decisionWhy: "MUCHO volumen pero peor conv (27%) · bajamos budget €90/mes y se lo pasamos a Belleza/Servicios.",
+  },
+  {
+    postHogName: "conv_mx_comercio_may26",
+    displayName: "MX Comercio",
+    juneMap: null,
+    leads: 10,
+    trials: 4,
+    action: "APAGADA",
+    decisionWhy: "Volumen bajo + CPL €25 · queda apagada como mayo.",
+  },
+  {
+    postHogName: "conv_latam_comercio_may26",
+    displayName: "LATAM Comercio",
+    juneMap: null,
+    leads: 3,
+    trials: 0,
+    action: "APAGADA",
+    decisionWhy: "0% conv a trial · audiencia saturada · pausada definitiva.",
+  },
+];
+
+const CONV_ACTION_TONE: Record<ConvAction, Tone> = {
+  ESCALAR: "success",
+  MANTENER: "cyan",
+  AJUSTA: "warning",
+  APAGADA: "destructive",
+};
+
 // ── BLOQUE 3 · Plan semanal interactivo por escenario ────────────
 interface WeekRow {
   week: string;
@@ -1701,6 +1788,202 @@ export function JunioPlan() {
         </TextureCard>
       </section>
 
+      {/* ── BLOQUE 2d · Conversión real lead → trial · PostHog 12 días ── */}
+      <section>
+        <SectionHeader
+          title="Conversión real lead → trial · últimos 12 días"
+          sub="Data PostHog · período 16-28 may · qué campañas convierten mejor y cómo eso ajusta el budget de junio"
+          accent="violet"
+        />
+        {/* Stats overview · trial rate blend */}
+        {(() => {
+          const totalLeads = MAY_CONV_REAL.reduce((s, r) => s + r.leads, 0);
+          const totalTrials = MAY_CONV_REAL.reduce((s, r) => s + r.trials, 0);
+          const blend = totalTrials / totalLeads;
+          const target = 0.5;
+          const gap = target - blend;
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div
+                className="rounded-xl border p-3"
+                style={{
+                  borderColor: tw("violet", 0.4),
+                  background: `linear-gradient(135deg, ${tw("violet", 0.08)}, hsl(var(--card)))`,
+                }}
+              >
+                <div className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+                  Total leads
+                </div>
+                <div className="font-mono text-2xl font-bold tabular-nums text-[hsl(var(--brand-violet))]">
+                  {totalLeads}
+                </div>
+                <div className="text-[9px] text-muted-foreground mt-0.5">12 días · 6 campañas</div>
+              </div>
+              <div
+                className="rounded-xl border p-3"
+                style={{
+                  borderColor: tw("cyan", 0.4),
+                  background: `linear-gradient(135deg, ${tw("cyan", 0.08)}, hsl(var(--card)))`,
+                }}
+              >
+                <div className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+                  Total trials
+                </div>
+                <div className="font-mono text-2xl font-bold tabular-nums text-[hsl(var(--brand-cyan))]">
+                  {totalTrials}
+                </div>
+                <div className="text-[9px] text-muted-foreground mt-0.5">los que llegaron al producto</div>
+              </div>
+              <div
+                className="rounded-xl border p-3"
+                style={{
+                  borderColor: tw(gap > 0.1 ? "warning" : "success", 0.4),
+                  background: `linear-gradient(135deg, ${tw(gap > 0.1 ? "warning" : "success", 0.08)}, hsl(var(--card)))`,
+                }}
+              >
+                <div className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+                  Conv blend
+                </div>
+                <div
+                  className="font-mono text-2xl font-bold tabular-nums"
+                  style={{ color: `hsl(${TOKEN[gap > 0.1 ? "warning" : "success"]})` }}
+                >
+                  {Math.round(blend * 100)}%
+                </div>
+                <div className="text-[9px] text-muted-foreground mt-0.5">
+                  vs meta 50% ({gap > 0 ? `-${Math.round(gap * 100)}pp` : `+${Math.round(-gap * 100)}pp`})
+                </div>
+              </div>
+              <div
+                className="rounded-xl border p-3"
+                style={{
+                  borderColor: tw("success", 0.4),
+                  background: `linear-gradient(135deg, ${tw("success", 0.08)}, hsl(var(--card)))`,
+                }}
+              >
+                <div className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+                  Top converter
+                </div>
+                <div className="font-mono text-lg font-bold tabular-nums text-[hsl(var(--success))] leading-tight">
+                  MX Belleza
+                </div>
+                <div className="text-[9px] text-muted-foreground mt-0.5">50% · 19 trials · escalar</div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Tabla principal */}
+        <TextureCard className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px] min-w-[860px]">
+              <thead className="bg-secondary/40 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                <tr>
+                  <th className="text-left p-3 font-bold">Campaña (PostHog)</th>
+                  <th className="text-left p-3 font-bold">Junio</th>
+                  <th className="text-right p-3 font-bold">Leads</th>
+                  <th className="text-right p-3 font-bold">Trials</th>
+                  <th className="text-left p-3 font-bold w-[180px]">Conv lead → trial</th>
+                  <th className="text-left p-3 font-bold">Acción · por qué</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...MAY_CONV_REAL]
+                  .sort((a, b) => b.trials / b.leads - a.trials / a.leads)
+                  .map((r, i) => {
+                    const conv = r.leads > 0 ? r.trials / r.leads : 0;
+                    const aTone = CONV_ACTION_TONE[r.action];
+                    const convTone: Tone =
+                      conv >= 0.45 ? "success" : conv >= 0.35 ? "cyan" : conv >= 0.2 ? "warning" : "destructive";
+                    return (
+                      <motion.tr
+                        key={r.postHogName}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className="border-t border-border/40 hover:bg-secondary/20"
+                        style={{ borderLeft: `3px solid hsl(${TOKEN[aTone]} / 0.65)` }}
+                      >
+                        <td className="p-3">
+                          <div className="text-[12px] font-bold leading-tight">{r.displayName}</div>
+                          <div className="text-[9px] text-muted-foreground/80 font-mono">{r.postHogName}</div>
+                        </td>
+                        <td className="p-3">
+                          {r.juneMap ? (
+                            <span
+                              className="font-mono text-[10px] px-1.5 py-0.5 rounded font-bold inline-block"
+                              style={{
+                                background: tw("violet", 0.14),
+                                color: `hsl(${TOKEN.violet})`,
+                              }}
+                            >
+                              {r.juneMap}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/50 italic">—</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums font-semibold">{r.leads}</td>
+                        <td className="p-3 text-right font-mono tabular-nums font-bold text-[hsl(var(--brand-cyan))]">
+                          {r.trials}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-2 rounded-full bg-secondary/40 overflow-hidden flex-1"
+                              style={{ maxWidth: 110 }}
+                            >
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${conv * 100}%` }}
+                                transition={{ delay: 0.2 + i * 0.05, duration: 0.6 }}
+                                className="h-full rounded-full"
+                                style={{ background: `hsl(${TOKEN[convTone]})` }}
+                              />
+                            </div>
+                            <span
+                              className="font-mono tabular-nums text-[11px] font-bold"
+                              style={{ color: `hsl(${TOKEN[convTone]})` }}
+                            >
+                              {Math.round(conv * 100)}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <Badge variant={BADGE_VARIANT[aTone]} className="!text-[8px]">
+                              {r.action}
+                            </Badge>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-snug">
+                            {r.decisionWhy}
+                          </p>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </TextureCard>
+
+        {/* Insight summary */}
+        <TextureCard
+          className="p-3 mt-3 flex items-start gap-2"
+          style={{ borderColor: tw("warning", 0.35) }}
+        >
+          <TriangleAlert className="size-4 mt-0.5 shrink-0 text-[hsl(var(--warning))]" />
+          <div className="text-[11px] text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">Aprendizaje clave (2 semanas):</span>{" "}
+            Belleza convierte a trial al doble que Retargeting (50% vs 27%) ·
+            por eso{" "}
+            <span className="font-semibold text-[hsl(var(--warning))]">le bajamos €90/mes a J5 RMKT</span> y
+            se lo pasamos a Belleza CP (+€60) y Servicios (+€30) · el budget total
+            queda igual (€3.100) pero apunta a más trials.
+          </div>
+        </TextureCard>
+      </section>
+
       {/* ── BLOQUE 7 · Lifecycle ── */}
       <section>
         <SectionHeader
@@ -2395,7 +2678,10 @@ export function JunioPlan() {
       </section>
 
       {/* ── BLOQUE 9 · Tabla operativa del plan · 3 vistas ── */}
-      <JunioPlanTable scenario={selectedScenario} />
+      <JunioPlanTable
+        scenario={selectedScenario}
+        onScenarioChange={setSelectedScenario}
+      />
 
       {/* ── BLOQUE 10 · Mejores anuncios mayo ── */}
       <section>

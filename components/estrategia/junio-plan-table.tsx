@@ -115,35 +115,42 @@ interface PlanCampaign {
 }
 
 // ── Budget por escenario · €/día y €/mes por campaña ─────────────
-// Mantenemos perDay y perMonth explícitos porque los totales del plan
-// (€3.100 · €3.100 · €3.500) no son múltiplos exactos de 30 días.
+// Ajustado con data REAL de PostHog (May 16-28 · 12 días):
+//   conv_mx_belleza    50% conv lead→trial (mejor) → escalar (J1)
+//   conv_latam_belleza 45% conv (alto)             → mantener/subir (J2)
+//   conv_mx_servicios  42% conv (decente)          → escalar (J4)
+//   conv_latam_rmkt    27% conv (mediocre · volumen) → BAJAR (J5)
+//   conv_mx_comercio   40% pero pausada
+//   conv_latam_comercio 0% pausada
+// Resultado: RMKT pierde ~€90/mes (conservador) y se redistribuye
+// a Belleza CP (J3) y Servicios (J4).
 const BUDGET_BY_SCENARIO: Record<ScenarioKey, Record<string, { perDay: number; perMonth: number }>> = {
   // Conservador · total €3.100/mes (€103/día promedio)
   conservador: {
-    J1: { perDay: 23, perMonth: 690 },
-    J2: { perDay: 21, perMonth: 620 },
-    J3: { perDay: 18, perMonth: 540 },
-    J4: { perDay: 13, perMonth: 400 },
-    J5: { perDay: 15, perMonth: 450 },
-    J6: { perDay: 13, perMonth: 400 },
+    J1: { perDay: 23, perMonth: 690 }, // MX Belleza · top converter
+    J2: { perDay: 22, perMonth: 660 }, // LATAM Belleza · 2do mejor (era 620)
+    J3: { perDay: 20, perMonth: 600 }, // Belleza CP · sube por audiencia (era 540)
+    J4: { perDay: 14, perMonth: 420 }, // Servicios · sube por 42% conv (era 400)
+    J5: { perDay: 12, perMonth: 360 }, // RMKT · BAJA por 27% conv (era 450)
+    J6: { perDay: 12, perMonth: 370 }, // Tools · ajuste menor (era 400)
   },
   // Base · total €3.100/mes (€103/día promedio)
   base: {
     J1: { perDay: 22, perMonth: 660 },
-    J2: { perDay: 20, perMonth: 600 },
-    J3: { perDay: 20, perMonth: 600 },
-    J4: { perDay: 13, perMonth: 400 },
-    J5: { perDay: 15, perMonth: 450 },
-    J6: { perDay: 13, perMonth: 390 },
+    J2: { perDay: 22, perMonth: 660 }, // sube (era 600)
+    J3: { perDay: 21, perMonth: 630 }, // sube (era 600)
+    J4: { perDay: 14, perMonth: 420 }, // sube (era 400)
+    J5: { perDay: 12, perMonth: 360 }, // BAJA (era 450)
+    J6: { perDay: 12, perMonth: 370 }, // ajuste (era 390)
   },
   // Agresivo · total €3.500/mes (€117/día promedio)
   agresivo: {
-    J1: { perDay: 25, perMonth: 750 },
-    J2: { perDay: 23, perMonth: 690 },
+    J1: { perDay: 26, perMonth: 780 }, // sube (era 750)
+    J2: { perDay: 25, perMonth: 750 }, // sube (era 690)
     J3: { perDay: 23, perMonth: 690 },
-    J4: { perDay: 15, perMonth: 450 },
-    J5: { perDay: 17, perMonth: 510 },
-    J6: { perDay: 14, perMonth: 410 },
+    J4: { perDay: 16, perMonth: 480 }, // sube (era 450)
+    J5: { perDay: 14, perMonth: 420 }, // BAJA (era 510)
+    J6: { perDay: 13, perMonth: 380 }, // ajuste (era 410)
   },
 };
 
@@ -324,7 +331,13 @@ function Th({
   );
 }
 
-export function JunioPlanTable({ scenario = "base" }: { scenario?: ScenarioKey } = {}) {
+export function JunioPlanTable({
+  scenario = "base",
+  onScenarioChange,
+}: {
+  scenario?: ScenarioKey;
+  onScenarioChange?: (s: ScenarioKey) => void;
+} = {}) {
   const [view, setView] = React.useState<ViewKey>("campaign");
   const [expanded, setExpanded] = React.useState<string | null>(null);
 
@@ -344,6 +357,7 @@ export function JunioPlanTable({ scenario = "base" }: { scenario?: ScenarioKey }
   );
 
   const sTone = SCENARIO_TONE[scenario];
+  const SCENARIO_KEYS: ScenarioKey[] = ["conservador", "base", "agresivo"];
 
   return (
     <section>
@@ -356,6 +370,43 @@ export function JunioPlanTable({ scenario = "base" }: { scenario?: ScenarioKey }
           </Badge>
         }
       />
+
+      {/* Selector de escenario · pills · sincroniza con el resto del plan */}
+      {onScenarioChange && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground mr-1">
+            Escenario:
+          </span>
+          {SCENARIO_KEYS.map((k) => {
+            const active = k === scenario;
+            const tone = SCENARIO_TONE[k];
+            const label = SCENARIO_LABEL[k];
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => onScenarioChange(k)}
+                aria-pressed={active}
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10.5px] font-bold transition-all"
+                style={{
+                  borderColor: active ? `hsl(${TOKEN[tone]})` : "hsl(var(--border) / 0.5)",
+                  background: active ? `hsl(${TOKEN[tone]} / 0.14)` : "transparent",
+                  color: active ? `hsl(${TOKEN[tone]})` : "hsl(var(--muted-foreground))",
+                }}
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{
+                    background: `hsl(${TOKEN[tone]})`,
+                    opacity: active ? 1 : 0.45,
+                  }}
+                />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Switcher de vistas · pills */}
       <div className="flex flex-wrap items-center gap-1.5 mb-3">

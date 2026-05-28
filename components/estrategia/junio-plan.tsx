@@ -374,29 +374,81 @@ const PHASE_LABEL: Record<RampPhase, string> = {
   taper: "S4 · taper",
 };
 
-const DAILY_RAMP: DayProjection[] = [
-  // Sem 1 arranque (~140 leads · 20/día)
-  { day: 1, leads: 14, phase: "learning" }, { day: 2, leads: 17, phase: "learning" },
-  { day: 3, leads: 19, phase: "learning" }, { day: 4, leads: 20, phase: "learning" },
-  { day: 5, leads: 21, phase: "learning" }, { day: 6, leads: 23, phase: "learning" },
-  { day: 7, leads: 26, phase: "learning" },
-  // Sem 2 push (~210 leads · 30/día)
-  { day: 8, leads: 28, phase: "push" }, { day: 9, leads: 29, phase: "push" },
-  { day: 10, leads: 30, phase: "push" }, { day: 11, leads: 30, phase: "push" },
-  { day: 12, leads: 31, phase: "push" }, { day: 13, leads: 31, phase: "push" },
-  { day: 14, leads: 31, phase: "push" },
-  // Sem 3 estabilizar (~196 leads · 28/día)
-  { day: 15, leads: 30, phase: "peak" }, { day: 16, leads: 29, phase: "peak" },
-  { day: 17, leads: 29, phase: "peak" }, { day: 18, leads: 28, phase: "peak" },
-  { day: 19, leads: 28, phase: "peak" }, { day: 20, leads: 27, phase: "peak" },
-  { day: 21, leads: 25, phase: "peak" },
-  // Sem 4 taper (~90 leads · 10/día)
-  { day: 22, leads: 14, phase: "taper" }, { day: 23, leads: 12, phase: "taper" },
-  { day: 24, leads: 11, phase: "taper" }, { day: 25, leads: 10, phase: "taper" },
-  { day: 26, leads: 9, phase: "taper" }, { day: 27, leads: 9, phase: "taper" },
-  { day: 28, leads: 8, phase: "taper" }, { day: 29, leads: 9, phase: "taper" },
-  { day: 30, leads: 8, phase: "taper" },
-];
+/**
+ * 3 curvas diarias · una por escenario. Cada una respeta el total semanal
+ * declarado en WEEKLY_BY_SCENARIO.
+ */
+const DAILY_RAMP_BY_SCENARIO: Record<ScenarioKey, DayProjection[]> = {
+  conservador: [
+    // Sem 1 arranque · ~105 leads (15/día)
+    { day: 1, leads: 10, phase: "learning" }, { day: 2, leads: 13, phase: "learning" },
+    { day: 3, leads: 14, phase: "learning" }, { day: 4, leads: 15, phase: "learning" },
+    { day: 5, leads: 16, phase: "learning" }, { day: 6, leads: 17, phase: "learning" },
+    { day: 7, leads: 20, phase: "learning" },
+    // Sem 2 push · ~175 leads (25/día)
+    { day: 8, leads: 22, phase: "push" }, { day: 9, leads: 24, phase: "push" },
+    { day: 10, leads: 25, phase: "push" }, { day: 11, leads: 25, phase: "push" },
+    { day: 12, leads: 26, phase: "push" }, { day: 13, leads: 26, phase: "push" },
+    { day: 14, leads: 27, phase: "push" },
+    // Sem 3 estabilizar · ~154 leads (22/día)
+    { day: 15, leads: 24, phase: "peak" }, { day: 16, leads: 23, phase: "peak" },
+    { day: 17, leads: 22, phase: "peak" }, { day: 18, leads: 22, phase: "peak" },
+    { day: 19, leads: 22, phase: "peak" }, { day: 20, leads: 21, phase: "peak" },
+    { day: 21, leads: 20, phase: "peak" },
+    // Sem 4 taper · ~72 leads (8/día)
+    { day: 22, leads: 12, phase: "taper" }, { day: 23, leads: 10, phase: "taper" },
+    { day: 24, leads: 9, phase: "taper" }, { day: 25, leads: 8, phase: "taper" },
+    { day: 26, leads: 8, phase: "taper" }, { day: 27, leads: 7, phase: "taper" },
+    { day: 28, leads: 6, phase: "taper" }, { day: 29, leads: 6, phase: "taper" },
+    { day: 30, leads: 6, phase: "taper" },
+  ],
+  base: [
+    // Sem 1 arranque · ~140 leads (20/día)
+    { day: 1, leads: 14, phase: "learning" }, { day: 2, leads: 17, phase: "learning" },
+    { day: 3, leads: 19, phase: "learning" }, { day: 4, leads: 20, phase: "learning" },
+    { day: 5, leads: 21, phase: "learning" }, { day: 6, leads: 23, phase: "learning" },
+    { day: 7, leads: 26, phase: "learning" },
+    // Sem 2 push · ~210 leads (30/día)
+    { day: 8, leads: 28, phase: "push" }, { day: 9, leads: 29, phase: "push" },
+    { day: 10, leads: 30, phase: "push" }, { day: 11, leads: 30, phase: "push" },
+    { day: 12, leads: 31, phase: "push" }, { day: 13, leads: 31, phase: "push" },
+    { day: 14, leads: 31, phase: "push" },
+    // Sem 3 estabilizar · ~196 leads (28/día)
+    { day: 15, leads: 30, phase: "peak" }, { day: 16, leads: 29, phase: "peak" },
+    { day: 17, leads: 29, phase: "peak" }, { day: 18, leads: 28, phase: "peak" },
+    { day: 19, leads: 28, phase: "peak" }, { day: 20, leads: 27, phase: "peak" },
+    { day: 21, leads: 25, phase: "peak" },
+    // Sem 4 taper · ~90 leads (10/día)
+    { day: 22, leads: 14, phase: "taper" }, { day: 23, leads: 12, phase: "taper" },
+    { day: 24, leads: 11, phase: "taper" }, { day: 25, leads: 10, phase: "taper" },
+    { day: 26, leads: 10, phase: "taper" }, { day: 27, leads: 9, phase: "taper" },
+    { day: 28, leads: 9, phase: "taper" }, { day: 29, leads: 8, phase: "taper" },
+    { day: 30, leads: 7, phase: "taper" },
+  ],
+  agresivo: [
+    // Sem 1 arranque · ~196 leads (28/día)
+    { day: 1, leads: 18, phase: "learning" }, { day: 2, leads: 23, phase: "learning" },
+    { day: 3, leads: 26, phase: "learning" }, { day: 4, leads: 28, phase: "learning" },
+    { day: 5, leads: 30, phase: "learning" }, { day: 6, leads: 33, phase: "learning" },
+    { day: 7, leads: 38, phase: "learning" },
+    // Sem 2 push · ~263 leads (37/día)
+    { day: 8, leads: 33, phase: "push" }, { day: 9, leads: 35, phase: "push" },
+    { day: 10, leads: 37, phase: "push" }, { day: 11, leads: 38, phase: "push" },
+    { day: 12, leads: 39, phase: "push" }, { day: 13, leads: 40, phase: "push" },
+    { day: 14, leads: 41, phase: "push" },
+    // Sem 3 estabilizar · ~245 leads (35/día)
+    { day: 15, leads: 40, phase: "peak" }, { day: 16, leads: 38, phase: "peak" },
+    { day: 17, leads: 36, phase: "peak" }, { day: 18, leads: 35, phase: "peak" },
+    { day: 19, leads: 33, phase: "peak" }, { day: 20, leads: 32, phase: "peak" },
+    { day: 21, leads: 31, phase: "peak" },
+    // Sem 4 taper · ~119 leads (13/día)
+    { day: 22, leads: 18, phase: "taper" }, { day: 23, leads: 16, phase: "taper" },
+    { day: 24, leads: 14, phase: "taper" }, { day: 25, leads: 13, phase: "taper" },
+    { day: 26, leads: 13, phase: "taper" }, { day: 27, leads: 12, phase: "taper" },
+    { day: 28, leads: 11, phase: "taper" }, { day: 29, leads: 11, phase: "taper" },
+    { day: 30, leads: 11, phase: "taper" },
+  ],
+};
 
 // ── BLOQUE 4 · Reglas para darle norte a la pauta ────────────────
 interface Rule {
@@ -881,17 +933,19 @@ function tw(tone: Tone, alpha: number): string {
 }
 
 // ── Sub-componente · Curva diaria de leads ───────────────────────
-function DailyRampChart() {
+function DailyRampChart({ scenario }: { scenario: ScenarioKey }) {
   const W = 800;
   const H = 300;
   const M = { top: 36, right: 56, bottom: 34, left: 40 };
   const plotW = W - M.left - M.right;
   const plotH = H - M.top - M.bottom;
 
-  const days = DAILY_RAMP;
+  const days = DAILY_RAMP_BY_SCENARIO[scenario];
   const n = days.length;
 
-  const yMaxLeads = 35;
+  // Eje Y dinámico según escenario · agresivo llega a ~41/día, base a 31, conservador a 27
+  const maxDayLeads = Math.max(...days.map((d) => d.leads));
+  const yMaxLeads = Math.ceil((maxDayLeads + 5) / 5) * 5;
   const yLeads = (v: number): number => M.top + plotH - (v / yMaxLeads) * plotH;
 
   let running = 0;
@@ -900,7 +954,7 @@ function DailyRampChart() {
     return running;
   });
   const total = running;
-  const yMaxCum = Math.max(640, total);
+  const yMaxCum = Math.max(640, Math.ceil((total + 50) / 100) * 100);
   const yCum = (v: number): number => M.top + plotH - (v / yMaxCum) * plotH;
 
   const slot = plotW / n;
@@ -922,15 +976,29 @@ function DailyRampChart() {
   const weekDivX = (startIdx: number): number => M.left + startIdx * slot;
 
   const xTicks = [1, 7, 14, 21, 30];
-  const yTicks = [0, 10, 20, 30];
+  // Eje Y · ticks proporcionales al máximo (cada ~yMaxLeads/4)
+  const yTicks = (() => {
+    const step = Math.max(5, Math.round(yMaxLeads / 4 / 5) * 5);
+    const out: number[] = [];
+    for (let v = 0; v <= yMaxLeads; v += step) out.push(v);
+    return out;
+  })();
 
   const peakDay = days.reduce((a, b) => (b.leads > a.leads ? b : a));
   const day22Cum = cumulative[21];
 
+  const scenarioLabel: Record<ScenarioKey, string> = {
+    conservador: "conservador",
+    base: "base",
+    agresivo: "agresivo",
+  };
+
+  const day22Note = day22Cum >= 500 ? "supera la meta de 500" : `${500 - day22Cum} para meta`;
+
   const stats = [
     { label: "Pico", value: `${peakDay.leads} leads/día`, note: "sem 2-3", tone: "violet" as Tone },
-    { label: "Al día 22", value: `~${day22Cum} acum`, note: "supera la meta de 500", tone: "cyan" as Tone },
-    { label: "Cierre", value: `~${total} leads`, note: "total del mes (base)", tone: "success" as Tone },
+    { label: "Al día 22", value: `~${day22Cum} acum`, note: day22Note, tone: "cyan" as Tone },
+    { label: "Cierre", value: `~${total} leads`, note: `total · escenario ${scenarioLabel[scenario]}`, tone: "success" as Tone },
   ];
 
   const legend: { label: string; tone: Tone }[] = [
@@ -1687,13 +1755,13 @@ export function JunioPlan() {
         </TextureCard>
       </section>
 
-      {/* ── BLOQUE 3b · Proyección diaria de leads ── */}
+      {/* ── BLOQUE 3b · Proyección diaria de leads · sigue el escenario seleccionado ── */}
       <section>
         <SectionHeader
-          title="Proyección diaria de leads · junio (base 620)"
-          sub="Cómo arranca, sube, se estabiliza y cierra · línea guía a 500 leads"
+          title={`Proyección diaria de leads · junio (${activeScenario.name.toLowerCase()} ${activeScenario.leads})`}
+          sub="Sigue el escenario seleccionado arriba · línea guía a 500 leads"
         />
-        <DailyRampChart />
+        <DailyRampChart scenario={selectedScenario} />
       </section>
 
       {/* ── BLOQUE 4 · Reglas de learning + reglas operativas ── */}

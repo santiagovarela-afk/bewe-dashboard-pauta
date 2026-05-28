@@ -57,6 +57,18 @@ AGRESIVO (€3.500 · 778 leads · 389 trials · blend €4.50 · CPT €9.00):
 - J5 Remarketing LATAM · objetivo Ventas · €15/€15/€17 día · €450/€450/€510 mes · validar CPL · AJUSTA · APOYO
 - J6 Tools + Academy · objetivo Tráfico · €13/€13/€14 día · €400/€390/€410 mes · tráfico · NUEVA · ATRACCIÓN
 
+ESTRUCTURA DE ADSETS (regla nueva fija):
+- MÍNIMO €9/día por adset · ningún conjunto puede quedar por debajo de ese piso.
+- BELLEZA siempre con 2 LOK adsets por campaña:
+  · LOK Ganadores (50% del budget): carga los creativos validados de mayo (mkt, paraguas, linda).
+  · LOK Test Creativos (50%): adset paralelo con los videos perro-mucho + creativos nuevos. Misma audiencia LOK pero adset separado para no contaminar el de ganadores.
+- J1, J2, J3 cada una con 2 LOK adsets (Ganadores + Test Creativos).
+- J4 Servicios consolidado en 1 LOK ganador (CPL €3.98 · concentramos budget · el adset de Interés se apaga).
+- J5 Remarketing: 1 conjunto fusionado de los 2 que había.
+- J6 Tools+Academy: 1 conjunto Interés PYME amplio.
+- Adsets eliminados (vs mayo): A1.2 Custom Engagers (CPL €9.16 caro), A1.4/A4.2 Interés amplio (no validados), A3.2 Interés Servicios (consolidado en LOK ganador).
+- TOTAL: 9 adsets (antes 11) · todos ≥€9/día.
+
 QUÉ SE PRENDE/QUEDA/APAGA:
 - Quedan activas (sin reiniciar aprendizaje): MX Belleza, LATAM Belleza, Servicios.
 - Se prenden nuevas el lunes: Belleza Clientes Potenciales, Tools+Academy.

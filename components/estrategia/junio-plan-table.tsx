@@ -178,11 +178,10 @@ const PLAN: PlanCampaign[] = [
     perMonth: 660,
     cplMeta: "€4-5",
     adsets: [
-      { name: "A1.1 Lookalike Belleza", audience: "Lookalike", share: 0.5, cplMay: 5.03, action: "ESCALAR", campaignCode: "J1", campaignName: "MX · Belleza" },
-      { name: "A1.2 Custom Engagers", audience: "Custom", share: 0.22, cplMay: 9.16, action: "REVISAR", campaignCode: "J1", campaignName: "MX · Belleza" },
-      { name: "A1.4 Interés amplio", audience: "Interés", share: 0.28, cplMay: null, action: "NUEVO", campaignCode: "J1", campaignName: "MX · Belleza" },
+      { name: "A1.1 LOK Belleza · Ganadores", audience: "Lookalike", share: 0.5, cplMay: 5.03, action: "ESCALAR", campaignCode: "J1", campaignName: "MX · Belleza" },
+      { name: "A1.5 LOK Belleza · Test Creativos", audience: "Lookalike", share: 0.5, cplMay: null, action: "NUEVO", campaignCode: "J1", campaignName: "MX · Belleza" },
     ],
-    ads: "paraguas (reemplazar por VIDEO · fatigado 68K impr) + mkt + 2 videos nuevos.",
+    ads: "Ganadores: mkt + paraguas (reemplazar por VIDEO · fatigado 68K impr). Test creativos: 3 videos perro-mucho + 2 videos nuevos belleza.",
   },
   {
     code: "J2",
@@ -195,10 +194,10 @@ const PLAN: PlanCampaign[] = [
     perMonth: 600,
     cplMeta: "€3.5-5",
     adsets: [
-      { name: "A4.1 Lookalike Belleza", audience: "Lookalike", share: 0.63, cplMay: 7.13, action: "MANTENER", campaignCode: "J2", campaignName: "LATAM · Belleza" },
-      { name: "A4.2 Interés amplio", audience: "Interés", share: 0.37, cplMay: null, action: "NUEVO", campaignCode: "J2", campaignName: "LATAM · Belleza" },
+      { name: "A4.1 LOK Belleza · Ganadores", audience: "Lookalike", share: 0.5, cplMay: 7.13, action: "MANTENER", campaignCode: "J2", campaignName: "LATAM · Belleza" },
+      { name: "A4.5 LOK Belleza · Test Creativos", audience: "Lookalike", share: 0.5, cplMay: null, action: "NUEVO", campaignCode: "J2", campaignName: "LATAM · Belleza" },
     ],
-    ads: "mkt_v1_dol (volumen 71K) + paraguas LATAM (CPL €5.49) + 2 videos.",
+    ads: "Ganadores: mkt_v1_dol (volumen 71K) + paraguas LATAM (CPL €5.49). Test creativos: 3 videos perro-mucho LATAM + 2 piezas refresh.",
   },
   {
     code: "J3",
@@ -211,10 +210,10 @@ const PLAN: PlanCampaign[] = [
     perMonth: 600,
     cplMeta: "€3",
     adsets: [
-      { name: "Lookalike Belleza LATAM", audience: "Lookalike", share: 0.6, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
-      { name: "Interés amplio", audience: "Interés", share: 0.4, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
+      { name: "LOK Belleza CP · Ganadores", audience: "Lookalike", share: 0.5, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
+      { name: "LOK Belleza CP · Test Creativos", audience: "Lookalike", share: 0.5, cplMay: null, action: "NUEVO", campaignCode: "J3", campaignName: "Belleza · Clientes Potenciales" },
     ],
-    ads: "ganadores belleza (mkt, paraguas, linda) + 4 videos nuevos.",
+    ads: "Ganadores: mkt + paraguas + linda (ángulos validados). Test creativos: 6 videos perro-mucho (refresh creativo).",
   },
   {
     code: "J4",
@@ -227,10 +226,9 @@ const PLAN: PlanCampaign[] = [
     perMonth: 390,
     cplMeta: "€4",
     adsets: [
-      { name: "A3.1 Lookalike Servicios", audience: "Lookalike", share: 0.64, cplMay: 3.98, action: "ESCALAR", campaignCode: "J4", campaignName: "MX · Servicios" },
-      { name: "A3.2 Interés Servicios", audience: "Interés", share: 0.36, cplMay: 5.49, action: "MANTENER", campaignCode: "J4", campaignName: "MX · Servicios" },
+      { name: "A3.1 LOK Servicios · Concentrado", audience: "Lookalike", share: 1, cplMay: 3.98, action: "ESCALAR", campaignCode: "J4", campaignName: "MX · Servicios" },
     ],
-    ads: "linda (mejor de la cuenta €3.88) + variantes video.",
+    ads: "linda (€3.88 · mejor anuncio de la cuenta) + 3 videos servicios + 2 imágenes nuevas. Conjunto Interés se apaga (consolidación al LOK ganador).",
   },
   {
     code: "J5",
@@ -560,9 +558,21 @@ function CampaignRows({
                     <Layers className="size-3" /> Conjuntos · {c.adsets.length}
                   </div>
                   <div className="space-y-1.5">
-                    {c.adsets.map((a) => {
+                    {c.adsets.map((a, idx) => {
                       const aTone = ADSET_ACTION_TONE[a.action];
-                      const adsetDay = Math.max(1, Math.round(c.perDay * a.share));
+                      // Reparto exacto: los primeros adsets floor(perDay × share),
+                      // el último toma el residual para que la suma cuadre al
+                      // perDay total. Piso mínimo €9/día por adset (regla nueva).
+                      const isLast = idx === c.adsets.length - 1;
+                      let adsetDay: number;
+                      if (isLast) {
+                        const sumPrevious = c.adsets
+                          .slice(0, idx)
+                          .reduce((s, prev) => s + Math.floor(c.perDay * prev.share), 0);
+                        adsetDay = Math.max(9, c.perDay - sumPrevious);
+                      } else {
+                        adsetDay = Math.max(9, Math.floor(c.perDay * a.share));
+                      }
                       return (
                         <div
                           key={a.name}

@@ -37,7 +37,10 @@ interface CacheEntry<T> {
   storedAt: number;
 }
 
-const DEFAULT_TTL_MS = 5 * 60 * 1000;
+// Reducido de 5 min → 2 min · Meta agrega data c/30-90 min, pero el cache
+// más corto reduce el lag percibido y la confusión "no se actualiza".
+// Para forzar refresh inmediato usa el botón Actualizar del dashboard.
+const DEFAULT_TTL_MS = 2 * 60 * 1000;
 const STORAGE_PREFIX = "bw_meta_cache:";
 
 function readLocal<T>(key: string): CacheEntry<T> | null {

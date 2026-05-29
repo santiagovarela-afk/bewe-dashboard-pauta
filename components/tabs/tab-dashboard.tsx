@@ -25,6 +25,7 @@ import {
   Banknote,
   UserPlus,
   Tag,
+  RefreshCw,
 } from "lucide-react";
 import { useDashboard } from "@/lib/store";
 import { useFunnelEvents } from "@/lib/hooks/use-funnel-events";
@@ -417,7 +418,34 @@ function buildAttentionItems(
  * ─────────────────────────────────────────────────────────────────────── */
 
 export function TabDashboard() {
-  const { campaigns, daysElapsed, dateRange, daily } = useDashboard();
+  const { campaigns, daysElapsed, dateRange, daily, refresh, snapshot } = useDashboard();
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const handleRefresh = React.useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    // Limpiar localStorage cache de meta-fetch para forzar fresh
+    try {
+      const keys = Object.keys(window.localStorage);
+      keys.forEach((k) => {
+        if (k.startsWith("bw_meta_cache:")) window.localStorage.removeItem(k);
+      });
+    } catch {
+      /* ignora */
+    }
+    try {
+      await refresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, refresh]);
+  const lastFetchLabel = React.useMemo(() => {
+    if (!snapshot.fetchedAt) return "—";
+    const ts = new Date(snapshot.fetchedAt).getTime();
+    const secs = Math.round((Date.now() - ts) / 1000);
+    if (secs < 60) return `hace ${secs}s`;
+    if (secs < 3600) return `hace ${Math.round(secs / 60)} min`;
+    return `hace ${Math.round(secs / 3600)} h`;
+  }, [snapshot.fetchedAt]);
   const m = computeMetrics(campaigns);
   const ctx = React.useMemo(
     () => describeRange(dateRange.from, dateRange.to),
@@ -541,6 +569,23 @@ export function TabDashboard() {
                   {dateRange.from} → {dateRange.to}
                 </Badge>
               )}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                aria-label="Actualizar datos ahora"
+                title={`Última actualización: ${lastFetchLabel}`}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-bold transition-all",
+                  isRefreshing
+                    ? "border-[hsl(var(--brand-cyan)/0.5)] bg-[hsl(var(--brand-cyan)/0.14)] text-[hsl(var(--brand-cyan))] cursor-wait"
+                    : "border-border/60 bg-background/40 text-muted-foreground hover:border-[hsl(var(--brand-cyan)/0.5)] hover:bg-[hsl(var(--brand-cyan)/0.10)] hover:text-[hsl(var(--brand-cyan))]",
+                )}
+              >
+                <RefreshCw className={cn("size-3.5", isRefreshing && "animate-spin")} />
+                {isRefreshing ? "Actualizando…" : "Actualizar"}
+                <span className="text-muted-foreground/60 font-mono font-normal hidden sm:inline">· {lastFetchLabel}</span>
+              </button>
               <HelpGuideTrigger content={HELP_DASHBOARD} />
             </div>
           </div>

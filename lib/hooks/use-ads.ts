@@ -119,10 +119,10 @@ export function useAds(opts?: { enabled?: boolean }) {
     {
       fields: FIELDS,
       filtering: FILTERING,
-      limit: "60",
+      limit: "100",
       date_preset: "this_month",
     },
-    { enabled, ttlMs: 5 * 60 * 1000 },
+    { enabled, ttlMs: 2 * 60 * 1000 },
   );
 
   const ads = React.useMemo<MetaAd[]>(() => {

@@ -57,6 +57,7 @@ import { ExplainedMetric } from "@/components/shared/explained-metric";
 import { HealthPill, SeverityDot } from "@/components/shared/health-pill";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/fx/reveal";
 import type { Adset, Campaign, DailyRow } from "@/lib/types";
+import { useAds, type MetaAd } from "@/lib/hooks/use-ads";
 
 const VERT_COLOR = {
   Belleza: "var(--brand-violet)",
@@ -130,6 +131,7 @@ function computeTrail(campaignId: string, event: Campaign["event"], daily: Daily
 
 export function TabCampanas() {
   const { campaigns, rawCampaigns, adsets, daysElapsed, daily } = useDashboard();
+  const { ads } = useAds();
   const [selected, setSelected] = React.useState<string | null>(null);
   const [sortBy, setSortBy] = React.useState<SortKey>("spend");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
@@ -567,6 +569,7 @@ export function TabCampanas() {
             <DetailPanel
               campaign={campaigns.find((c) => c.cid === selected)!}
               adsets={adsets.filter((a) => a.cid === selected)}
+              campaignAds={ads.filter((ad) => ad.campaign_id === selected)}
               daysElapsed={daysElapsed}
               allCampaigns={campaigns}
               onClose={() => setSelected(null)}
@@ -1106,15 +1109,23 @@ function CampaignRow({
 
 /* ─────────────── Detail Panel ─────────────── */
 
+function getActionValue(actions: Array<{ action_type: string; value: string }> | undefined, ...types: string[]): number {
+  if (!actions) return 0;
+  const row = actions.find((a) => types.includes(a.action_type));
+  return row ? parseInt(row.value, 10) || 0 : 0;
+}
+
 function DetailPanel({
   campaign,
   adsets,
+  campaignAds,
   daysElapsed,
   allCampaigns,
   onClose,
 }: {
   campaign: Campaign;
   adsets: Adset[];
+  campaignAds: MetaAd[];
   daysElapsed: number;
   allCampaigns: Campaign[];
   onClose: () => void;
@@ -1439,7 +1450,149 @@ function DetailPanel({
           </table>
         </div>
       </div>
+
+      {/* Ads table */}
+      <AdsDetailTable ads={campaignAds} />
     </TextureCard>
+  );
+}
+
+/* ─────────────── Ads detail table ─────────────── */
+
+function AdsDetailTable({ ads }: { ads: MetaAd[] }) {
+  const visible = React.useMemo(() => {
+    const filtered = ads.filter(
+      (ad) =>
+        ad.effective_status === "ACTIVE" || ad.effective_status === "PAUSED",
+    );
+    filtered.sort((a, b) => {
+      const spendA = parseFloat(a.ins?.spend ?? "0");
+      const spendB = parseFloat(b.ins?.spend ?? "0");
+      return spendB - spendA;
+    });
+    return filtered;
+  }, [ads]);
+
+  return (
+    <div className="border-t border-border">
+      <div className="px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground bg-background/40">
+        Anuncios · detalle · {visible.length}
+      </div>
+      {visible.length === 0 ? (
+        <div className="px-5 py-6 text-center text-muted-foreground/70 text-[11px]">
+          Sin anuncios con data aún
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs min-w-[900px]">
+            <thead>
+              <tr className="border-b border-border/60 bg-background/60">
+                {["Nombre", "Estado", "Gasto", "Alcance", "Clicks", "Visitas sitio", "CTR", "CPM", "Registros"].map((h) => (
+                  <th
+                    key={h}
+                    className={cn(
+                      "px-4 py-2 text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground",
+                      h === "Nombre" ? "text-left" : "text-right",
+                    )}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((ad, i) => {
+                const ins = ad.ins;
+                const spend = ins?.spend !== undefined ? parseFloat(ins.spend) : null;
+                const reach = ins?.reach !== undefined ? parseInt(ins.reach, 10) : null;
+                const impressions = ins?.impressions !== undefined ? parseInt(ins.impressions, 10) : null;
+                const clicks = ins?.clicks !== undefined ? parseInt(ins.clicks, 10) : null;
+                const ctr = ins?.ctr !== undefined ? parseFloat(ins.ctr) : null;
+                const cpm = ins?.cpm !== undefined ? parseFloat(ins.cpm) : null;
+                const lpv = getActionValue(ins?.actions, "landing_page_view");
+                const regs = getActionValue(
+                  ins?.actions,
+                  "offsite_conversion.fb_pixel_complete_registration",
+                  "complete_registration",
+                );
+                const isActive = ad.effective_status === "ACTIVE";
+                const truncName =
+                  ad.name.length > 35 ? `${ad.name.slice(0, 35)}…` : ad.name;
+
+                return (
+                  <motion.tr
+                    key={ad.id}
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.035, duration: 0.3 }}
+                    className="border-b border-border/30 hover:bg-secondary/40 transition-colors"
+                  >
+                    <td
+                      className="px-4 py-2 font-mono text-[11px] text-foreground/90 max-w-[220px]"
+                      title={ad.name}
+                    >
+                      {truncName}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <span
+                        className={cn(
+                          "inline-block font-mono text-[9px] px-1.5 py-0.5 rounded font-bold",
+                          isActive
+                            ? "bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]"
+                            : "bg-secondary text-muted-foreground",
+                        )}
+                      >
+                        {ad.effective_status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-[11px] font-bold">
+                      {spend !== null ? `€${spend.toFixed(2)}` : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-[11px] text-muted-foreground">
+                      {reach !== null ? reach.toLocaleString("es-ES") : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-[11px] text-muted-foreground">
+                      {clicks !== null ? clicks.toLocaleString("es-ES") : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-[11px] text-muted-foreground">
+                      {ins ? lpv.toLocaleString("es-ES") : "—"}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-4 py-2 text-right font-mono text-[11px]",
+                        ctr !== null && ctrTone(ctr) === "success" && "text-[hsl(var(--success))]",
+                        ctr !== null && ctrTone(ctr) === "warning" && "text-[hsl(var(--warning))]",
+                        ctr !== null && ctrTone(ctr) === "danger" && "text-[hsl(var(--destructive))]",
+                      )}
+                    >
+                      {ctr !== null ? `${ctr.toFixed(2)}%` : "—"}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-4 py-2 text-right font-mono text-[11px]",
+                        cpm !== null && cpmTone(cpm) === "success" && "text-[hsl(var(--success))]",
+                        cpm !== null && cpmTone(cpm) === "warning" && "text-[hsl(var(--warning))]",
+                        cpm !== null && cpmTone(cpm) === "danger" && "text-[hsl(var(--destructive))]",
+                      )}
+                    >
+                      {cpm !== null ? `€${cpm.toFixed(2)}` : "—"}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-4 py-2 text-right font-mono text-[11px]",
+                        ins && regs > 0 ? "text-[hsl(var(--success))]" : "text-muted-foreground/50",
+                      )}
+                    >
+                      {ins ? (regs > 0 ? regs.toLocaleString("es-ES") : "—") : "—"}
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 

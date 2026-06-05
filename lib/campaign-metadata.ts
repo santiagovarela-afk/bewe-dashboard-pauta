@@ -54,9 +54,9 @@ export const CAMPAIGN_LIFECYCLE: Record<string, CampaignLifecycleEntry> = {
   },
   // ── Pausadas JUN26 ─────────────────────────────────────────────────────
   "52575253372686": {
-    state: "paused",
-    reason: "J6 Academy + Tools (vieja) · reemplazada por tools_PYME_junio_2026",
-    pausedAt: "2026-06-01",
+    state: "active",
+    reason: "J6 Academy + Tools · activa · Tráfico PYME · LPV · 47K impresiones",
+    activatedAt: "2026-06-01",
   },
   "52579132474486": {
     state: "active",
@@ -112,7 +112,7 @@ export function getDisplayName(campaignName: string): string {
     // JUN26
     MX_LATAM_BELLEZA_CP_TEST_AB_JUN26: "Belleza CP · Test A/B",
     ACADEMY_TOOLS_PYME_JUN26: "Academy + Tools",
-    "tools_PYME_junio_2026": "Tools PYME · Calculadora + IG + Comparador",
+    tools_PYME_junio_2026: "Tools PYME · Jun26",
   };
   if (campaignName in specific) return specific[campaignName];
 

@@ -59,9 +59,9 @@ export const CAMPAIGN_LIFECYCLE: Record<string, CampaignLifecycleEntry> = {
     pausedAt: "2026-06-01",
   },
   "52579132474486": {
-    state: "paused",
-    reason: "J7 Tools PYME · Calculadora ROI + IG Audit + Comparador · objetivo Clientes Potenciales · pendiente activación y asignación de presupuesto",
-    pausedAt: "2026-06-05",
+    state: "active",
+    reason: "J7 Tools PYME · Calculadora ROI + IG Audit + Comparador · objetivo Clientes Potenciales · €17/día · ACTIVA",
+    activatedAt: "2026-06-05",
   },
   // ── Archivadas (mayo · fuera del plan junio) ───────────────────────────
   "52551556733086": {

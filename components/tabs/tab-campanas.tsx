@@ -1487,7 +1487,7 @@ function AdsDetailTable({ ads }: { ads: MetaAd[] }) {
           <table className="w-full text-xs min-w-[900px]">
             <thead>
               <tr className="border-b border-border/60 bg-background/60">
-                {["Nombre", "Estado", "Gasto", "Alcance", "Clicks", "Visitas sitio", "CTR", "CPM", "Registros"].map((h) => (
+                {["Nombre", "Estado", "Gasto", "Alcance", "Clicks", "Visitas sitio", "CTR", "CPM", "Leads / Reg"].map((h) => (
                   <th
                     key={h}
                     className={cn(
@@ -1514,6 +1514,9 @@ function AdsDetailTable({ ads }: { ads: MetaAd[] }) {
                   ins?.actions,
                   "offsite_conversion.fb_pixel_complete_registration",
                   "complete_registration",
+                  "lead",
+                  "onsite_conversion.lead_grouped",
+                  "offsite_conversion.fb_pixel_lead",
                 );
                 const isActive = ad.effective_status === "ACTIVE";
                 const truncName =

@@ -2505,19 +2505,52 @@ function Mensajes() {
   const otherParticipant = (c: Conversation) =>
     c.participants?.data?.find((p) => p.name !== "Bewe Software")?.name ?? "Usuario";
 
+  // Aplicar filtros: pendientes (no respondidos) + unread + búsqueda
+  const filteredConvs = conversations.filter((c) => {
+    if (filter === "no-respondidos" && statuses[c.id] === "respondido") return false;
+    if (filter === "unread" && (c.unread_count ?? 0) === 0) return false;
+    if (search) {
+      const name = otherParticipant(c).toLowerCase();
+      const snippet = (c.snippet ?? "").toLowerCase();
+      const q = search.toLowerCase();
+      if (!name.includes(q) && !snippet.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const pendingCount = conversations.filter((c) => statuses[c.id] !== "respondido").length;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Badge variant="outline" className="gap-1.5 text-[10px]">
           <MessageSquare className="size-3 text-violet-400" /> Messenger Facebook
         </Badge>
         <span className="text-xs text-muted-foreground">
-          {conversations.length} conversaciones · DMs Instagram pendiente (próxima versión)
+          {conversations.length} conversaciones · <strong className="text-rose-300">{pendingCount} pendientes</strong>
         </span>
         <Button onClick={refresh} variant="outline" size="sm" disabled={loading} className="ml-auto">
           {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
           <span className="ml-1.5">Actualizar</span>
         </Button>
+      </div>
+
+      {/* Filtros chip + búsqueda */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex items-center rounded-md border border-border/60 bg-card/40 p-0.5">
+          <ChipBtn active={filter === "all"} onClick={() => setFilter("all")} label={`Todas (${conversations.length})`} />
+          <ChipBtn active={filter === "no-respondidos"} onClick={() => setFilter("no-respondidos")} label={`🔴 Pendientes (${pendingCount})`} />
+          <ChipBtn active={filter === "unread"} onClick={() => setFilter("unread")} label="Sin leer" />
+        </div>
+        <div className="relative max-w-xs flex-1">
+          <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar conversación..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 text-xs h-8"
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
@@ -2532,7 +2565,7 @@ function Mensajes() {
             <p className="p-8 text-center text-sm text-muted-foreground">Sin conversaciones recientes.</p>
           ) : (
             <ul className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
-              {conversations.map((c) => {
+              {filteredConvs.map((c) => {
                 const tag = tagsMap[c.id];
                 const tagDef = tag ? getTagDef(tag) : null;
                 return (

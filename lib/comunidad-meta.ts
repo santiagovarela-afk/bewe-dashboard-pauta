@@ -263,11 +263,14 @@ export interface AdPost {
  * aparecen como anuncios y no están en el feed orgánico de la página).
  */
 export async function fetchActiveAdsWithPosts(): Promise<AdPost[]> {
+  // OJO Meta: `effective_object_story_id` NO está disponible a nivel `ad`,
+  // solo dentro de `creative{...}`. Antes pedíamos directo y siempre devolvía
+  // null — todos los ads se filtraban y "Comentarios Pauta" salía vacío.
   const res = await metaCall({
     endpoint: `${PLAN.meta.accountId}/ads`,
     params: {
       fields:
-        "id,name,campaign_id,campaign{name},effective_object_story_id,status,effective_status",
+        "id,name,campaign_id,campaign{name},creative{effective_object_story_id,object_type},status,effective_status",
       effective_status: '["ACTIVE"]',
       limit: 200,
     },
@@ -279,19 +282,19 @@ export async function fetchActiveAdsWithPosts(): Promise<AdPost[]> {
       name?: string;
       campaign_id?: string;
       campaign?: { name?: string };
-      effective_object_story_id?: string;
+      creative?: { effective_object_story_id?: string; object_type?: string };
       status: string;
       effective_status: string;
     }>;
   };
   return (data.data ?? [])
-    .filter((a) => !!a.effective_object_story_id)
+    .filter((a) => !!a.creative?.effective_object_story_id)
     .map((a) => ({
       ad_id: a.id,
       ad_name: a.name ?? "Anuncio sin nombre",
       campaign_id: a.campaign_id ?? "",
       campaign_name: a.campaign?.name ?? "Campaña sin nombre",
-      effective_object_story_id: a.effective_object_story_id!,
+      effective_object_story_id: a.creative!.effective_object_story_id!,
       status: a.status,
       effective_status: a.effective_status,
     }));

@@ -663,6 +663,7 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
   const [loadingComments, setLoadingComments] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState<"all" | "no-respondidos" | "con-comments">("all");
+  const [postFilter, setPostFilter] = React.useState<"all" | "con-pendientes">("all");
   const [statuses, setStatuses] = React.useState<Record<string, string>>({});
   const [tagsMap, setTagsMap] = React.useState<Record<string, FunnelTag>>({});
   const [lastFetch, setLastFetch] = React.useState<number>(0);
@@ -736,6 +737,7 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
   // Filtros aplicados a la lista de posts (incluye dateRange global del dashboard)
   const filteredPosts = posts.filter((p) => {
     if (filter === "con-comments" && (p.comments_count ?? 0) === 0) return false;
+    if (filter === "no-respondidos" && (p.comments_count ?? 0) === 0) return false;
     if (search) {
       const text = platform === "ig" ? (p as IGPost).caption ?? "" : (p as FBPost).message ?? "";
       if (!text.toLowerCase().includes(search.toLowerCase())) return false;
@@ -814,6 +816,7 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
           <div className="flex flex-wrap gap-1.5">
             <ChipBtn active={filter === "all"} onClick={() => setFilter("all")} label="Todas" />
             <ChipBtn active={filter === "con-comments"} onClick={() => setFilter("con-comments")} label="Con comentarios" />
+            <ChipBtn active={filter === "no-respondidos"} onClick={() => setFilter("no-respondidos")} label="🔴 Pendientes" />
           </div>
 
           {/* Lista */}
@@ -2442,9 +2445,13 @@ function Mensajes() {
   const [loading, setLoading] = React.useState(true);
   const [loadingMsgs, setLoadingMsgs] = React.useState(false);
   const [tagsMap, setTagsMap] = React.useState<Record<string, FunnelTag>>({});
+  const [statuses, setStatuses] = React.useState<Record<string, string>>({});
+  const [filter, setFilter] = React.useState<"all" | "no-respondidos" | "unread">("all");
+  const [search, setSearch] = React.useState("");
 
   React.useEffect(() => {
     setTagsMap(loadTags());
+    setStatuses(loadStatuses());
   }, []);
 
   const refresh = React.useCallback(async () => {

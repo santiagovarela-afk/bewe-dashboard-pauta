@@ -655,6 +655,7 @@ function TopPostCard<T extends IGPost | FBPost>({
  */
 function PostInbox({ platform }: { platform: "ig" | "fb" }) {
   type AnyPost = (IGPost | FBPost) & { _comments?: Comment[]; _commentCount?: number };
+  const { dateRange } = useDashboard();
   const [posts, setPosts] = React.useState<AnyPost[]>([]);
   const [selected, setSelected] = React.useState<AnyPost | null>(null);
   const [postComments, setPostComments] = React.useState<Comment[]>([]);
@@ -675,7 +676,8 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
     setLoadingPosts(true);
     try {
       const endpoint = platform === "ig" ? "/api/comunidad/ig-posts" : "/api/comunidad/fb-posts";
-      const r = await fetch(`${endpoint}?limit=25&_t=${Date.now()}`).then((r) => r.json());
+      // Limit 50 para tener suficientes posts para aplicar filtro por dateRange client-side
+      const r = await fetch(`${endpoint}?limit=50&_t=${Date.now()}`).then((r) => r.json());
       if (r.ok) {
         setPosts(r.posts ?? []);
         setLastFetch(Date.now());
@@ -731,12 +733,18 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
     }
   };
 
-  // Filtros aplicados a la lista de posts
+  // Filtros aplicados a la lista de posts (incluye dateRange global del dashboard)
   const filteredPosts = posts.filter((p) => {
     if (filter === "con-comments" && (p.comments_count ?? 0) === 0) return false;
     if (search) {
       const text = platform === "ig" ? (p as IGPost).caption ?? "" : (p as FBPost).message ?? "";
       if (!text.toLowerCase().includes(search.toLowerCase())) return false;
+    }
+    // Filtro por dateRange global (desde el selector superior del dashboard)
+    const ts = platform === "ig" ? (p as IGPost).timestamp : (p as FBPost).created_time;
+    if (ts && dateRange?.from && dateRange?.to) {
+      const day = new Date(ts).toISOString().slice(0, 10);
+      if (day < dateRange.from || day > dateRange.to) return false;
     }
     return true;
   });

@@ -129,7 +129,14 @@ interface MessengerMsg {
   created_time: string;
 }
 
-type SubTab = "resumen" | "comentarios" | "mensajes" | "crm" | "plantillas" | "reporte";
+type SubTab =
+  | "resumen"
+  | "comentarios-fb"
+  | "comentarios-ig"
+  | "mensajes"
+  | "crm"
+  | "plantillas"
+  | "reporte";
 
 // ─── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────
 
@@ -165,14 +172,15 @@ export function TabComunidad() {
       <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-2">
         {(
           [
-            { id: "resumen", label: "Resumen", icon: BarChart3 },
-            { id: "comentarios", label: "Comentarios", icon: MessageSquare },
-            { id: "mensajes", label: "Messenger", icon: Send },
-            { id: "crm", label: "CRM Contactos", icon: Users },
-            { id: "plantillas", label: "Plantillas", icon: Sparkles },
-            { id: "reporte", label: "Reporte semanal", icon: FileText },
+            { id: "resumen", label: "Resumen", icon: BarChart3, color: "" },
+            { id: "mensajes", label: "Messenger", icon: MessageSquare, color: "text-violet-400" },
+            { id: "comentarios-fb", label: "Comentarios Facebook", icon: Facebook, color: "text-blue-400" },
+            { id: "comentarios-ig", label: "Comentarios Instagram", icon: Instagram, color: "text-pink-400" },
+            { id: "crm", label: "CRM Contactos", icon: Users, color: "" },
+            { id: "plantillas", label: "Plantillas", icon: Sparkles, color: "" },
+            { id: "reporte", label: "Reporte semanal", icon: FileText, color: "" },
           ] as const
-        ).map(({ id, label, icon: Icon }) => (
+        ).map(({ id, label, icon: Icon, color }) => (
           <button
             key={id}
             onClick={() => setSub(id)}
@@ -183,7 +191,7 @@ export function TabComunidad() {
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
             )}
           >
-            <Icon className="size-3.5" />
+            <Icon className={cn("size-3.5", sub === id ? "" : color)} />
             {label}
           </button>
         ))}
@@ -200,7 +208,8 @@ export function TabComunidad() {
         transition={{ duration: 0.25 }}
       >
         {sub === "resumen" && <Resumen onJump={setSub} />}
-        {sub === "comentarios" && <Comentarios />}
+        {sub === "comentarios-fb" && <PostInbox platform="fb" />}
+        {sub === "comentarios-ig" && <PostInbox platform="ig" />}
         {sub === "mensajes" && <Mensajes />}
         {sub === "crm" && <CRMKanban />}
         {sub === "plantillas" && <PlantillasView />}
@@ -520,13 +529,13 @@ function Resumen({ onJump }: { onJump: (s: SubTab) => void }) {
           posts={igPosts}
           loading={loading}
           platform="ig"
-          onSeeMore={() => onJump("comentarios")}
+          onSeeMore={() => onJump("comentarios-ig")}
         />
         <TopPostCard
           posts={fbPosts}
           loading={loading}
           platform="fb"
-          onSeeMore={() => onJump("comentarios")}
+          onSeeMore={() => onJump("comentarios-fb")}
         />
       </div>
     </div>
@@ -623,7 +632,560 @@ function TopPostCard<T extends IGPost | FBPost>({
 
 // ─── COMENTARIOS (con filtros iconos) ──────────────────────────────────────
 
-function Comentarios() {
+/**
+ * Layout estilo Meta Business Suite:
+ * - Lista de POSTS a la izquierda con miniatura, título, último comentario
+ * - Detalle a la derecha con preview del post completo + lista de comentarios
+ *   con composer inline por cada uno
+ */
+function PostInbox({ platform }: { platform: "ig" | "fb" }) {
+  type AnyPost = (IGPost | FBPost) & { _comments?: Comment[]; _commentCount?: number };
+  const [posts, setPosts] = React.useState<AnyPost[]>([]);
+  const [selected, setSelected] = React.useState<AnyPost | null>(null);
+  const [postComments, setPostComments] = React.useState<Comment[]>([]);
+  const [loadingPosts, setLoadingPosts] = React.useState(true);
+  const [loadingComments, setLoadingComments] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [filter, setFilter] = React.useState<"all" | "no-respondidos" | "con-comments">("all");
+  const [statuses, setStatuses] = React.useState<Record<string, string>>({});
+  const [tagsMap, setTagsMap] = React.useState<Record<string, FunnelTag>>({});
+  const [lastFetch, setLastFetch] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    setStatuses(loadStatuses());
+    setTagsMap(loadTags());
+  }, []);
+
+  const refreshPosts = React.useCallback(async () => {
+    setLoadingPosts(true);
+    try {
+      const endpoint = platform === "ig" ? "/api/comunidad/ig-posts" : "/api/comunidad/fb-posts";
+      const r = await fetch(`${endpoint}?limit=25&_t=${Date.now()}`).then((r) => r.json());
+      if (r.ok) {
+        setPosts(r.posts ?? []);
+        setLastFetch(Date.now());
+      }
+    } catch {
+      toast.error("Error cargando posts");
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, [platform]);
+
+  React.useEffect(() => {
+    refreshPosts();
+    setSelected(null);
+    setPostComments([]);
+  }, [refreshPosts]);
+
+  const loadCommentsForPost = async (post: AnyPost) => {
+    setSelected(post);
+    setLoadingComments(true);
+    try {
+      const url =
+        platform === "ig"
+          ? `/api/comunidad/ig-comments?mediaId=${post.id}&_t=${Date.now()}`
+          : `/api/comunidad/fb-comments?postId=${post.id}&_t=${Date.now()}`;
+      const r = await fetch(url).then((r) => r.json());
+      if (r.ok) {
+        const cs = (r.comments as Comment[]) ?? [];
+        const enriched = cs.map((c) => ({
+          ...c,
+          post_caption: platform === "ig" ? (post as IGPost).caption : (post as FBPost).message,
+          post_permalink: platform === "ig" ? (post as IGPost).permalink : (post as FBPost).permalink_url,
+        }));
+        setPostComments(enriched);
+
+        // Auto-upsert contactos al CRM
+        const contacts = loadContacts();
+        let next = contacts;
+        enriched.forEach((c) => {
+          const name = c.username ?? c.from?.name;
+          const ts = c.timestamp ?? c.created_time ?? new Date().toISOString();
+          if (name) {
+            const u = upsertContact(next, { name, platform: c.platform, interactionAt: ts });
+            next = u.contacts;
+          }
+        });
+        saveContacts(next);
+      }
+    } catch {
+      toast.error("Error cargando comentarios");
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  // Filtros aplicados a la lista de posts
+  const filteredPosts = posts.filter((p) => {
+    if (filter === "con-comments" && (p.comments_count ?? 0) === 0) return false;
+    if (search) {
+      const text = platform === "ig" ? (p as IGPost).caption ?? "" : (p as FBPost).message ?? "";
+      if (!text.toLowerCase().includes(search.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  const platformDef = {
+    ig: { label: "Instagram", Icon: Instagram, color: "text-pink-400", bgColor: "bg-pink-500/10" },
+    fb: { label: "Facebook", Icon: Facebook, color: "text-blue-400", bgColor: "bg-blue-500/10" },
+  }[platform];
+
+  const getPostThumb = (p: AnyPost) =>
+    platform === "ig" ? (p as IGPost).thumbnail_url || (p as IGPost).media_url : (p as FBPost).full_picture;
+  const getPostText = (p: AnyPost) => (platform === "ig" ? (p as IGPost).caption : (p as FBPost).message) ?? "Sin texto";
+  const getPostTime = (p: AnyPost) => (platform === "ig" ? (p as IGPost).timestamp : (p as FBPost).created_time);
+  const getPostLink = (p: AnyPost) => (platform === "ig" ? (p as IGPost).permalink : (p as FBPost).permalink_url);
+  const getPostStats = (p: AnyPost) => {
+    if (platform === "ig") {
+      const ig = p as IGPost;
+      return { likes: ig.like_count, comments: ig.comments_count };
+    }
+    return { likes: undefined, comments: (p as FBPost).comments_count };
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Header tipo Meta */}
+      <div className="flex flex-wrap items-center gap-3 pb-2">
+        <div className="flex items-center gap-2">
+          <div className={cn("flex size-8 items-center justify-center rounded-md", platformDef.bgColor)}>
+            <platformDef.Icon className={cn("size-4", platformDef.color)} />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold">Comentarios · {platformDef.label}</h3>
+            <p className="text-[10px] text-muted-foreground">
+              {posts.length} publicaciones · {posts.reduce((s, p) => s + (p.comments_count ?? 0), 0)} comentarios totales
+            </p>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {lastFetch > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              Actualizado <RelativeTime ts={lastFetch} />
+            </span>
+          )}
+          <Button onClick={refreshPosts} variant="outline" size="sm" disabled={loadingPosts}>
+            {loadingPosts ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            <span className="ml-1.5">Actualizar</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Layout 2-col */}
+      <div className="grid gap-4 lg:grid-cols-[360px_1fr] min-h-[700px]">
+        {/* Lista de posts (izquierda) */}
+        <TextureCard className="p-3 space-y-2 flex flex-col">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar publicación..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 text-xs h-8"
+            />
+          </div>
+
+          {/* Filtros chip */}
+          <div className="flex flex-wrap gap-1.5">
+            <ChipBtn active={filter === "all"} onClick={() => setFilter("all")} label="Todas" />
+            <ChipBtn active={filter === "con-comments"} onClick={() => setFilter("con-comments")} label="Con comentarios" />
+          </div>
+
+          {/* Lista */}
+          <ul className="space-y-1.5 max-h-[640px] overflow-y-auto pr-1 -mr-1">
+            {loadingPosts ? (
+              Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16" />)
+            ) : filteredPosts.length === 0 ? (
+              <p className="p-6 text-center text-xs text-muted-foreground">Sin publicaciones que coincidan.</p>
+            ) : (
+              filteredPosts.map((p) => {
+                const isSel = selected?.id === p.id;
+                const thumb = getPostThumb(p);
+                const text = getPostText(p);
+                const stats = getPostStats(p);
+                return (
+                  <li key={p.id}>
+                    <button
+                      onClick={() => loadCommentsForPost(p)}
+                      className={cn(
+                        "flex w-full items-start gap-2.5 rounded-md border bg-card/40 p-2 text-left transition-colors",
+                        isSel ? "border-primary/50 bg-primary/5" : "border-border/40 hover:bg-card/60",
+                      )}
+                    >
+                      <div className="size-12 shrink-0 overflow-hidden rounded bg-muted/40">
+                        {thumb ? (
+                          <img src={thumb} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center">
+                            <platformDef.Icon className={cn("size-4", platformDef.color)} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-medium line-clamp-2 leading-snug">{text}</p>
+                          <span className="text-[9px] text-muted-foreground shrink-0">
+                            {formatDate(getPostTime(p) ?? "")}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-0.5">
+                            <MessageCircle className="size-2.5" /> {stats.comments ?? 0}
+                          </span>
+                          {stats.likes !== undefined && (
+                            <span className="flex items-center gap-0.5">❤️ {stats.likes}</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </TextureCard>
+
+        {/* Detalle del post + comentarios (derecha) */}
+        {selected ? (
+          <div className="space-y-3">
+            {/* Preview del post */}
+            <TextureCard className="p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-md", platformDef.bgColor)}>
+                  <platformDef.Icon className={cn("size-5", platformDef.color)} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium">
+                    {platform === "ig" ? "@bewe_software" : "Bewe Software"}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground flex items-center gap-2">
+                    <span>{formatDate(getPostTime(selected) ?? "")}</span>
+                    {getPostLink(selected) && (
+                      <a
+                        href={getPostLink(selected)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                      >
+                        Ver en {platformDef.label} <ExternalLink className="size-2.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {getPostThumb(selected) && (
+                <div className="overflow-hidden rounded-md bg-muted/40">
+                  <img
+                    src={getPostThumb(selected)}
+                    alt=""
+                    className="max-h-[280px] w-full object-cover"
+                  />
+                </div>
+              )}
+
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">{getPostText(selected)}</p>
+
+              {/* Stats del post */}
+              <div className="flex items-center gap-4 text-xs text-muted-foreground border-t border-border/40 pt-2">
+                {getPostStats(selected).likes !== undefined && (
+                  <span className="flex items-center gap-1">❤️ {getPostStats(selected).likes}</span>
+                )}
+                <span className="flex items-center gap-1">
+                  <MessageCircle className="size-3" /> {getPostStats(selected).comments ?? 0} comentarios
+                </span>
+              </div>
+            </TextureCard>
+
+            {/* Lista de comentarios */}
+            <TextureCard className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <MessageCircle className="size-4" /> Comentarios ({postComments.length})
+                </h4>
+              </div>
+              {loadingComments ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-20" />
+                  ))}
+                </div>
+              ) : postComments.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">Sin comentarios en este post.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {postComments.map((c) => (
+                    <CommentItem
+                      key={c.id}
+                      comment={c}
+                      tag={tagsMap[c.id]}
+                      status={statuses[c.id]}
+                      onTagChange={(t) => {
+                        saveTag(c.id, t);
+                        setTagsMap({ ...tagsMap, [c.id]: t });
+                      }}
+                      onStatusChange={(s) => {
+                        saveStatus(c.id, s);
+                        setStatuses({ ...statuses, [c.id]: s });
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+            </TextureCard>
+          </div>
+        ) : (
+          <TextureCard className="flex items-center justify-center p-12 text-center">
+            <div>
+              <platformDef.Icon className={cn("size-12 mx-auto mb-3 opacity-30", platformDef.color)} />
+              <p className="text-sm font-medium">Selecciona una publicación</p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
+                Elige un post de la lista para ver su contenido completo y todos los comentarios con sus respuestas.
+              </p>
+            </div>
+          </TextureCard>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Comentario individual con composer inline (estilo Meta). */
+function CommentItem({
+  comment,
+  tag,
+  status,
+  onTagChange,
+  onStatusChange,
+}: {
+  comment: Comment;
+  tag?: FunnelTag;
+  status?: string;
+  onTagChange: (t: FunnelTag) => void;
+  onStatusChange: (s: "nuevo" | "leido" | "respondido") => void;
+}) {
+  const [reply, setReply] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+  const [showReply, setShowReply] = React.useState(false);
+  const [showDM, setShowDM] = React.useState(false);
+  const [dmText, setDmText] = React.useState("");
+  const [sendingDM, setSendingDM] = React.useState(false);
+  const tagDef = tag ? getTagDef(tag) : null;
+  const author = comment.username ?? comment.from?.name ?? "Anónimo";
+  const time = comment.timestamp ?? comment.created_time ?? "";
+
+  const sendReply = async () => {
+    if (!reply.trim()) return;
+    setSending(true);
+    try {
+      const url = comment.platform === "ig" ? "/api/comunidad/ig-comments" : "/api/comunidad/fb-comments";
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId: comment.id, message: reply.trim() }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast.success("Respuesta enviada");
+        onStatusChange("respondido");
+        setReply("");
+        setShowReply(false);
+      } else {
+        toast.error("Error: " + (d.error ?? "no se pudo"));
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const sendPrivateDM = async () => {
+    if (!dmText.trim()) return;
+    setSendingDM(true);
+    try {
+      if (comment.platform === "ig") {
+        if (!comment.username) {
+          toast.error("Sin username");
+          return;
+        }
+        window.open(`https://ig.me/m/${comment.username}`, "_blank", "noopener,noreferrer");
+        toast.success("Abriendo chat IG en pestaña nueva");
+        setShowDM(false);
+        return;
+      }
+      const r = await fetch("/api/comunidad/private-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId: comment.id, platform: comment.platform, message: dmText.trim() }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast.success("DM privado enviado");
+        onStatusChange("respondido");
+        setDmText("");
+        setShowDM(false);
+      } else {
+        toast.error("Error: " + (d.error ?? "no se pudo"));
+      }
+    } finally {
+      setSendingDM(false);
+    }
+  };
+
+  return (
+    <li className="space-y-2 rounded-md border border-border/40 bg-card/30 p-3">
+      <div className="flex items-start gap-2.5">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-primary/10 text-xs font-semibold text-primary">
+          {author.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-medium">{author}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{formatDate(time)}</span>
+            {status === "respondido" && (
+              <Badge variant="outline" className="text-[9px] py-0 h-4 bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
+                <Check className="size-2 mr-0.5" /> respondido
+              </Badge>
+            )}
+            {tagDef && (
+              <Badge variant="outline" className={cn("text-[9px] py-0 h-4", tagDef.bg)}>
+                {tagDef.icon}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 text-sm leading-relaxed">{comment.text}</p>
+
+          {/* Acciones estilo Meta */}
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] font-medium">
+            <button
+              onClick={() => setShowReply((v) => !v)}
+              className="text-muted-foreground hover:text-foreground transition"
+            >
+              💬 Responder
+            </button>
+            <button
+              onClick={() => setShowDM((v) => !v)}
+              className="text-violet-400 hover:text-violet-300 transition"
+            >
+              ✉️ Enviar DM
+            </button>
+            <button
+              onClick={() => onStatusChange("respondido")}
+              className="text-emerald-400 hover:text-emerald-300 transition"
+            >
+              ✓ Marcar respondido
+            </button>
+            <div className="ml-auto flex items-center gap-1">
+              {FUNNEL_TAGS.slice(0, 7).map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => onTagChange(t.id)}
+                  title={t.label}
+                  className={cn(
+                    "size-5 rounded text-[10px] transition-colors",
+                    tag === t.id ? t.bg : "opacity-40 hover:opacity-100",
+                  )}
+                >
+                  {t.icon}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Composer inline de respuesta */}
+          {showReply && (
+            <div className="mt-2 space-y-1.5 rounded-md border border-primary/20 bg-primary/[0.03] p-2">
+              <Textarea
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder={`Responder a ${author}...`}
+                rows={2}
+                className="text-xs"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <Button onClick={() => setShowReply(false)} variant="ghost" size="sm" className="h-7 text-[10px]">
+                  Cancelar
+                </Button>
+                <Button onClick={sendReply} disabled={sending || !reply.trim()} size="sm" className="h-7 gap-1.5">
+                  {sending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
+                  Responder
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Composer inline de DM privado */}
+          {showDM && (
+            <div className="mt-2 space-y-1.5 rounded-md border border-violet-500/30 bg-gradient-to-br from-violet-500/[0.08] to-violet-500/[0.02] p-2">
+              <p className="text-[10px] text-violet-200">
+                {comment.platform === "ig"
+                  ? "Para IG el DM se abre en Instagram (limitación de scope)."
+                  : "Envía UN DM privado al autor (válido hasta 7d después del comentario)."}
+              </p>
+              {comment.platform === "fb" && (
+                <Textarea
+                  value={dmText}
+                  onChange={(e) => setDmText(e.target.value)}
+                  placeholder={`Hola ${author.split(" ")[0]}! Te escribo en privado para...`}
+                  rows={2}
+                  className="text-xs"
+                />
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <Button onClick={() => setShowDM(false)} variant="ghost" size="sm" className="h-7 text-[10px]">
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={sendPrivateDM}
+                  disabled={sendingDM || (comment.platform === "fb" && !dmText.trim())}
+                  size="sm"
+                  className="h-7 gap-1.5"
+                >
+                  {sendingDM ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
+                  {comment.platform === "ig" ? "Abrir chat IG" : "Enviar DM"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function ChipBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-full px-2.5 py-1 text-[10px] font-medium border transition-colors",
+        active
+          ? "bg-primary/15 text-primary border-primary/40"
+          : "border-border/40 text-muted-foreground hover:bg-muted/40",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function RelativeTime({ ts }: { ts: number }) {
+  const [, force] = React.useReducer((x) => x + 1, 0);
+  React.useEffect(() => {
+    const i = setInterval(() => force(), 15_000);
+    return () => clearInterval(i);
+  }, []);
+  const diff = (Date.now() - ts) / 1000;
+  if (diff < 60) return <>hace {Math.max(1, Math.round(diff))}s</>;
+  if (diff < 3600) return <>hace {Math.round(diff / 60)}m</>;
+  return <>hace {Math.round(diff / 3600)}h</>;
+}
+
+// ─── LEGACY: vista vieja de comentarios (mantengo refs por compatibilidad) ─
+
+function ComentariosLegacy() {
   const [platform, setPlatform] = React.useState<"all" | "ig" | "fb">("all");
   const [comments, setComments] = React.useState<Comment[]>([]);
   const [loading, setLoading] = React.useState(true);

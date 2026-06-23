@@ -65,6 +65,7 @@ import {
 } from "@/lib/comunidad-tags";
 import {
   CONTACT_STAGES,
+  FUNNEL_STAGES,
   getStageDef,
   loadContacts,
   saveContacts,
@@ -363,7 +364,7 @@ function Resumen({ onJump }: { onJump: (s: SubTab) => void }) {
         <KpiCard
           label="Contactos en CRM"
           value={loading ? 0 : crmStats.total}
-          sub={`${crmStats.byStage.calificado + crmStats.byStage.convertido} calificados+`}
+          sub={`${crmStats.byStage.lead + crmStats.byStage.trial + crmStats.byStage.convertido} en lead+`}
           tone="ember"
         />
       </div>
@@ -378,23 +379,26 @@ function Resumen({ onJump }: { onJump: (s: SubTab) => void }) {
             Ver tablero →
           </Button>
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           {CONTACT_STAGES.map((s) => (
             <div
               key={s.id}
-              className={cn("rounded-md border p-3 text-center", s.bg)}
+              className={cn("rounded-md border p-2.5 text-center transition-transform hover:scale-[1.02]", s.bg)}
             >
-              <div className="text-2xl">{s.icon}</div>
-              <div className={cn("text-2xl font-bold mt-1", s.color)}>
+              <div className="text-xl">{s.icon}</div>
+              <div className={cn("text-xl font-bold mt-0.5", s.color)}>
                 {crmStats.byStage[s.id] ?? 0}
               </div>
-              <div className="text-[10px] text-muted-foreground mt-0.5">{s.label}</div>
+              <div className="text-[9px] text-muted-foreground mt-0.5 truncate">{s.label}</div>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center justify-between text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="text-muted-foreground">
-            Tasa de calificación: <span className="font-medium text-foreground">{crmStats.qualificationRate.toFixed(0)}%</span>
+            Calificación: <span className="font-medium text-foreground">{crmStats.qualificationRate.toFixed(0)}%</span>
+          </span>
+          <span className="text-muted-foreground">
+            Trial: <span className="font-medium text-orange-400">{crmStats.trialRate.toFixed(0)}%</span>
           </span>
           <span className="text-muted-foreground">
             Conversión: <span className="font-medium text-emerald-400">{crmStats.conversionRate.toFixed(0)}%</span>
@@ -921,6 +925,8 @@ function CommentDetail({
 
       <TagPicker tag={tag} onChange={onTagChange} />
 
+      <DMShortcut comment={comment} />
+
       <ReplyBox
         platform={comment.platform}
         author={comment.username ?? comment.from?.name}
@@ -942,6 +948,107 @@ function CommentDetail({
         }}
       />
     </TextureCard>
+  );
+}
+
+/**
+ * Atajo para iniciar conversación privada desde un comentario público.
+ * - FB: usa Private Reply API (envía DM directo al autor, máx 7d post-comment)
+ * - IG: abre ig.me/m/{username} en nueva pestaña (falta scope manage_messages)
+ */
+function DMShortcut({ comment }: { comment: Comment }) {
+  const [dmText, setDmText] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
+
+  const sendFBPrivate = async () => {
+    if (!dmText.trim()) return;
+    setSending(true);
+    try {
+      const r = await fetch("/api/comunidad/private-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId: comment.id, platform: "fb", message: dmText.trim() }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast.success("DM privado enviado al autor del comentario");
+        setDmText("");
+        setExpanded(false);
+        saveStatus(comment.id, "respondido");
+      } else {
+        toast.error(d.error ?? "No se pudo enviar el DM privado");
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const openIGChat = () => {
+    if (!comment.username) {
+      toast.error("Sin username · no puedo abrir el chat IG");
+      return;
+    }
+    window.open(`https://ig.me/m/${comment.username}`, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <div className="rounded-md border border-violet-500/30 bg-gradient-to-br from-violet-500/[0.08] to-violet-500/[0.02] p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-medium text-violet-200">
+          <Send className="size-3.5" />
+          Mover a conversación privada
+        </div>
+        {!expanded && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => (comment.platform === "ig" ? openIGChat() : setExpanded(true))}
+            className="gap-1.5 h-7 text-[10px]"
+          >
+            {comment.platform === "ig" ? (
+              <>
+                <Instagram className="size-3 text-pink-400" /> Abrir chat IG ↗
+              </>
+            ) : (
+              <>
+                <MessageSquare className="size-3 text-violet-400" /> Enviar DM privado
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+      {comment.platform === "fb" && expanded && (
+        <>
+          <p className="text-[10px] text-muted-foreground">
+            Meta permite UN DM privado al autor del comentario (válido hasta 7d después del
+            comentario). Se enviará desde la página de Bewe.
+          </p>
+          <Textarea
+            value={dmText}
+            onChange={(e) => setDmText(e.target.value)}
+            placeholder={`Hola ${comment.from?.name?.split(" ")[0] ?? ""}! Te escribo en privado para...`}
+            rows={3}
+            className="text-xs"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setExpanded(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={sendFBPrivate} disabled={sending || !dmText.trim()} size="sm" className="gap-1.5">
+              {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+              Enviar DM
+            </Button>
+          </div>
+        </>
+      )}
+      {comment.platform === "ig" && (
+        <p className="text-[10px] text-muted-foreground">
+          Para Instagram el DM se abre en una pestaña nueva (limitación de permisos de Meta).
+          Hablas con @{comment.username} directamente desde Instagram.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1272,7 +1379,7 @@ function CRMKanban() {
         </TextureCard>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-4">
+      <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-7">
         {CONTACT_STAGES.map((stage) => {
           const stageContacts = contacts.filter((c) => c.stage === stage.id);
           return (
@@ -1619,10 +1726,20 @@ const INTENTS: Array<{ id: Intent; label: string }> = [
   { id: "descartar", label: "Descarte" },
 ];
 
+type CategoryFilter =
+  | "all"
+  | "top"
+  | "custom"
+  | `industry:${Industry}`
+  | `intent:${Intent}`;
+
 function PlantillasView() {
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [editing, setEditing] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState<Template | null>(null);
+  const [category, setCategory] = React.useState<CategoryFilter>("all");
+  const [search, setSearch] = React.useState("");
+  const [previewPlatform, setPreviewPlatform] = React.useState<"ig" | "fb" | "messenger">("ig");
 
   React.useEffect(() => {
     setTemplates(loadTemplates());
@@ -1635,7 +1752,7 @@ function PlantillasView() {
 
   const startNew = () => {
     const id = "custom-" + Date.now();
-    const newT: Template = {
+    setDraft({
       id,
       name: "Nueva plantilla",
       icon: "💡",
@@ -1645,8 +1762,7 @@ function PlantillasView() {
       text: "",
       useCount: 0,
       createdAt: new Date().toISOString(),
-    };
-    setDraft(newT);
+    });
     setEditing(id);
   };
 
@@ -1665,153 +1781,403 @@ function PlantillasView() {
     toast.success("Plantilla eliminada");
   };
 
-  const renderItem = (t: Template) => {
-    const isEditing = editing === t.id && draft?.id === t.id;
-    const previewUrl = t.urlBase
-      ? buildUTMUrl(t.urlBase, { platform: "ig", industry: t.industry, intent: t.intent })
-      : "";
+  // Filtros aplicados
+  const filtered = React.useMemo(() => {
+    let list = [...templates];
+    if (category === "top") list = list.sort((a, b) => b.useCount - a.useCount).slice(0, 8);
+    else if (category === "custom") list = list.filter((t) => t.id.startsWith("custom-"));
+    else if (category.startsWith("industry:")) {
+      const ind = category.slice("industry:".length) as Industry;
+      list = list.filter((t) => t.industry === ind);
+    } else if (category.startsWith("intent:")) {
+      const intent = category.slice("intent:".length) as Intent;
+      list = list.filter((t) => t.intent === intent);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.text.toLowerCase().includes(q) ||
+          t.industry.toLowerCase().includes(q),
+      );
+    }
+    if (category !== "top") list = list.sort((a, b) => b.useCount - a.useCount);
+    return list;
+  }, [templates, category, search]);
 
-    return (
-      <TextureCard key={t.id} className="p-4 space-y-2">
-        {isEditing && draft ? (
-          <>
-            <div className="flex gap-2">
-              <Input
-                value={draft.icon}
-                onChange={(e) => setDraft({ ...draft, icon: e.target.value })}
-                className="w-14 text-center"
-                maxLength={2}
-              />
-              <Input
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="Nombre"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Select value={draft.industry} onValueChange={(v) => setDraft({ ...draft, industry: v as Industry })}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {INDUSTRIES.map((i) => (
-                    <SelectItem key={i.id} value={i.id}>{i.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={draft.intent} onValueChange={(v) => setDraft({ ...draft, intent: v as Intent })}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {INTENTS.map((i) => (
-                    <SelectItem key={i.id} value={i.id}>{i.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Input
-              value={draft.urlBase ?? ""}
-              onChange={(e) => setDraft({ ...draft, urlBase: e.target.value })}
-              placeholder="https://bewe.ai/... (opcional)"
-              className="text-xs"
-            />
-            <Textarea
-              value={draft.text}
-              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-              rows={5}
-              placeholder="Texto... usa {{nombre}} para el nombre del usuario, {{link}} para insertar la URL con UTMs"
-              className="text-xs"
-            />
-            <div className="flex items-center justify-end gap-2">
-              <Button onClick={() => { setEditing(null); setDraft(null); }} variant="ghost" size="sm">
-                Cancelar
-              </Button>
-              <Button onClick={saveDraft} size="sm" className="gap-1.5">
-                <Check className="size-3.5" /> Guardar
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-start justify-between">
-              <div>
-                <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <span className="text-base">{t.icon}</span>
-                  {t.name}
-                </h4>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] text-muted-foreground">
-                  <Badge variant="outline" className="text-[9px]">{t.industry}</Badge>
-                  <Badge variant="outline" className="text-[9px]">{t.intent}</Badge>
-                  <span>· usada {t.useCount} {t.useCount === 1 ? "vez" : "veces"}</span>
-                </div>
-              </div>
-              <div className="flex gap-1">
-                <Button onClick={() => { setDraft(t); setEditing(t.id); }} variant="ghost" size="icon" className="size-7">
-                  <Edit3 className="size-3.5" />
-                </Button>
-                <Button onClick={() => deleteOne(t.id)} variant="ghost" size="icon" className="size-7 text-destructive hover:bg-destructive/10">
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-            <p className="rounded bg-muted/20 p-2 text-xs whitespace-pre-wrap">{t.text}</p>
-            {previewUrl && (
-              <div className="flex items-center gap-2 rounded border border-violet-500/20 bg-violet-500/5 p-2">
-                <LinkIcon className="size-3 text-violet-400 shrink-0" />
-                <code className="text-[10px] text-violet-200 truncate flex-1">{previewUrl}</code>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(previewUrl);
-                    toast.success("URL copiada");
-                  }}
-                >
-                  <CopyIcon className="size-3" />
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </TextureCard>
-    );
-  };
+  const counts = React.useMemo(() => {
+    const byInd: Record<string, number> = {};
+    const byInt: Record<string, number> = {};
+    templates.forEach((t) => {
+      byInd[t.industry] = (byInd[t.industry] ?? 0) + 1;
+      byInt[t.intent] = (byInt[t.intent] ?? 0) + 1;
+    });
+    return {
+      total: templates.length,
+      custom: templates.filter((t) => t.id.startsWith("custom-")).length,
+      byInd,
+      byInt,
+    };
+  }, [templates]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground">
-            {templates.length} plantilla(s) · variables:{" "}
-            <code className="rounded bg-muted/40 px-1">{"{{nombre}}"}</code>{" "}
-            <code className="rounded bg-muted/40 px-1">{"{{link}}"}</code>{" "}
-            (URL con UTMs auto-generadas)
+    <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+      {/* Sidebar de categorías */}
+      <div className="space-y-3">
+        <TextureCard className="p-3 space-y-3">
+          <div className="space-y-1">
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              Vista
+            </h4>
+            <CatBtn active={category === "all"} onClick={() => setCategory("all")} icon="📚" label="Todas" count={counts.total} />
+            <CatBtn active={category === "top"} onClick={() => setCategory("top")} icon="⭐" label="Top usadas" count={Math.min(8, counts.total)} />
+            <CatBtn active={category === "custom"} onClick={() => setCategory("custom")} icon="✨" label="Personalizadas" count={counts.custom} />
+          </div>
+
+          <div className="space-y-1 pt-2 border-t border-border/40">
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              Por industria
+            </h4>
+            {INDUSTRIES.map((i) => (
+              <CatBtn
+                key={i.id}
+                active={category === `industry:${i.id}`}
+                onClick={() => setCategory(`industry:${i.id}`)}
+                icon={
+                  i.id === "belleza" ? "💄" : i.id === "comercio" ? "🛍️" : i.id === "servicios" ? "🔧" : i.id === "tools" ? "🧰" : "🌐"
+                }
+                label={i.label}
+                count={counts.byInd[i.id] ?? 0}
+              />
+            ))}
+          </div>
+
+          <div className="space-y-1 pt-2 border-t border-border/40">
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              Por intent
+            </h4>
+            {INTENTS.map((i) => (
+              <CatBtn
+                key={i.id}
+                active={category === `intent:${i.id}`}
+                onClick={() => setCategory(`intent:${i.id}`)}
+                icon={
+                  i.id === "demo" ? "📅" : i.id === "trial" ? "🚀" : i.id === "precios" ? "💰" : i.id === "soporte" ? "🛠️" : i.id === "agradecimiento" ? "🙏" : i.id === "descartar" ? "🚫" : "ℹ️"
+                }
+                label={i.label}
+                count={counts.byInt[i.id] ?? 0}
+              />
+            ))}
+          </div>
+        </TextureCard>
+
+        {/* Info UTM */}
+        <div className="rounded-md border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.08] to-violet-500/[0.02] p-3 text-[10px] space-y-1.5">
+          <p className="font-semibold text-violet-200 flex items-center gap-1.5">
+            <LinkIcon className="size-3" /> UTMs auto-generados
+          </p>
+          <p className="text-violet-200/70 leading-relaxed">
+            Cada plantilla con URL base genera un link con{" "}
+            <code className="rounded bg-violet-500/20 px-1">utm_source</code>{" "}
+            <code className="rounded bg-violet-500/20 px-1">utm_medium=comunidad</code>{" "}
+            <code className="rounded bg-violet-500/20 px-1">utm_campaign=junio_redes_[industria]</code>{" "}
+            <code className="rounded bg-violet-500/20 px-1">utm_content=[intent]</code>
           </p>
         </div>
-        <Button onClick={startNew} size="sm" className="gap-1.5">
-          <Plus className="size-3.5" /> Nueva
-        </Button>
       </div>
 
-      <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-3 text-xs">
-        <p className="font-medium text-violet-200 mb-1">🎯 UTMs auto-generados (junio · redes)</p>
-        <p className="text-violet-200/70">
-          Cada plantilla con <strong>URL base</strong> genera un link con{" "}
-          <code>utm_source</code> (plataforma) · <code>utm_medium=comunidad</code> ·{" "}
-          <code>utm_campaign=junio_redes_[industria]_2026</code> · <code>utm_content=[intent]</code>.{" "}
-          Al insertar la plantilla en una respuesta, el <code>{"{{link}}"}</code> se reemplaza por la URL completa.
-        </p>
-      </div>
+      {/* Lista principal */}
+      <div className="space-y-3">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar plantilla..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 text-xs h-8"
+            />
+          </div>
+          <div className="inline-flex items-center rounded-md border border-border/60 bg-card/40 p-0.5 ml-auto">
+            <span className="px-2 text-[10px] text-muted-foreground">Preview UTM:</span>
+            <PlatformButton active={previewPlatform === "ig"} onClick={() => setPreviewPlatform("ig")} icon={<Instagram className="size-3 text-pink-400" />} label="IG" />
+            <PlatformButton active={previewPlatform === "fb"} onClick={() => setPreviewPlatform("fb")} icon={<Facebook className="size-3 text-blue-400" />} label="FB" />
+            <PlatformButton active={previewPlatform === "messenger"} onClick={() => setPreviewPlatform("messenger")} icon={<MessageSquare className="size-3 text-violet-400" />} label="MSG" />
+          </div>
+          <Button onClick={startNew} size="sm" className="gap-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 border-0">
+            <Plus className="size-3.5" /> Nueva plantilla
+          </Button>
+        </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {[...templates]
-          .sort((a, b) => b.useCount - a.useCount)
-          .map(renderItem)}
-        {editing && draft && !templates.find((t) => t.id === draft.id) && renderItem(draft)}
+        {/* Header de resultados */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {filtered.length} {filtered.length === 1 ? "resultado" : "resultados"}
+            {category !== "all" && ` · filtro activo`}
+            {search && ` · buscando "${search}"`}
+          </span>
+          {(category !== "all" || search) && (
+            <Button variant="ghost" size="sm" onClick={() => { setCategory("all"); setSearch(""); }} className="text-[10px] h-6">
+              Limpiar filtros
+            </Button>
+          )}
+        </div>
+
+        {/* Grid de plantillas */}
+        <div className="grid gap-3 md:grid-cols-2">
+          {filtered.map((t) => (
+            <TemplateCard
+              key={t.id}
+              t={t}
+              previewPlatform={previewPlatform}
+              isEditing={editing === t.id && draft?.id === t.id}
+              draft={draft}
+              setDraft={setDraft}
+              startEdit={() => { setDraft(t); setEditing(t.id); }}
+              cancelEdit={() => { setEditing(null); setDraft(null); }}
+              saveDraft={saveDraft}
+              deleteOne={() => deleteOne(t.id)}
+            />
+          ))}
+          {editing && draft && !templates.find((t) => t.id === draft.id) && (
+            <TemplateCard
+              t={draft}
+              previewPlatform={previewPlatform}
+              isEditing={true}
+              draft={draft}
+              setDraft={setDraft}
+              startEdit={() => {}}
+              cancelEdit={() => { setEditing(null); setDraft(null); }}
+              saveDraft={saveDraft}
+              deleteOne={() => {}}
+            />
+          )}
+          {filtered.length === 0 && !editing && (
+            <TextureCard className="p-8 text-center md:col-span-2">
+              <Sparkles className="size-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+              <p className="text-sm font-medium">No hay plantillas en esta categoría</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Crea una nueva o ajusta los filtros.
+              </p>
+            </TextureCard>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function CatBtn({
+  active,
+  onClick,
+  icon,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: string;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs transition-colors",
+        active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span>{icon}</span>
+        <span>{label}</span>
+      </span>
+      <span className="text-[9px] tabular-nums">{count}</span>
+    </button>
+  );
+}
+
+function TemplateCard({
+  t,
+  previewPlatform,
+  isEditing,
+  draft,
+  setDraft,
+  startEdit,
+  cancelEdit,
+  saveDraft,
+  deleteOne,
+}: {
+  t: Template;
+  previewPlatform: "ig" | "fb" | "messenger";
+  isEditing: boolean;
+  draft: Template | null;
+  setDraft: (d: Template | null) => void;
+  startEdit: () => void;
+  cancelEdit: () => void;
+  saveDraft: () => void;
+  deleteOne: () => void;
+}) {
+  const previewUrl = (isEditing && draft ? draft.urlBase : t.urlBase)
+    ? buildUTMUrl(
+        (isEditing && draft ? draft.urlBase : t.urlBase) || "",
+        {
+          platform: previewPlatform,
+          industry: (isEditing && draft ? draft.industry : t.industry) as Industry,
+          intent: (isEditing && draft ? draft.intent : t.intent) as Intent,
+        },
+      )
+    : "";
+
+  if (isEditing && draft) {
+    return (
+      <TextureCard className="p-4 space-y-3 border-violet-500/40 bg-violet-500/[0.03]">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-violet-300 font-semibold">
+          <Edit3 className="size-3" /> Editando
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={draft.icon}
+            onChange={(e) => setDraft({ ...draft, icon: e.target.value })}
+            className="w-14 text-center text-lg"
+            maxLength={2}
+          />
+          <Input
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            placeholder="Nombre"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Select value={draft.industry} onValueChange={(v) => setDraft({ ...draft, industry: v as Industry })}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INDUSTRIES.map((i) => (
+                <SelectItem key={i.id} value={i.id}>{i.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={draft.intent} onValueChange={(v) => setDraft({ ...draft, intent: v as Intent })}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INTENTS.map((i) => (
+                <SelectItem key={i.id} value={i.id}>{i.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <div className="text-[10px] text-muted-foreground mb-1">URL base (sin UTMs):</div>
+          <Input
+            value={draft.urlBase ?? ""}
+            onChange={(e) => setDraft({ ...draft, urlBase: e.target.value })}
+            placeholder="https://bewe.ai/belleza/precios"
+            className="text-xs"
+          />
+        </div>
+        <div>
+          <div className="text-[10px] text-muted-foreground mb-1">
+            Texto · variables: <code className="rounded bg-muted/40 px-1">{"{{nombre}}"}</code>{" "}
+            <code className="rounded bg-muted/40 px-1">{"{{link}}"}</code>
+          </div>
+          <Textarea
+            value={draft.text}
+            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            rows={5}
+            placeholder="Hola {{nombre}}!"
+            className="text-xs"
+          />
+        </div>
+        {previewUrl && (
+          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.05] p-2 space-y-1">
+            <div className="text-[9px] uppercase tracking-wider text-emerald-300 font-semibold flex items-center gap-1.5">
+              <LinkIcon className="size-2.5" /> Preview URL en vivo ({previewPlatform})
+            </div>
+            <code className="block text-[10px] text-emerald-200 break-all">{previewUrl}</code>
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-2">
+          <Button onClick={cancelEdit} variant="ghost" size="sm">Cancelar</Button>
+          <Button onClick={saveDraft} size="sm" className="gap-1.5">
+            <Check className="size-3.5" /> Guardar
+          </Button>
+        </div>
+      </TextureCard>
+    );
+  }
+
+  // View mode
+  return (
+    <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2 }}>
+      <TextureCard className="p-4 space-y-3 h-full">
+        <div className="flex items-start justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-xl shrink-0">
+              {t.icon}
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold leading-tight">{t.name}</h4>
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <Badge variant="outline" className="text-[9px] py-0 h-4">{t.industry}</Badge>
+                <Badge variant="outline" className="text-[9px] py-0 h-4 bg-amber-500/5">{t.intent}</Badge>
+                {t.useCount > 0 && (
+                  <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                    <TrendingUp className="size-2.5" /> {t.useCount}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-0.5">
+            <Button onClick={startEdit} variant="ghost" size="icon" className="size-7">
+              <Edit3 className="size-3" />
+            </Button>
+            <Button
+              onClick={() => {
+                if (confirm(`¿Borrar "${t.name}"?`)) deleteOne();
+              }}
+              variant="ghost"
+              size="icon"
+              className="size-7 text-rose-400 hover:bg-rose-500/10"
+            >
+              <Trash2 className="size-3" />
+            </Button>
+          </div>
+        </div>
+
+        <p className="rounded bg-muted/20 p-2.5 text-xs whitespace-pre-wrap leading-relaxed">
+          {t.text}
+        </p>
+
+        {previewUrl && (
+          <div className="rounded-md border border-violet-500/20 bg-gradient-to-r from-violet-500/[0.06] to-fuchsia-500/[0.04] p-2 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[9px] uppercase tracking-wider text-violet-300 font-semibold flex items-center gap-1">
+                <LinkIcon className="size-2.5" /> URL con UTMs · {previewPlatform}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-5"
+                onClick={() => {
+                  navigator.clipboard?.writeText(previewUrl);
+                  toast.success("URL copiada");
+                }}
+              >
+                <CopyIcon className="size-2.5" />
+              </Button>
+            </div>
+            <code className="block text-[10px] text-violet-200 break-all">{previewUrl}</code>
+          </div>
+        )}
+      </TextureCard>
+    </motion.div>
   );
 }
 

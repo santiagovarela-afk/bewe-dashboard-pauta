@@ -9,7 +9,10 @@
 
 export type ContactStage =
   | "registrado"
-  | "calificado"
+  | "interesado"
+  | "prospecto"
+  | "lead"
+  | "trial"
   | "convertido"
   | "spam";
 
@@ -20,6 +23,8 @@ export interface ContactStageDef {
   description: string;
   color: string;
   bg: string;
+  /** Color del header del stage (Tailwind className). */
+  accent: string;
 }
 
 export const CONTACT_STAGES: ContactStageDef[] = [
@@ -28,34 +33,85 @@ export const CONTACT_STAGES: ContactStageDef[] = [
     label: "Registrado",
     icon: "🆕",
     description: "Primer contacto · acaba de escribir",
-    color: "text-slate-300",
-    bg: "border-slate-500/40 bg-slate-500/10",
+    color: "text-slate-200",
+    bg: "border-slate-500/40 bg-gradient-to-br from-slate-500/10 to-slate-500/[0.02]",
+    accent: "from-slate-500 to-slate-400",
   },
   {
-    id: "calificado",
-    label: "Calificado",
+    id: "interesado",
+    label: "Interesado",
     icon: "👋",
-    description: "Mostró interés real · conversamos algo",
-    color: "text-blue-300",
-    bg: "border-blue-500/40 bg-blue-500/10",
+    description: "Mostró interés inicial · primera respuesta",
+    color: "text-blue-200",
+    bg: "border-blue-500/40 bg-gradient-to-br from-blue-500/10 to-blue-500/[0.02]",
+    accent: "from-blue-500 to-cyan-400",
+  },
+  {
+    id: "prospecto",
+    label: "Prospecto",
+    icon: "💬",
+    description: "Conversación activa · interés sostenido",
+    color: "text-violet-200",
+    bg: "border-violet-500/40 bg-gradient-to-br from-violet-500/10 to-violet-500/[0.02]",
+    accent: "from-violet-500 to-fuchsia-400",
+  },
+  {
+    id: "lead",
+    label: "Lead / Demo",
+    icon: "🎯",
+    description: "Pidió precios / demo / información concreta",
+    color: "text-amber-200",
+    bg: "border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-amber-500/[0.02]",
+    accent: "from-amber-500 to-orange-400",
+  },
+  {
+    id: "trial",
+    label: "Trial",
+    icon: "🚀",
+    description: "Inició trial · probando Bewe",
+    color: "text-orange-200",
+    bg: "border-orange-500/40 bg-gradient-to-br from-orange-500/10 to-orange-500/[0.02]",
+    accent: "from-orange-500 to-red-400",
   },
   {
     id: "convertido",
     label: "Convertido",
     icon: "✅",
-    description: "Cerró trial, demo o conversión",
-    color: "text-emerald-300",
-    bg: "border-emerald-500/40 bg-emerald-500/10",
+    description: "Cliente pagado · conversión cerrada",
+    color: "text-emerald-200",
+    bg: "border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-emerald-500/[0.02]",
+    accent: "from-emerald-500 to-green-400",
   },
   {
     id: "spam",
-    label: "Spam / Descartado",
+    label: "Descartado",
     icon: "🚫",
-    description: "Spam, troll, off-topic, problemas",
-    color: "text-rose-300",
-    bg: "border-rose-500/40 bg-rose-500/10",
+    description: "Spam, troll, off-topic, no relevante",
+    color: "text-rose-200",
+    bg: "border-rose-500/40 bg-gradient-to-br from-rose-500/10 to-rose-500/[0.02]",
+    accent: "from-rose-500 to-pink-400",
   },
 ];
+
+/** Stages activos del funnel (sin contar spam/descartado). Para porcentajes. */
+export const FUNNEL_STAGES: ContactStage[] = [
+  "registrado",
+  "interesado",
+  "prospecto",
+  "lead",
+  "trial",
+  "convertido",
+];
+
+/**
+ * Migra contactos desde el schema v1 (4 stages) al v2 (7 stages).
+ * "calificado" antiguo se mapea a "interesado".
+ */
+function migrateStage(stage: string): ContactStage {
+  if (stage === "calificado") return "interesado";
+  if (CONTACT_STAGES.some((s) => s.id === stage)) return stage as ContactStage;
+  return "registrado";
+}
 
 export function getStageDef(id: ContactStage): ContactStageDef {
   return CONTACT_STAGES.find((s) => s.id === id) ?? CONTACT_STAGES[0];
@@ -99,7 +155,9 @@ const CONTACTS_KEY = "bewe_comunidad_contacts_v1";
 export function loadContacts(): Contact[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(CONTACTS_KEY) || "[]");
+    const raw = JSON.parse(localStorage.getItem(CONTACTS_KEY) || "[]") as Contact[];
+    // Auto-migración: stages v1 ("calificado") → v2 ("interesado")
+    return raw.map((c) => ({ ...c, stage: migrateStage(c.stage as string) }));
   } catch {
     return [];
   }
@@ -190,14 +248,18 @@ export function deleteContact(contacts: Contact[], contactId: string): Contact[]
 export interface CRMStats {
   total: number;
   byStage: Record<ContactStage, number>;
-  conversionRate: number; // % convertidos / total
-  qualificationRate: number; // % calificados (≥calificado) / total
+  conversionRate: number; // % convertidos / (total - spam)
+  qualificationRate: number; // % >=interesado / total
+  trialRate: number; // % trial+convertido / total
 }
 
 export function computeStats(contacts: Contact[]): CRMStats {
   const byStage: Record<ContactStage, number> = {
     registrado: 0,
-    calificado: 0,
+    interesado: 0,
+    prospecto: 0,
+    lead: 0,
+    trial: 0,
     convertido: 0,
     spam: 0,
   };
@@ -205,11 +267,14 @@ export function computeStats(contacts: Contact[]): CRMStats {
     byStage[c.stage] = (byStage[c.stage] ?? 0) + 1;
   });
   const total = contacts.length;
-  const qualified = byStage.calificado + byStage.convertido;
+  const activeFunnel = total - byStage.spam;
+  const qualified = byStage.interesado + byStage.prospecto + byStage.lead + byStage.trial + byStage.convertido;
+  const trial = byStage.trial + byStage.convertido;
   return {
     total,
     byStage,
     qualificationRate: total > 0 ? (qualified / total) * 100 : 0,
-    conversionRate: total > 0 ? (byStage.convertido / total) * 100 : 0,
+    trialRate: total > 0 ? (trial / total) * 100 : 0,
+    conversionRate: activeFunnel > 0 ? (byStage.convertido / activeFunnel) * 100 : 0,
   };
 }

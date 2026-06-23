@@ -21,7 +21,10 @@ const ALLOWED_ENDPOINT_PATTERNS: RegExp[] = [
   new RegExp(`^${PLAN.meta.pageId}(/(photos|posts|feed|published_posts|tagged|videos|insights|conversations))?$`),
   // Lookups por ID (creative · adset · ad · IG media · FB post · comment)
   // Incluye /comments (FB post + IG media) · /replies (responder IG comment)
-  /^\d+(\/(insights|comments|replies))?$/,
+  // · /private_replies (FB comment → DM directo)
+  /^\d+(\/(insights|comments|replies|private_replies))?$/,
+  // FB comment IDs tienen formato pageId_commentId
+  new RegExp(`^${PLAN.meta.pageId}_\\d+(/(comments|replies|private_replies))?$`),
   // Conversations Messenger · IDs tipo "t_2048315332430427"
   /^t_\d+(\/messages)?$/,
   // Envío de mensajes via página (POST /me/messages usando Page Token)
@@ -41,7 +44,7 @@ const PAGE_ENDPOINT_PATTERNS: RegExp[] = [
   // Enviar mensaje desde página
   /^me\/messages$/,
   // Responder a comentario FB (los comment IDs FB también tienen formato pageId_commentId)
-  new RegExp(`^${PLAN.meta.pageId}_\\d+\\/comments$`),
+  new RegExp(`^${PLAN.meta.pageId}_\\d+\\/(comments|private_replies)$`),
 ];
 
 export function isEndpointAllowed(endpoint: string): boolean {

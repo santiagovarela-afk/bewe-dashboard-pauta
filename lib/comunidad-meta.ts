@@ -220,3 +220,24 @@ export async function sendMessengerMessage(recipientId: string, message: string)
     },
   });
 }
+
+/**
+ * Envía un Private Reply (DM directo desde un comentario público en Facebook).
+ *
+ * Meta permite responder al autor de un comentario público con un DM privado
+ * usando Page Token + endpoint /{comment-id}/private_replies. SOLO funciona
+ * dentro de los primeros 7 días después del comentario y solo UNA vez por
+ * comentario.
+ *
+ * Para Instagram el endpoint funciona similar pero requiere el scope
+ * `instagram_manage_messages` que actualmente NO tenemos. En IG, el frontend
+ * debería abrir un link a ig.me/m/{username} en lugar de llamar a este
+ * endpoint.
+ */
+export async function sendFBPrivateReply(commentId: string, message: string) {
+  return metaCall({
+    endpoint: `${commentId}/private_replies`,
+    method: "POST",
+    body: { message },
+  });
+}

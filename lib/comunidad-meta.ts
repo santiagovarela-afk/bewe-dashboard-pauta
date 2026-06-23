@@ -241,3 +241,58 @@ export async function sendFBPrivateReply(commentId: string, message: string) {
     body: { message },
   });
 }
+
+// ─── ADS · DARK POSTS ──────────────────────────────────────────────────────
+
+export interface AdPost {
+  ad_id: string;
+  ad_name: string;
+  campaign_id: string;
+  campaign_name: string;
+  effective_object_story_id: string; // formato pageId_postId
+  status: string;
+  effective_status: string;
+}
+
+/**
+ * Lista todos los ads ACTIVOS con su post_id asociado.
+ * Devuelve objetos con: ad_id, ad_name, campaign_id, campaign_name,
+ * effective_object_story_id.
+ *
+ * Esto permite traer los comentarios de "dark posts" (publicaciones que solo
+ * aparecen como anuncios y no están en el feed orgánico de la página).
+ */
+export async function fetchActiveAdsWithPosts(): Promise<AdPost[]> {
+  const res = await metaCall({
+    endpoint: `${PLAN.meta.accountId}/ads`,
+    params: {
+      fields:
+        "id,name,campaign_id,campaign{name},effective_object_story_id,status,effective_status",
+      effective_status: '["ACTIVE"]',
+      limit: 200,
+    },
+  });
+  if (!res.ok) return [];
+  const data = res.data as {
+    data?: Array<{
+      id: string;
+      name?: string;
+      campaign_id?: string;
+      campaign?: { name?: string };
+      effective_object_story_id?: string;
+      status: string;
+      effective_status: string;
+    }>;
+  };
+  return (data.data ?? [])
+    .filter((a) => !!a.effective_object_story_id)
+    .map((a) => ({
+      ad_id: a.id,
+      ad_name: a.name ?? "Anuncio sin nombre",
+      campaign_id: a.campaign_id ?? "",
+      campaign_name: a.campaign?.name ?? "Campaña sin nombre",
+      effective_object_story_id: a.effective_object_story_id!,
+      status: a.status,
+      effective_status: a.effective_status,
+    }));
+}

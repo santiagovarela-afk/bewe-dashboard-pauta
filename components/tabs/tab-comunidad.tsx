@@ -29,6 +29,13 @@ import {
   Frown,
   Meh,
   BarChart3,
+  Bot,
+  Bell,
+  Zap,
+  AlertCircle,
+  Filter,
+  Eye,
+  Power,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,9 +140,11 @@ type SubTab =
   | "resumen"
   | "comentarios-fb"
   | "comentarios-ig"
+  | "comentarios-pauta"
   | "mensajes"
   | "crm"
   | "plantillas"
+  | "automatizaciones"
   | "reporte";
 
 // ─── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────
@@ -169,16 +178,20 @@ export function TabComunidad() {
         }
       />
 
+      <NotificationsBanner onJump={setSub} />
+
       <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-2">
         {(
           [
             { id: "resumen", label: "Resumen", icon: BarChart3, color: "" },
             { id: "mensajes", label: "Messenger", icon: MessageSquare, color: "text-violet-400" },
-            { id: "comentarios-fb", label: "Comentarios Facebook", icon: Facebook, color: "text-blue-400" },
-            { id: "comentarios-ig", label: "Comentarios Instagram", icon: Instagram, color: "text-pink-400" },
+            { id: "comentarios-fb", label: "Comentarios FB", icon: Facebook, color: "text-blue-400" },
+            { id: "comentarios-ig", label: "Comentarios IG", icon: Instagram, color: "text-pink-400" },
+            { id: "comentarios-pauta", label: "Comentarios Pauta", icon: TrendingUp, color: "text-amber-400" },
             { id: "crm", label: "CRM Contactos", icon: Users, color: "" },
             { id: "plantillas", label: "Plantillas", icon: Sparkles, color: "" },
-            { id: "reporte", label: "Reporte semanal", icon: FileText, color: "" },
+            { id: "automatizaciones", label: "Automatizaciones", icon: Bot, color: "text-emerald-400" },
+            { id: "reporte", label: "Reporte", icon: FileText, color: "" },
           ] as const
         ).map(({ id, label, icon: Icon, color }) => (
           <button
@@ -210,9 +223,11 @@ export function TabComunidad() {
         {sub === "resumen" && <Resumen onJump={setSub} />}
         {sub === "comentarios-fb" && <PostInbox platform="fb" />}
         {sub === "comentarios-ig" && <PostInbox platform="ig" />}
+        {sub === "comentarios-pauta" && <PostInboxPauta />}
         {sub === "mensajes" && <Mensajes />}
         {sub === "crm" && <CRMKanban />}
         {sub === "plantillas" && <PlantillasView />}
+        {sub === "automatizaciones" && <AutomatizacionesView />}
         {sub === "reporte" && <Reporte />}
       </motion.div>
 
@@ -1181,6 +1196,778 @@ function RelativeTime({ ts }: { ts: number }) {
   if (diff < 60) return <>hace {Math.max(1, Math.round(diff))}s</>;
   if (diff < 3600) return <>hace {Math.round(diff / 60)}m</>;
   return <>hace {Math.round(diff / 3600)}h</>;
+}
+
+// ─── BANNER NOTIFICACIONES ─────────────────────────────────────────────────
+
+function NotificationsBanner({ onJump }: { onJump: (s: SubTab) => void }) {
+  const [pendingComments, setPendingComments] = React.useState(0);
+  const [pendingMessages, setPendingMessages] = React.useState(0);
+  const [loaded, setLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const statuses = loadStatuses();
+        const [igRes, fbRes, msgRes] = await Promise.all([
+          fetch("/api/comunidad/ig-posts?limit=15&_t=" + Date.now()).then((r) => r.json()),
+          fetch("/api/comunidad/fb-posts?limit=15&_t=" + Date.now()).then((r) => r.json()),
+          fetch("/api/comunidad/messenger?limit=25&_t=" + Date.now()).then((r) => r.json()),
+        ]);
+
+        // Mensajes sin responder
+        const convs: Conversation[] = msgRes.ok ? (msgRes.conversations ?? []) : [];
+        const pendingMsgs = convs.filter((c) => statuses[c.id] !== "respondido").length;
+        setPendingMessages(pendingMsgs);
+
+        // Comentarios sin responder — aproximación basada en comments_count total
+        const igTotal = (igRes.posts ?? []).reduce(
+          (s: number, p: IGPost) => s + (p.comments_count ?? 0),
+          0,
+        );
+        const fbTotal = (fbRes.posts ?? []).reduce(
+          (s: number, p: FBPost) => s + (p.comments_count ?? 0),
+          0,
+        );
+        const respondedComments = Object.entries(statuses).filter(
+          ([id, s]) => s === "respondido" && !id.startsWith("t_"),
+        ).length;
+        setPendingComments(Math.max(0, igTotal + fbTotal - respondedComments));
+      } catch {
+        // silenciar
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, []);
+
+  if (!loaded || (pendingComments === 0 && pendingMessages === 0)) {
+    return null;
+  }
+
+  const total = pendingComments + pendingMessages;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-lg border border-amber-500/40 bg-gradient-to-r from-amber-500/[0.12] via-orange-500/[0.08] to-rose-500/[0.06] p-3"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-full bg-amber-500/20">
+          <Bell className="size-5 text-amber-300" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-amber-100">
+            Tienes {total} pendiente{total === 1 ? "" : "s"} por responder
+          </p>
+          <p className="text-xs text-amber-200/70 mt-0.5">
+            {pendingMessages > 0 && (
+              <button
+                onClick={() => onJump("mensajes")}
+                className="underline hover:text-amber-100"
+              >
+                {pendingMessages} mensaje{pendingMessages === 1 ? "" : "s"} en Messenger
+              </button>
+            )}
+            {pendingMessages > 0 && pendingComments > 0 && " · "}
+            {pendingComments > 0 && (
+              <button
+                onClick={() => onJump("comentarios-fb")}
+                className="underline hover:text-amber-100"
+              >
+                ~{pendingComments} comentario{pendingComments === 1 ? "" : "s"} sin atender
+              </button>
+            )}
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          {pendingMessages > 0 && (
+            <Button size="sm" onClick={() => onJump("mensajes")} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-amber-950 border-0">
+              <MessageSquare className="size-3.5" /> Mensajes
+            </Button>
+          )}
+          {pendingComments > 0 && (
+            <Button size="sm" variant="outline" onClick={() => onJump("comentarios-fb")} className="gap-1.5 border-amber-500/40">
+              <MessageCircle className="size-3.5" /> Comentarios
+            </Button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── COMENTARIOS PAUTA (ads activos · dark posts) ─────────────────────────
+
+interface AdPost {
+  ad_id: string;
+  ad_name: string;
+  campaign_id: string;
+  campaign_name: string;
+  post_id: string;
+  platform: "fb" | "ig";
+  message?: string;
+  caption?: string;
+  created_time?: string;
+  permalink_url?: string;
+  full_picture?: string;
+  thumbnail_url?: string;
+  comments_count?: number;
+  like_count?: number;
+}
+
+function PostInboxPauta() {
+  const [posts, setPosts] = React.useState<AdPost[]>([]);
+  const [selected, setSelected] = React.useState<AdPost | null>(null);
+  const [postComments, setPostComments] = React.useState<Comment[]>([]);
+  const [loadingPosts, setLoadingPosts] = React.useState(true);
+  const [loadingComments, setLoadingComments] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [platformFilter, setPlatformFilter] = React.useState<"all" | "ig" | "fb">("all");
+  const [statuses, setStatuses] = React.useState<Record<string, string>>({});
+  const [tagsMap, setTagsMap] = React.useState<Record<string, FunnelTag>>({});
+  const [lastFetch, setLastFetch] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    setStatuses(loadStatuses());
+    setTagsMap(loadTags());
+  }, []);
+
+  const refresh = React.useCallback(async () => {
+    setLoadingPosts(true);
+    try {
+      const r = await fetch(`/api/comunidad/ad-posts?_t=${Date.now()}`).then((r) => r.json());
+      if (r.ok) {
+        setPosts(r.posts ?? []);
+        setLastFetch(Date.now());
+      } else {
+        toast.error("Error: " + (r.error ?? "no se pudieron cargar ads"));
+      }
+    } catch {
+      toast.error("Error cargando publicaciones de pauta");
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const loadCommentsForPost = async (post: AdPost) => {
+    setSelected(post);
+    setLoadingComments(true);
+    try {
+      const url =
+        post.platform === "ig"
+          ? `/api/comunidad/ig-comments?mediaId=${post.post_id}&_t=${Date.now()}`
+          : `/api/comunidad/fb-comments?postId=${post.post_id}&_t=${Date.now()}`;
+      const r = await fetch(url).then((r) => r.json());
+      if (r.ok) {
+        const cs = (r.comments as Comment[]) ?? [];
+        const enriched = cs.map((c) => ({
+          ...c,
+          post_caption: post.caption ?? post.message,
+          post_permalink: post.permalink_url,
+        }));
+        setPostComments(enriched);
+
+        // Auto-upsert al CRM
+        const contacts = loadContacts();
+        let next = contacts;
+        enriched.forEach((c) => {
+          const name = c.username ?? c.from?.name;
+          const ts = c.timestamp ?? c.created_time ?? new Date().toISOString();
+          if (name) {
+            const u = upsertContact(next, { name, platform: c.platform, interactionAt: ts });
+            next = u.contacts;
+          }
+        });
+        saveContacts(next);
+      }
+    } catch {
+      toast.error("Error cargando comentarios del anuncio");
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const filtered = posts.filter((p) => {
+    if (platformFilter !== "all" && p.platform !== platformFilter) return false;
+    if (search) {
+      const text = (p.caption ?? p.message ?? "") + " " + p.campaign_name + " " + p.ad_name;
+      if (!text.toLowerCase().includes(search.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  const totalComments = posts.reduce((s, p) => s + (p.comments_count ?? 0), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3 pb-2">
+        <div className="flex items-center gap-2">
+          <div className="flex size-8 items-center justify-center rounded-md bg-amber-500/10">
+            <TrendingUp className="size-4 text-amber-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold">Comentarios en publicaciones de Pauta</h3>
+            <p className="text-[10px] text-muted-foreground">
+              {posts.length} anuncios activos · {totalComments} comentarios totales · Solo posts de ads ACTIVE
+            </p>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {lastFetch > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              Actualizado <RelativeTime ts={lastFetch} />
+            </span>
+          )}
+          <Button onClick={refresh} variant="outline" size="sm" disabled={loadingPosts}>
+            {loadingPosts ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            <span className="ml-1.5">Actualizar</span>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[380px_1fr] min-h-[700px]">
+        {/* Lista de ad posts */}
+        <TextureCard className="p-3 space-y-2 flex flex-col">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por campaña, anuncio o texto..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 text-xs h-8"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <ChipBtn active={platformFilter === "all"} onClick={() => setPlatformFilter("all")} label="Todas" />
+            <ChipBtn active={platformFilter === "fb"} onClick={() => setPlatformFilter("fb")} label="Facebook" />
+            <ChipBtn active={platformFilter === "ig"} onClick={() => setPlatformFilter("ig")} label="Instagram" />
+          </div>
+
+          <ul className="space-y-1.5 max-h-[640px] overflow-y-auto pr-1 -mr-1">
+            {loadingPosts ? (
+              Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20" />)
+            ) : filtered.length === 0 ? (
+              <p className="p-6 text-center text-xs text-muted-foreground">
+                Sin publicaciones de pauta activas con esos filtros.
+              </p>
+            ) : (
+              filtered.map((p) => {
+                const isSel = selected?.post_id === p.post_id;
+                const thumb = p.thumbnail_url || p.full_picture;
+                const text = p.caption ?? p.message ?? "Sin texto";
+                return (
+                  <li key={p.post_id}>
+                    <button
+                      onClick={() => loadCommentsForPost(p)}
+                      className={cn(
+                        "flex w-full items-start gap-2.5 rounded-md border bg-card/40 p-2 text-left transition-colors",
+                        isSel ? "border-amber-500/50 bg-amber-500/5" : "border-border/40 hover:bg-card/60",
+                      )}
+                    >
+                      <div className="size-12 shrink-0 overflow-hidden rounded bg-muted/40 relative">
+                        {thumb ? (
+                          <img src={thumb} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center">
+                            {p.platform === "ig" ? (
+                              <Instagram className="size-4 text-pink-400" />
+                            ) : (
+                              <Facebook className="size-4 text-blue-400" />
+                            )}
+                          </div>
+                        )}
+                        <div className="absolute -top-1 -right-1 size-4 rounded-full bg-amber-500 flex items-center justify-center">
+                          <TrendingUp className="size-2.5 text-white" />
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          {p.platform === "ig" ? (
+                            <Instagram className="size-2.5 text-pink-400 shrink-0" />
+                          ) : (
+                            <Facebook className="size-2.5 text-blue-400 shrink-0" />
+                          )}
+                          <span className="text-[9px] text-amber-300 font-medium truncate">
+                            {p.campaign_name}
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium line-clamp-2 leading-snug">{text}</p>
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-0.5">
+                            <MessageCircle className="size-2.5" /> {p.comments_count ?? 0}
+                          </span>
+                          {p.like_count !== undefined && (
+                            <span className="flex items-center gap-0.5">❤️ {p.like_count}</span>
+                          )}
+                          <span>·</span>
+                          <span>{formatDate(p.created_time ?? "")}</span>
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </TextureCard>
+
+        {/* Detalle del post + comentarios */}
+        {selected ? (
+          <div className="space-y-3">
+            <TextureCard className="p-4 space-y-3">
+              {/* Banner de pauta */}
+              <div className="rounded-md border border-amber-500/30 bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] p-3 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
+                  <TrendingUp className="size-3.5" /> Publicación en PAUTA activa
+                </div>
+                <div className="text-[10px] text-amber-200/70">
+                  Campaña: <span className="font-mono">{selected.campaign_name}</span>
+                </div>
+                <div className="text-[10px] text-amber-200/70">
+                  Anuncio: <span className="font-mono">{selected.ad_name}</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-md", selected.platform === "ig" ? "bg-pink-500/10" : "bg-blue-500/10")}>
+                  {selected.platform === "ig" ? (
+                    <Instagram className="size-5 text-pink-400" />
+                  ) : (
+                    <Facebook className="size-5 text-blue-400" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium">
+                    {selected.platform === "ig" ? "@bewe_software" : "Bewe Software"}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground flex items-center gap-2">
+                    <span>{formatDate(selected.created_time ?? "")}</span>
+                    {selected.permalink_url && (
+                      <a
+                        href={selected.permalink_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                      >
+                        Ver post <ExternalLink className="size-2.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {(selected.thumbnail_url || selected.full_picture) && (
+                <div className="overflow-hidden rounded-md bg-muted/40">
+                  <img
+                    src={selected.thumbnail_url || selected.full_picture}
+                    alt=""
+                    className="max-h-[280px] w-full object-cover"
+                  />
+                </div>
+              )}
+
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                {selected.caption ?? selected.message ?? "Sin texto"}
+              </p>
+
+              <div className="flex items-center gap-4 text-xs text-muted-foreground border-t border-border/40 pt-2">
+                {selected.like_count !== undefined && <span className="flex items-center gap-1">❤️ {selected.like_count}</span>}
+                <span className="flex items-center gap-1">
+                  <MessageCircle className="size-3" /> {selected.comments_count ?? 0} comentarios
+                </span>
+              </div>
+            </TextureCard>
+
+            <TextureCard className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <MessageCircle className="size-4" /> Comentarios del anuncio ({postComments.length})
+                </h4>
+              </div>
+              {loadingComments ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-20" />
+                  ))}
+                </div>
+              ) : postComments.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">
+                  Sin comentarios en este anuncio todavía.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {postComments.map((c) => (
+                    <CommentItem
+                      key={c.id}
+                      comment={c}
+                      tag={tagsMap[c.id]}
+                      status={statuses[c.id]}
+                      onTagChange={(t) => {
+                        saveTag(c.id, t);
+                        setTagsMap({ ...tagsMap, [c.id]: t });
+                      }}
+                      onStatusChange={(s) => {
+                        saveStatus(c.id, s);
+                        setStatuses({ ...statuses, [c.id]: s });
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+            </TextureCard>
+          </div>
+        ) : (
+          <TextureCard className="flex items-center justify-center p-12 text-center">
+            <div>
+              <TrendingUp className="size-12 mx-auto mb-3 opacity-30 text-amber-400" />
+              <p className="text-sm font-medium">Selecciona una publicación de pauta</p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
+                Verás el anuncio completo, su campaña, y todos los comentarios que ha generado.
+              </p>
+            </div>
+          </TextureCard>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AUTOMATIZACIONES ──────────────────────────────────────────────────────
+
+function AutomatizacionesView() {
+  const [rules, setRules] = React.useState<import("@/lib/comunidad-automations").AutomationRule[]>([]);
+  const [editing, setEditing] = React.useState<string | null>(null);
+  const [draft, setDraft] = React.useState<import("@/lib/comunidad-automations").AutomationRule | null>(null);
+
+  React.useEffect(() => {
+    import("@/lib/comunidad-automations").then((m) => setRules(m.loadAutomations()));
+  }, []);
+
+  const saveAll = async (next: typeof rules) => {
+    setRules(next);
+    const m = await import("@/lib/comunidad-automations");
+    m.saveAutomations(next);
+  };
+
+  const toggleRule = (id: string) => {
+    const next = rules.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r));
+    saveAll(next);
+  };
+
+  const deleteRule = (id: string) => {
+    if (!confirm("¿Borrar esta regla?")) return;
+    const next = rules.filter((r) => r.id !== id);
+    saveAll(next);
+    toast.success("Regla eliminada");
+  };
+
+  const startNew = () => {
+    const id = "custom-" + Date.now();
+    setDraft({
+      id,
+      name: "Nueva automatización",
+      enabled: false,
+      matchType: "include",
+      keywords: [],
+      platforms: ["ig", "fb", "messenger"],
+      channels: ["comment", "message"],
+      action: { type: "notify-only" },
+      triggeredCount: 0,
+      createdAt: new Date().toISOString(),
+    });
+    setEditing(id);
+  };
+
+  const saveDraft = () => {
+    if (!draft) return;
+    if (draft.keywords.length === 0) {
+      toast.error("Agrega al menos un keyword");
+      return;
+    }
+    const idx = rules.findIndex((r) => r.id === draft.id);
+    const next = idx >= 0 ? rules.map((r, i) => (i === idx ? draft : r)) : [...rules, draft];
+    saveAll(next);
+    setEditing(null);
+    setDraft(null);
+    toast.success("Regla guardada");
+  };
+
+  const activeCount = rules.filter((r) => r.enabled).length;
+  const totalTriggers = rules.reduce((s, r) => s + (r.triggeredCount ?? 0), 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <Bot className="size-5 text-emerald-400" /> Automatizaciones
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Reglas de keyword → acción. Hoy <strong>solo sugieren</strong> (no responden solas).
+            Cuando integremos webhooks de Meta, podremos ejecutar automáticamente.
+          </p>
+        </div>
+        <Button onClick={startNew} size="sm" className="gap-1.5 bg-gradient-to-r from-emerald-500 to-cyan-500">
+          <Plus className="size-3.5" /> Nueva regla
+        </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <TextureCard className="p-3 text-center">
+          <div className="text-2xl font-bold text-emerald-400">{activeCount}</div>
+          <div className="text-[10px] text-muted-foreground">Reglas activas</div>
+        </TextureCard>
+        <TextureCard className="p-3 text-center">
+          <div className="text-2xl font-bold">{rules.length}</div>
+          <div className="text-[10px] text-muted-foreground">Total configuradas</div>
+        </TextureCard>
+        <TextureCard className="p-3 text-center">
+          <div className="text-2xl font-bold text-amber-400">{totalTriggers}</div>
+          <div className="text-[10px] text-muted-foreground">Veces sugerida</div>
+        </TextureCard>
+      </div>
+
+      {/* Lista de reglas */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {rules.map((r) => {
+          const isEditing = editing === r.id && draft?.id === r.id;
+          if (isEditing && draft) {
+            return <AutomationEditor key={r.id} draft={draft} setDraft={setDraft} onSave={saveDraft} onCancel={() => { setEditing(null); setDraft(null); }} />;
+          }
+          return (
+            <TextureCard key={r.id} className={cn("p-4 space-y-3", r.enabled ? "" : "opacity-60")}>
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-2 min-w-0 flex-1">
+                  <div className={cn("flex size-8 items-center justify-center rounded-md", r.enabled ? "bg-emerald-500/15" : "bg-muted/40")}>
+                    <Zap className={cn("size-4", r.enabled ? "text-emerald-400" : "text-muted-foreground")} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold truncate">{r.name}</h4>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {r.triggeredCount > 0 ? `Activada ${r.triggeredCount} ${r.triggeredCount === 1 ? "vez" : "veces"}` : "Aún no se ha activado"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-0.5">
+                  <Button onClick={() => toggleRule(r.id)} variant="ghost" size="icon" className="size-7" title={r.enabled ? "Desactivar" : "Activar"}>
+                    <Power className={cn("size-3.5", r.enabled ? "text-emerald-400" : "text-muted-foreground")} />
+                  </Button>
+                  <Button onClick={() => { setDraft(r); setEditing(r.id); }} variant="ghost" size="icon" className="size-7">
+                    <Edit3 className="size-3" />
+                  </Button>
+                  <Button onClick={() => deleteRule(r.id)} variant="ghost" size="icon" className="size-7 text-rose-400 hover:bg-rose-500/10">
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                  Si el mensaje contiene
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {r.keywords.slice(0, 6).map((k) => (
+                    <Badge key={k} variant="outline" className="text-[10px]">{k}</Badge>
+                  ))}
+                  {r.keywords.length > 6 && (
+                    <Badge variant="outline" className="text-[10px]">+{r.keywords.length - 6}</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] p-2">
+                <p className="text-[9px] uppercase tracking-wider text-emerald-300 mb-0.5">Acción</p>
+                <p className="text-xs">
+                  {r.action.type === "suggest-template" && (
+                    <>💡 Sugerir plantilla <code className="font-mono">{r.action.templateId}</code></>
+                  )}
+                  {r.action.type === "move-stage" && (
+                    <>🎯 Mover contacto a <code className="font-mono">{r.action.stage}</code></>
+                  )}
+                  {r.action.type === "auto-tag" && (
+                    <>🏷️ Auto-etiquetar como <code className="font-mono">{r.action.tag}</code></>
+                  )}
+                  {r.action.type === "notify-only" && <>🔔 Solo notificar</>}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-1 text-[9px] text-muted-foreground">
+                <Badge variant="outline" className="text-[9px]">{r.matchType}</Badge>
+                {r.platforms.map((p) => (
+                  <Badge key={p} variant="outline" className="text-[9px]">{p}</Badge>
+                ))}
+                {r.channels.map((c) => (
+                  <Badge key={c} variant="outline" className="text-[9px]">{c}</Badge>
+                ))}
+              </div>
+            </TextureCard>
+          );
+        })}
+        {editing && draft && !rules.find((r) => r.id === draft.id) && (
+          <AutomationEditor draft={draft} setDraft={setDraft} onSave={saveDraft} onCancel={() => { setEditing(null); setDraft(null); }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AutomationEditor({
+  draft,
+  setDraft,
+  onSave,
+  onCancel,
+}: {
+  draft: import("@/lib/comunidad-automations").AutomationRule;
+  setDraft: (d: import("@/lib/comunidad-automations").AutomationRule | null) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const [kwInput, setKwInput] = React.useState("");
+  const addKw = () => {
+    const k = kwInput.trim();
+    if (!k) return;
+    if (draft.keywords.includes(k)) return;
+    setDraft({ ...draft, keywords: [...draft.keywords, k] });
+    setKwInput("");
+  };
+  const removeKw = (k: string) => setDraft({ ...draft, keywords: draft.keywords.filter((x) => x !== k) });
+
+  return (
+    <TextureCard className="p-4 space-y-3 md:col-span-2 border-emerald-500/40 bg-emerald-500/[0.03]">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
+        <Edit3 className="size-3" /> {draft.id.startsWith("custom-") ? "Nueva regla" : "Editando"}
+      </div>
+
+      <Input
+        value={draft.name}
+        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+        placeholder="Nombre descriptivo (ej: Pregunta por precios)"
+      />
+
+      <div>
+        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Keywords (al menos 1)</label>
+        <div className="mt-1 flex gap-1.5">
+          <Input
+            value={kwInput}
+            onChange={(e) => setKwInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addKw())}
+            placeholder="precio, cuánto cuesta, info..."
+            className="text-xs"
+          />
+          <Button onClick={addKw} size="sm" variant="outline">Agregar</Button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {draft.keywords.map((k) => (
+            <button
+              key={k}
+              onClick={() => removeKw(k)}
+              className="rounded-full bg-muted/40 px-2 py-0.5 text-[10px] hover:bg-rose-500/20 transition"
+            >
+              {k} ✕
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Match</label>
+          <Select value={draft.matchType} onValueChange={(v) => setDraft({ ...draft, matchType: v as typeof draft.matchType })}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="include">Contiene</SelectItem>
+              <SelectItem value="exact">Exacto</SelectItem>
+              <SelectItem value="regex">Regex</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Acción</label>
+          <Select
+            value={draft.action.type}
+            onValueChange={(v) => {
+              const t = v as "suggest-template" | "move-stage" | "auto-tag" | "notify-only";
+              const newAction: import("@/lib/comunidad-automations").AutomationAction =
+                t === "suggest-template"
+                  ? { type: "suggest-template", templateId: "info-belleza" }
+                  : t === "move-stage"
+                    ? { type: "move-stage", stage: "interesado" }
+                    : t === "auto-tag"
+                      ? { type: "auto-tag", tag: "interesado" }
+                      : { type: "notify-only" };
+              setDraft({ ...draft, action: newAction });
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="suggest-template">Sugerir plantilla</SelectItem>
+              <SelectItem value="move-stage">Mover en CRM</SelectItem>
+              <SelectItem value="notify-only">Solo notificar</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {draft.action.type === "suggest-template" && (
+        <Input
+          value={draft.action.templateId}
+          onChange={(e) => setDraft({ ...draft, action: { type: "suggest-template", templateId: e.target.value } })}
+          placeholder="ID de plantilla (ej: precios-belleza)"
+          className="text-xs"
+        />
+      )}
+      {draft.action.type === "move-stage" && (
+        <Select
+          value={draft.action.stage}
+          onValueChange={(v) => setDraft({ ...draft, action: { type: "move-stage", stage: v as import("@/lib/comunidad-crm").ContactStage } })}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CONTACT_STAGES.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.icon} {s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      <div className="flex items-center justify-between border-t border-border/40 pt-3">
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10px] font-medium border transition-colors",
+              draft.enabled
+                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                : "border-border/40 text-muted-foreground",
+            )}
+          >
+            {draft.enabled ? "✓ Activa" : "○ Inactiva"}
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={onCancel} variant="ghost" size="sm">Cancelar</Button>
+          <Button onClick={onSave} size="sm" className="gap-1.5">
+            <Check className="size-3.5" /> Guardar
+          </Button>
+        </div>
+      </div>
+    </TextureCard>
+  );
 }
 
 // ─── LEGACY: vista vieja de comentarios (mantengo refs por compatibilidad) ─

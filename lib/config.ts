@@ -121,7 +121,7 @@ export const TABS = [
   { id: "anuncios",    label: "Anuncios",    icon: "Image",            group: "pauta" },
   { id: "organico",    label: "Contenidos Orgánicos",    icon: "Sparkles",         group: "contenido" },
   { id: "parrilla",    label: "Parrilla",    icon: "CalendarDays",     group: "contenido" },
-  { id: "open-bui",    label: "Open Design",  icon: "Palette",          group: "contenido" },
+  { id: "open-bui",    label: "Bewe Studio",  icon: "Palette",          group: "contenido" },
   { id: "performance", label: "Performance", icon: "Gauge",            group: "analítica" },
   { id: "seo",         label: "SEO",         icon: "Search",           group: "analítica" },
   { id: "aeo",         label: "AEO · LLMs",  icon: "Brain",            group: "analítica" },

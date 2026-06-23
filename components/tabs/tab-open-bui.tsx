@@ -1,619 +1,938 @@
 "use client";
 import * as React from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Pencil, Sparkles, HelpCircle, ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { motion } from "motion/react";
+import {
+  Palette,
+  Layout,
+  Sparkles,
+  Library,
+  Terminal,
+  ExternalLink,
+  Copy,
+  Check,
+  Download,
+  Loader2,
+  Wand2,
+  History as HistoryIcon,
+  Type as TypeIcon,
+  Eye,
+  ShieldCheck,
+  AlertTriangle,
+  Layers,
+  Image as ImageIcon,
+  Mic,
+  Code,
+  Hash,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TldrawCanvas } from "@/components/open-bui/canvas";
-import { DesignPreview } from "@/components/open-bui/design-preview";
-import { SKILLS, getSkill } from "@/components/open-bui/skills";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
-  OpenDesignOnboarding,
-  clearOpenDesignOnboardingSeen,
-} from "@/components/open-bui/onboarding-tour";
-import { TemplatesGrid } from "@/components/open-bui/templates-grid";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TextureCard } from "@/components/fx/texture-card";
+import { SectionHeader } from "@/components/shared/section-header";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
-  ControlPanel,
-  type ControlTab,
-} from "@/components/open-bui/control-panel";
+  BRAND_COLORS,
+  BRAND_GRADIENTS,
+  BRAND_FONTS,
+  BRAND_RULES,
+  CONTENT_FORMATS,
+  BRAND_VOICE,
+  TYPICAL_CTAS,
+  UTM_STRUCTURE,
+  AUDIO_SPECS,
+  buildBrandGuardrailsPrompt,
+} from "@/lib/bewe-studio-brand";
 import {
   loadHistory,
   pushHistory,
   type HistoryEntry,
 } from "@/components/open-bui/history";
-import { useDashboard } from "@/lib/store";
-import { cn } from "@/lib/utils";
-import type {
-  OpenDesignAspect,
-  OpenDesignMode,
-} from "@/lib/open-design-templates";
 
-/** Variante de imagen devuelta por Nano Banana en el modo image. */
-interface ImageVariant {
-  dataUri: string;
-  mimeType: string;
-  textResponse?: string;
-}
+type SubTab = "brand" | "templates" | "generator" | "library" | "studio-cli" | "canva" | "history";
 
-const STORAGE_KEY_SKILL = "bw_open_design_skill";
-const STORAGE_KEY_BRIEF = "bw_open_design_brief";
-const STORAGE_KEY_QUOTA_UNTIL = "bw_open_design_quota_until";
-const STORAGE_KEY_GEN_MODE = "bw_open_design_gen_mode";
-const STORAGE_KEY_ASPECT = "bw_open_design_aspect";
-const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
-
-/**
- * Open Design · Bewe OS — rediseño Canva-style (may-2026).
- *
- * Layout:
- *   1. Header grande + categorías + templates grid
- *   2. Split horizontal:
- *      - LEFT  (60%) · canvas preview big con scale-to-fit
- *      - RIGHT (40%) · tabs Formato/Idea/Marca/Refs/Export con CTA pegado abajo
- *   3. Toggle "Canvas manual" tldraw queda en el header como modo alterno.
- *
- * Keyboard:
- *   - Cmd+Enter → generar
- *   - Cmd+S    → reservado (Export PNG · handled in ControlPanel/Export tab)
- *
- * Responsive: <1200px colapsa a single column (templates → preview → controls).
- */
 export function TabOpenBui() {
-  const { aiPersona } = useDashboard();
-  const personaLabel = aiPersona === "lua" ? "Lúa OS" : "Mark OS";
-
-  const [mode, setMode] = React.useState<"design" | "canvas">("design");
-  const [skillId, setSkillId] = React.useState<string>(() => SKILLS[0].id);
-  const [brief, setBrief] = React.useState("");
-  const [html, setHtml] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [variant, setVariant] = React.useState(0);
-  const [variantCount, setVariantCount] = React.useState(1);
-  const [quotaUntil, setQuotaUntil] = React.useState<number>(0);
-  const [now, setNow] = React.useState<number>(() => Date.now());
-  const [forceOnb, setForceOnb] = React.useState(false);
-  const [toast, setToast] = React.useState<string | null>(null);
-  const [history, setHistory] = React.useState<HistoryEntry[]>([]);
-  const [referenceImages, setReferenceImages] = React.useState<string[]>([]);
-  const [activeTab, setActiveTab] = React.useState<ControlTab>("idea");
-  // Modo de generación · "html" Gemini text · "image" Nano Banana · "hybrid" mix
-  const [genMode, setGenMode] = React.useState<OpenDesignMode>("html");
-  const [aspectRatio, setAspectRatio] = React.useState<OpenDesignAspect>("1:1");
-  // Resultados modo "image" · Nano Banana puede devolver 1-4 variantes
-  const [images, setImages] = React.useState<ImageVariant[]>([]);
-  const [activeImageIdx, setActiveImageIdx] = React.useState(0);
-
-  // Hidratar
-  React.useEffect(() => {
-    try {
-      const sk = localStorage.getItem(STORAGE_KEY_SKILL);
-      if (sk && SKILLS.some((s) => s.id === sk)) setSkillId(sk);
-      const br = localStorage.getItem(STORAGE_KEY_BRIEF);
-      if (br) setBrief(br);
-      const qu = Number(localStorage.getItem(STORAGE_KEY_QUOTA_UNTIL) || "0");
-      if (qu > Date.now()) setQuotaUntil(qu);
-      const gm = localStorage.getItem(STORAGE_KEY_GEN_MODE);
-      if (gm === "html" || gm === "image" || gm === "hybrid") setGenMode(gm);
-      const ar = localStorage.getItem(STORAGE_KEY_ASPECT);
-      if (ar === "1:1" || ar === "9:16" || ar === "16:9" || ar === "4:5") {
-        setAspectRatio(ar);
-      }
-    } catch {
-      /* ignore */
-    }
-    setHistory(loadHistory());
-  }, []);
-
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_SKILL, skillId);
-    } catch {
-      /* ignore */
-    }
-  }, [skillId]);
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_BRIEF, brief);
-    } catch {
-      /* ignore */
-    }
-  }, [brief]);
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_GEN_MODE, genMode);
-    } catch {
-      /* ignore */
-    }
-  }, [genMode]);
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_ASPECT, aspectRatio);
-    } catch {
-      /* ignore */
-    }
-  }, [aspectRatio]);
-
-  React.useEffect(() => {
-    if (quotaUntil <= Date.now()) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [quotaUntil]);
-
-  React.useEffect(() => {
-    if (!toast) return;
-    const id = window.setTimeout(() => setToast(null), 2400);
-    return () => window.clearTimeout(id);
-  }, [toast]);
-
-  const cooldownRemainingMs = Math.max(0, quotaUntil - now);
-  const inCooldown = cooldownRemainingMs > 0;
-  const skill = getSkill(skillId);
-
-  async function generate(nextVariant: number) {
-    if (inCooldown) return;
-    setLoading(true);
-    setError(null);
-    try {
-      // Construir body según el modo activo
-      const referenceImage = referenceImages[0];
-      const body: Record<string, unknown> = {
-        mode: genMode,
-        skillId,
-        brief,
-        variant: nextVariant,
-        persona: aiPersona,
-      };
-      if (genMode === "image" || genMode === "hybrid") {
-        body.prompt = brief;
-        body.aspectRatio = aspectRatio;
-        if (genMode === "image") {
-          body.variants = Math.min(4, Math.max(1, variantCount));
-        }
-        if (referenceImage) body.referenceImage = referenceImage;
-      }
-
-      const r = await fetch("/api/design/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        if (r.status === 429 || data?.quotaExhausted) {
-          const until = Date.now() + QUOTA_COOLDOWN_MS;
-          setQuotaUntil(until);
-          try {
-            localStorage.setItem(STORAGE_KEY_QUOTA_UNTIL, String(until));
-          } catch {
-            /* ignore */
-          }
-          setError(
-            data?.hint ||
-              "Cuota Gemini agotada · prueba con el canvas manual o espera 4h",
-          );
-        } else {
-          setError(data?.error || `Error ${r.status}`);
-        }
-        setHtml(null);
-        setImages([]);
-        return;
-      }
-
-      // Handler por modo
-      if (genMode === "image") {
-        const rawImages = Array.isArray(data.images) ? data.images : [];
-        const next: ImageVariant[] = rawImages
-          .filter(
-            (i: unknown): i is ImageVariant =>
-              typeof i === "object" &&
-              i !== null &&
-              typeof (i as ImageVariant).dataUri === "string",
-          )
-          .map((i: ImageVariant) => ({
-            dataUri: i.dataUri,
-            mimeType: i.mimeType ?? "image/png",
-            textResponse: i.textResponse,
-          }));
-        setImages(next);
-        setActiveImageIdx(0);
-        setHtml(null);
-        setVariant(nextVariant);
-      } else if (genMode === "hybrid") {
-        const hybridHtml = typeof data.html === "string" ? data.html : null;
-        const dataUri = typeof data.dataUri === "string" ? data.dataUri : null;
-        setHtml(hybridHtml);
-        if (dataUri) {
-          setImages([{ dataUri, mimeType: "image/png" }]);
-          setActiveImageIdx(0);
-        } else {
-          setImages([]);
-        }
-        setVariant(nextVariant);
-        if (hybridHtml) {
-          const entry: HistoryEntry = {
-            id: new Date().toISOString(),
-            skillId,
-            brief,
-            variant: nextVariant,
-            html: hybridHtml,
-            persona: aiPersona,
-          };
-          setHistory(pushHistory(entry));
-        }
-      } else {
-        // mode === "html"
-        const htmlOut = typeof data.html === "string" ? data.html : null;
-        setHtml(htmlOut);
-        setImages([]);
-        setVariant(nextVariant);
-        if (htmlOut) {
-          const entry: HistoryEntry = {
-            id: new Date().toISOString(),
-            skillId,
-            brief,
-            variant: nextVariant,
-            html: htmlOut,
-            persona: aiPersona,
-          };
-          setHistory(pushHistory(entry));
-        }
-      }
-    } catch (e) {
-      setError((e as Error).message || "Falló la generación");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function onGenerate() {
-    if (variantCount > 1) {
-      // Genera N variantes serial · solo retenemos la última como activa
-      void (async () => {
-        for (let i = 0; i < variantCount; i++) {
-          await generate(variant + 1 + i);
-        }
-        setToast(`${variantCount} variantes generadas`);
-      })();
-      return;
-    }
-    setVariant(0);
-    void generate(0);
-  }
-  function onVariant() {
-    void generate(variant + 1);
-  }
-
-  function handleUseReference(snippet: string) {
-    setBrief((prev) => (prev ? prev.trimEnd() + snippet : snippet.trimStart()));
-    setToast("Referencia agregada al brief");
-    setActiveTab("idea");
-  }
-
-  function openOnboarding() {
-    clearOpenDesignOnboardingSeen();
-    setForceOnb(true);
-  }
-
-  function pickTemplate(tpl: {
-    skillId: string;
-    brief: string;
-    persona: "mark" | "lua";
-    title: string;
-    mode?: OpenDesignMode;
-    aspect?: OpenDesignAspect;
-  }) {
-    setSkillId(tpl.skillId);
-    setBrief(tpl.brief);
-    setActiveTab("idea");
-    if (tpl.mode) setGenMode(tpl.mode);
-    if (tpl.aspect) setAspectRatio(tpl.aspect);
-    setToast(`Plantilla "${tpl.title}" cargada`);
-  }
-
-  function pickHistory(h: HistoryEntry) {
-    setSkillId(h.skillId);
-    setBrief(h.brief);
-    setHtml(h.html);
-    setVariant(h.variant);
-    setToast("Pieza del historial recuperada");
-  }
+  const [sub, setSub] = React.useState<SubTab>("brand");
 
   return (
-    <div className="open-design-liquid relative -mx-4 -my-4 px-4 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 rounded-2xl">
-      {/* Liquid bg pastel · brand kit Bewe */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 rounded-2xl opacity-90 dark:opacity-60"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(176,210,252,0.25) 0%, rgba(204,251,241,0.18) 45%, rgba(250,209,158,0.22) 100%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 rounded-2xl opacity-70 dark:opacity-30"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 20% 10%, rgba(96,165,250,0.18), transparent 70%), radial-gradient(50% 50% at 90% 80%, rgba(52,211,153,0.16), transparent 70%)",
-        }}
+    <div className="space-y-6">
+      <SectionHeader
+        title="Bewe Studio"
+        sub="Sistema de producción de contenido · brand kit + templates + IA + CLI local"
+        accent="cyan"
+        right={
+          <Badge variant="outline" className="text-[10px] gap-1.5">
+            <ShieldCheck className="size-3 text-emerald-400" /> Brand kit oficial
+          </Badge>
+        }
       />
 
-      <div className="relative max-w-[1600px] mx-auto space-y-5">
-        <OpenDesignOnboarding
-          forceOpen={forceOnb}
-          onClose={() => setForceOnb(false)}
-        />
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-2">
+        {(
+          [
+            { id: "brand", label: "Brand Kit", icon: Palette, color: "text-cyan-400" },
+            { id: "templates", label: "Templates", icon: Layout, color: "text-blue-400" },
+            { id: "generator", label: "Generador IA", icon: Sparkles, color: "text-violet-400" },
+            { id: "library", label: "Biblioteca", icon: Library, color: "text-amber-400" },
+            { id: "studio-cli", label: "Bewe Studio (Local)", icon: Terminal, color: "text-emerald-400" },
+            { id: "canva", label: "Canva", icon: ImageIcon, color: "text-pink-400" },
+            { id: "history", label: "Histórico", icon: HistoryIcon, color: "text-muted-foreground" },
+          ] as const
+        ).map(({ id, label, icon: Icon, color }) => (
+          <button
+            key={id}
+            onClick={() => setSub(id)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              sub === id
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+            )}
+          >
+            <Icon className={cn("size-3.5", sub === id ? "" : color)} />
+            {label}
+          </button>
+        ))}
+      </div>
 
-        {/* HERO HEADER */}
-        <DesignHeader
-          mode={mode}
-          setMode={setMode}
-          personaLabel={personaLabel}
-          onOnboarding={openOnboarding}
-        />
+      <motion.div
+        key={sub}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+      >
+        {sub === "brand" && <BrandKitView />}
+        {sub === "templates" && <TemplatesView />}
+        {sub === "generator" && <GeneratorView />}
+        {sub === "library" && <LibraryView />}
+        {sub === "studio-cli" && <StudioCLIView />}
+        {sub === "canva" && <CanvaView />}
+        {sub === "history" && <HistoryView />}
+      </motion.div>
+    </div>
+  );
+}
 
-        <AnimatePresence mode="wait">
-          {mode === "design" ? (
-            <motion.div
-              key="design"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.25 }}
-              className="space-y-5"
+// ─── BRAND KIT VIEW ────────────────────────────────────────────────────────
+
+function BrandKitView() {
+  const [copiedHex, setCopiedHex] = React.useState<string | null>(null);
+
+  const copyHex = (hex: string) => {
+    navigator.clipboard?.writeText(hex);
+    setCopiedHex(hex);
+    setTimeout(() => setCopiedHex(null), 1500);
+    toast.success(`${hex} copiado`);
+  };
+
+  return (
+    <div className="space-y-6">
+      <TextureCard className="p-5 bg-gradient-to-br from-[#0A2540]/40 to-[#102E4E]/20 border-cyan-500/20">
+        <div className="flex items-start gap-4">
+          <div className="flex size-12 items-center justify-center rounded-lg bg-cyan-500/20">
+            <Palette className="size-6 text-cyan-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold">Brand Kit · Foundations v2.0</h3>
+            <p className="mt-1 text-sm text-muted-foreground italic">"{BRAND_VOICE.tone}"</p>
+            <ul className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+              {BRAND_VOICE.rules.map((r, i) => (
+                <li key={i} className="flex items-center gap-1.5">
+                  <Check className="size-3 text-emerald-400" /> {r}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </TextureCard>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold flex items-center gap-2">
+          <span className="text-base">🎨</span> Paleta oficial · {BRAND_COLORS.length} colores
+        </h4>
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {BRAND_COLORS.map((c) => (
+            <motion.button
+              key={c.hex}
+              whileHover={{ y: -2 }}
+              onClick={() => copyHex(c.hex)}
+              className="group relative overflow-hidden rounded-lg border border-border/40 bg-card/40 p-3 text-left transition-shadow hover:shadow-lg"
             >
-              {/* TEMPLATES */}
-              <TemplatesGrid onPick={pickTemplate} />
-
-              {/* MAIN SPLIT · Preview (LEFT) + Control Panel (RIGHT) */}
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(380px,2fr)] gap-4 min-h-[640px]">
-                {/* LEFT · Preview big */}
-                <div className="relative h-[640px] xl:h-[760px]">
-                  <DesignPreview
-                    skill={skill}
-                    html={html}
-                    loading={loading}
-                    error={error}
-                    onSwitchToCanvas={() => setMode("canvas")}
-                    personaLabel={personaLabel}
-                    imageDataUri={
-                      genMode === "image" && images.length > 0
-                        ? images[activeImageIdx]?.dataUri ?? null
-                        : null
-                    }
-                    aspectRatio={aspectRatio}
-                  />
-                  <PreviewMeta
-                    variant={variant}
-                    html={html}
-                    skillLabel={skill.label}
-                    genMode={genMode}
-                    imageCount={images.length}
-                  />
-                </div>
-
-                {/* RIGHT · Control panel */}
-                <div className="h-[640px] xl:h-[760px]">
-                  <ControlPanel
-                    skillId={skillId}
-                    setSkillId={setSkillId}
-                    skill={skill}
-                    brief={brief}
-                    setBrief={setBrief}
-                    onGenerate={onGenerate}
-                    onVariant={onVariant}
-                    loading={loading}
-                    html={html}
-                    error={error}
-                    variantCount={variantCount}
-                    setVariantCount={setVariantCount}
-                    cooldownRemainingMs={cooldownRemainingMs}
-                    personaLabel={personaLabel}
-                    history={history}
-                    onPickHistory={pickHistory}
-                    referenceImages={referenceImages}
-                    setReferenceImages={setReferenceImages}
-                    onUseReference={handleUseReference}
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    toast={setToast}
-                    genMode={genMode}
-                    setGenMode={setGenMode}
-                    aspectRatio={aspectRatio}
-                    setAspectRatio={setAspectRatio}
-                    images={images}
-                    activeImageIdx={activeImageIdx}
-                    setActiveImageIdx={setActiveImageIdx}
-                  />
-                </div>
+              <div className="h-16 rounded-md mb-2 shadow-inner" style={{ backgroundColor: c.hex }} />
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-xs font-semibold">{c.name}</span>
+                {copiedHex === c.hex ? (
+                  <Check className="size-3 text-emerald-400" />
+                ) : (
+                  <Copy className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition" />
+                )}
               </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="canvas"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.25 }}
-              className="w-full h-[calc(100vh-220px)] min-h-[560px] rounded-xl border border-border bg-card overflow-hidden relative"
-            >
-              <div className="absolute top-2 left-2 z-10 pointer-events-none">
-                <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground bg-card/80 backdrop-blur px-2 py-1 rounded-md border border-border">
-                  <Pencil className="size-3" />
-                  Modo manual · tldraw v3
-                </div>
-              </div>
-              <TldrawCanvas persistenceKey="bw_open_bui_doc" />
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <code className="text-[10px] font-mono text-cyan-400">{c.hex}</code>
+              <p className="mt-1 text-[10px] text-muted-foreground">{c.role}</p>
+              {c.notes && <p className="mt-1 text-[10px] text-amber-400">{c.notes}</p>}
+            </motion.button>
+          ))}
+        </div>
+      </div>
 
-        {/* Toast */}
-        <AnimatePresence>
-          {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.25 }}
-              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] pointer-events-none"
+      <div>
+        <h4 className="mb-3 text-sm font-semibold flex items-center gap-2">
+          <Layers className="size-4" /> Gradientes de marca · {BRAND_GRADIENTS.length}
+        </h4>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {BRAND_GRADIENTS.map((g) => (
+            <motion.button
+              key={g.name}
+              whileHover={{ y: -2 }}
+              onClick={() => {
+                navigator.clipboard?.writeText(g.css);
+                toast.success(`Gradiente ${g.name} copiado`);
+              }}
+              className="overflow-hidden rounded-lg border border-border/40 bg-card/40 text-left"
             >
-              <div
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-white text-[12px] font-semibold shadow-[0_10px_30px_-10px_rgba(10,37,64,0.4)]"
-                style={{
-                  background:
-                    "linear-gradient(90deg, #60A5FA 0%, #34D399 50%, #60A5FA 100%)",
+              <div className="h-24" style={{ background: g.css }} />
+              <div className="p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">{g.name}</span>
+                  <Badge variant="outline" className="text-[9px]">{g.angle}°</Badge>
+                </div>
+                <p className="text-[10px] text-muted-foreground">{g.use}</p>
+                <code className="block text-[9px] font-mono text-cyan-400 truncate">{g.css}</code>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold flex items-center gap-2">
+          <TypeIcon className="size-4" /> Tipografía
+        </h4>
+        <div className="grid gap-3 md:grid-cols-2">
+          {BRAND_FONTS.map((f) => (
+            <TextureCard key={f.family} className="p-4">
+              <div className="flex items-baseline justify-between mb-2">
+                <span
+                  className="text-2xl font-semibold"
+                  style={{ fontFamily: f.family, letterSpacing: f.letterSpacing }}
+                >
+                  {f.family}
+                </span>
+                <span className="text-[10px] text-muted-foreground">{f.weights.join(" · ")}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{f.use}</p>
+              {f.notes && <p className="mt-1 text-[10px] text-amber-400 leading-relaxed">{f.notes}</p>}
+            </TextureCard>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <TextureCard className="p-4 border-emerald-500/20 bg-emerald-500/[0.03]">
+          <h4 className="mb-3 text-sm font-semibold flex items-center gap-2 text-emerald-300">
+            <Check className="size-4" /> Reglas SÍ ({BRAND_RULES.filter((r) => r.type === "do").length})
+          </h4>
+          <ul className="space-y-2">
+            {BRAND_RULES.filter((r) => r.type === "do").map((r, i) => (
+              <li key={i} className="flex gap-2 text-xs">
+                <span className="text-emerald-400 shrink-0">✓</span>
+                <span className="text-foreground/90">{r.text}</span>
+              </li>
+            ))}
+          </ul>
+        </TextureCard>
+
+        <TextureCard className="p-4 border-rose-500/20 bg-rose-500/[0.03]">
+          <h4 className="mb-3 text-sm font-semibold flex items-center gap-2 text-rose-300">
+            <AlertTriangle className="size-4" /> Reglas NO ({BRAND_RULES.filter((r) => r.type === "dont").length})
+          </h4>
+          <ul className="space-y-2">
+            {BRAND_RULES.filter((r) => r.type === "dont").map((r, i) => (
+              <li key={i} className="flex gap-2 text-xs">
+                <span className="text-rose-400 shrink-0">✕</span>
+                <span className="text-foreground/90">{r.text.replace(/^❌\s*/, "")}</span>
+              </li>
+            ))}
+          </ul>
+        </TextureCard>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <TextureCard className="p-4">
+          <h4 className="mb-3 text-sm font-semibold flex items-center gap-2">
+            <Wand2 className="size-4" /> CTAs típicos
+          </h4>
+          <div className="flex flex-wrap gap-1.5">
+            {TYPICAL_CTAS.map((cta) => (
+              <button
+                key={cta}
+                onClick={() => {
+                  navigator.clipboard?.writeText(cta);
+                  toast.success("CTA copiado");
                 }}
+                className="rounded-md bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-1 text-[11px] text-cyan-200 hover:bg-cyan-500/20 transition"
               >
-                <Sparkles className="size-3.5" />
-                {toast}
+                {cta}
+              </button>
+            ))}
+          </div>
+        </TextureCard>
+
+        <TextureCard className="p-4">
+          <h4 className="mb-3 text-sm font-semibold flex items-center gap-2">
+            <Hash className="size-4" /> Estructura UTM
+          </h4>
+          <div className="space-y-1.5 text-xs font-mono">
+            <div><span className="text-muted-foreground">utm_source:</span> {UTM_STRUCTURE.source.join(" | ")}</div>
+            <div><span className="text-muted-foreground">utm_medium:</span> {UTM_STRUCTURE.medium.join(" | ")}</div>
+            <div><span className="text-muted-foreground">utm_campaign:</span> {UTM_STRUCTURE.campaign}</div>
+            <div><span className="text-muted-foreground">utm_content:</span> {UTM_STRUCTURE.content}</div>
+          </div>
+        </TextureCard>
+      </div>
+
+      <TextureCard className="p-4">
+        <h4 className="mb-3 text-sm font-semibold flex items-center gap-2">
+          <Mic className="size-4" /> Audio · specs de masterización
+        </h4>
+        <div className="grid gap-3 sm:grid-cols-3 text-xs">
+          <div>
+            <p className="text-[10px] uppercase text-muted-foreground mb-1">Niveles</p>
+            <p>🎤 Voz: <code>{AUDIO_SPECS.voice}</code></p>
+            <p>🎵 Música: <code>{AUDIO_SPECS.music}</code></p>
+            <p>🔊 SFX: <code>{AUDIO_SPECS.sfx}</code></p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase text-muted-foreground mb-1">Máster final</p>
+            <p className="font-mono text-emerald-300">{AUDIO_SPECS.master}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{AUDIO_SPECS.musicStyle}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase text-muted-foreground mb-1">Cadena FFmpeg</p>
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(AUDIO_SPECS.ffmpegChain);
+                toast.success("Cadena copiada");
+              }}
+              className="text-[10px] font-mono text-cyan-300 hover:text-cyan-200 text-left"
+            >
+              <code className="line-clamp-3 break-all">{AUDIO_SPECS.ffmpegChain}</code>
+              <span className="mt-1 inline-flex items-center gap-1 text-[9px] text-muted-foreground">
+                <Copy className="size-2.5" /> Click para copiar
+              </span>
+            </button>
+          </div>
+        </div>
+      </TextureCard>
+    </div>
+  );
+}
+
+// ─── TEMPLATES VIEW ────────────────────────────────────────────────────────
+
+function TemplatesView() {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        {CONTENT_FORMATS.length} formatos oficiales · specs reales del repo bewe-studio
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {CONTENT_FORMATS.map((f) => (
+          <motion.div key={f.id} whileHover={{ y: -2 }}>
+            <TextureCard className="p-4 h-full space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="flex size-12 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 text-2xl shrink-0">
+                  {f.icon}
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold leading-tight">{f.name}</h4>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground line-clamp-2">{f.description}</p>
+                </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px] border-t border-border/40 pt-2">
+                <div>
+                  <p className="text-muted-foreground">Aspect</p>
+                  <code className="font-mono text-cyan-300">{f.aspectRatio}</code>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Dimensiones</p>
+                  <code className="font-mono text-cyan-300">{f.dimensions}</code>
+                </div>
+                {f.duration && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">Duración</p>
+                    <code className="font-mono text-cyan-300">{f.duration}</code>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                {f.canvaTemplate && (
+                  <a
+                    href={f.canvaTemplate}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md bg-pink-500/15 border border-pink-500/30 px-2.5 py-1.5 text-[10px] font-medium text-pink-200 hover:bg-pink-500/25 transition"
+                  >
+                    <ImageIcon className="size-3" /> Abrir en Canva <ExternalLink className="size-2.5" />
+                  </a>
+                )}
+                {f.beweStudioCommand && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(f.beweStudioCommand!);
+                      toast.success("Comando copiado");
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1.5 text-[10px] font-medium text-emerald-200 hover:bg-emerald-500/25 transition"
+                  >
+                    <Terminal className="size-3" /> <code>{f.beweStudioCommand}</code>
+                  </button>
+                )}
+              </div>
+            </TextureCard>
+          </motion.div>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ---------- Header ---------- */
+// ─── GENERATOR VIEW ────────────────────────────────────────────────────────
 
-function DesignHeader({
-  mode,
-  setMode,
-  personaLabel,
-  onOnboarding,
-}: {
-  mode: "design" | "canvas";
-  setMode: (m: "design" | "canvas") => void;
-  personaLabel: string;
-  onOnboarding: () => void;
-}) {
+function GeneratorView() {
+  const [brief, setBrief] = React.useState("");
+  const [format, setFormat] = React.useState<string>("carousel");
+  const [mode, setMode] = React.useState<"image" | "html">("image");
+  const [loading, setLoading] = React.useState(false);
+  const [result, setResult] = React.useState<{ dataUri?: string; html?: string; mimeType?: string } | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const formatDef = CONTENT_FORMATS.find((f) => f.id === format);
+
+  const generate = async () => {
+    if (!brief.trim()) {
+      toast.error("Escribe un brief primero");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const systemPrompt = buildBrandGuardrailsPrompt();
+      const fullPrompt = `${systemPrompt}\n\nFORMATO: ${formatDef?.name} (${formatDef?.aspectRatio}, ${formatDef?.dimensions})\nBRIEF: ${brief}`;
+
+      if (mode === "image") {
+        const r = await fetch("/api/nano-banana", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: fullPrompt }),
+        });
+        const d = await r.json();
+        if (d.dataUri) {
+          setResult({ dataUri: d.dataUri, mimeType: d.mimeType });
+          pushHistory({
+            id: Date.now().toString(),
+            timestamp: Date.now(),
+            skillId: format,
+            brief,
+            html: "",
+            previewDataUri: d.dataUri,
+          });
+        } else {
+          setError(d.error ?? "Sin imagen generada");
+        }
+      } else {
+        const r = await fetch("/api/gemini", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: `Genera HTML/CSS para este brief en formato ${formatDef?.aspectRatio} (${formatDef?.dimensions}). Brief: ${brief}`,
+            system: systemPrompt,
+            maxTokens: 4096,
+          }),
+        });
+        const d = await r.json();
+        if (d.text) {
+          setResult({ html: d.text });
+          pushHistory({
+            id: Date.now().toString(),
+            timestamp: Date.now(),
+            skillId: format,
+            brief,
+            html: d.text,
+          });
+        } else {
+          setError(d.error ?? "Sin contenido generado");
+        }
+      }
+      toast.success("Generado · guardado en histórico");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <motion.header
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className={cn(
-        "relative rounded-2xl border border-border/60 bg-card/40 backdrop-blur px-5 py-4 sm:px-6 sm:py-5 overflow-hidden",
-      )}
-    >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-20 -right-10 size-56 rounded-full bg-[hsl(var(--brand-violet)/0.18)] blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-24 -left-10 size-56 rounded-full bg-[hsl(var(--brand-cyan)/0.14)] blur-3xl"
-      />
-
-      <div className="relative flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex-1 min-w-[280px]">
-          <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-bold mb-2">
-            <Sparkles className="size-3 text-[hsl(var(--brand-violet))]" />
-            Open Design · Bewe OS
+    <div className="grid gap-4 lg:grid-cols-[420px_1fr] min-h-[600px]">
+      <div className="space-y-3">
+        <TextureCard className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 text-violet-400" />
+            <h4 className="text-sm font-semibold">Generador IA</h4>
+            <Badge variant="outline" className="ml-auto text-[9px] gap-1">
+              <ShieldCheck className="size-2.5 text-emerald-400" /> Brand-safe
+            </Badge>
           </div>
-          <h1 className="font-display text-[28px] sm:text-[34px] font-extrabold leading-[1.05] tracking-[-0.025em]">
-            Genera piezas con AI{" "}
-            <span className="bg-gradient-to-r from-[hsl(var(--brand-violet))] to-[hsl(var(--brand-cyan))] bg-clip-text text-transparent">
-              en segundos
-            </span>
-          </h1>
-          <p className="mt-2 text-[12.5px] text-muted-foreground leading-relaxed max-w-[640px]">
-            Elegí una plantilla o describí tu idea — {" "}
-            <span className="text-foreground font-semibold">{personaLabel}</span>{" "}
-            la diseñará respetando colores, tipografía y voz de marca Bewe.
-            Previsualizá en vivo y exportá listo para publicar.
-          </p>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">Formato</label>
+            <Select value={format} onValueChange={setFormat}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONTENT_FORMATS.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.icon} {f.name} · {f.dimensions}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">Tipo de salida</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setMode("image")}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-xs transition",
+                  mode === "image" ? "border-violet-500/40 bg-violet-500/10 text-violet-200" : "border-border/40 text-muted-foreground hover:bg-muted/40",
+                )}
+              >
+                <ImageIcon className="size-3" /> Imagen (Nano Banana)
+              </button>
+              <button
+                onClick={() => setMode("html")}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-xs transition",
+                  mode === "html" ? "border-violet-500/40 bg-violet-500/10 text-violet-200" : "border-border/40 text-muted-foreground hover:bg-muted/40",
+                )}
+              >
+                <Code className="size-3" /> HTML (Gemini)
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">Brief</label>
+            <Textarea
+              value={brief}
+              onChange={(e) => setBrief(e.target.value)}
+              placeholder="Ej: Carrusel para PYMEs de belleza, mostrando que Bewe ahorra 3 horas al día con CRM + agenda + WhatsApp automatizado. Frase central: 'Deja de operar. Empieza a dirigir.' Estilo editorial con gradiente Linda."
+              rows={6}
+              className="text-xs"
+            />
+          </div>
+
+          <Button
+            onClick={generate}
+            disabled={loading || !brief.trim()}
+            className="w-full gap-1.5 bg-gradient-to-r from-violet-500 to-cyan-500"
+          >
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
+            Generar {mode === "image" ? "imagen" : "HTML"}
+          </Button>
+
+          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.05] p-2 text-[10px] space-y-1">
+            <p className="text-emerald-300 font-medium flex items-center gap-1">
+              <ShieldCheck className="size-3" /> Brand kit pre-cargado
+            </p>
+            <p className="text-emerald-200/70">
+              El prompt incluye la paleta, tipografía, gradientes y reglas no-negociables. La IA NO puede
+              usar #000, #FFF, morado, emojis, etc.
+            </p>
+          </div>
+        </TextureCard>
+      </div>
+
+      <TextureCard className="p-4 flex flex-col">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <Eye className="size-4" /> Preview
+          </h4>
+          {result && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (result.dataUri) {
+                  const a = document.createElement("a");
+                  a.href = result.dataUri;
+                  a.download = `bewe-${format}-${Date.now()}.${result.mimeType?.split("/")[1] ?? "png"}`;
+                  a.click();
+                } else if (result.html) {
+                  navigator.clipboard?.writeText(result.html);
+                  toast.success("HTML copiado");
+                }
+              }}
+              className="gap-1.5 text-[10px] h-7"
+            >
+              <Download className="size-3" /> Descargar
+            </Button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="violet" className="font-mono">
-            {mode === "design" ? `${personaLabel} · gen` : "tldraw v3"}
-          </Badge>
-          {mode === "design" && (
-            <button
-              type="button"
-              onClick={onOnboarding}
-              title="Ver tutorial Open Design"
-              aria-label="Ver tutorial Open Design"
-              className="inline-flex items-center justify-center size-8 rounded-md border border-border bg-card/40 text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-            >
-              <HelpCircle className="size-3.5" />
-            </button>
-          )}
-          <Button
-            variant={mode === "design" ? "outline" : "default"}
-            size="sm"
-            onClick={() => setMode(mode === "design" ? "canvas" : "design")}
-            title={
-              mode === "design"
-                ? "Abrir canvas manual tldraw"
-                : "Volver al generador AI"
-            }
-          >
-            {mode === "design" ? (
-              <>
-                <Pencil className="size-3.5" /> Canvas manual
-              </>
-            ) : (
-              <>
-                <Sparkles className="size-3.5" /> Volver al generador
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    </motion.header>
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <Loader2 className="size-8 animate-spin text-violet-400 mx-auto" />
+              <p className="text-xs text-muted-foreground">Generando con brand kit aplicado...</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center max-w-sm">
+              <AlertTriangle className="size-8 text-rose-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-rose-300">Error</p>
+              <p className="text-xs text-muted-foreground mt-1">{error}</p>
+            </div>
+          </div>
+        ) : result?.dataUri ? (
+          <div className="flex-1 flex items-center justify-center bg-muted/10 rounded-md overflow-hidden">
+            <img src={result.dataUri} alt="Resultado" className="max-w-full max-h-[520px] object-contain" />
+          </div>
+        ) : result?.html ? (
+          <iframe srcDoc={result.html} title="Preview HTML" className="flex-1 w-full rounded-md bg-white" />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-center">
+            <div className="max-w-sm">
+              <Sparkles className="size-12 mx-auto mb-3 opacity-30 text-violet-400" />
+              <p className="text-sm font-medium">Listo para generar</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Describe lo que quieres y la IA lo crea con el brand kit de Bewe aplicado automáticamente.
+              </p>
+            </div>
+          </div>
+        )}
+      </TextureCard>
+    </div>
   );
 }
 
-function PreviewMeta({
-  variant,
-  html,
-  skillLabel,
-  genMode,
-  imageCount,
-}: {
-  variant: number;
-  html: string | null;
-  skillLabel: string;
-  genMode: OpenDesignMode;
-  imageCount: number;
-}) {
-  const showMode = genMode !== "html";
-  const modeLabel =
-    genMode === "image" ? "Nano Banana" : genMode === "hybrid" ? "Híbrido" : "HTML";
+// ─── LIBRARY VIEW ──────────────────────────────────────────────────────────
+
+const LIBRARY_RESOURCES = [
+  { title: "Repo bewe-studio (skill)", category: "referencias" as const, description: "Repositorio completo · brand kit + templates Remotion + references", url: "https://github.com/santiagovarela-afk/bewe-studio", icon: "📚" },
+  { title: "Inter (Google Fonts)", category: "fonts" as const, description: "Tipografía principal · pesos 400/600/700/800", url: "https://fonts.google.com/specimen/Inter", icon: "🔤" },
+  { title: "Merriweather Italic", category: "fonts" as const, description: "SOLO para Linda y keywords aislados", url: "https://fonts.google.com/specimen/Merriweather", icon: "🔤" },
+  { title: "Higgsfield Soul (Avatares)", category: "referencias" as const, description: "Generador de avatares AI para personajes recurrentes", url: "https://higgsfield.ai", icon: "👤" },
+  { title: "Deep house cálido (mood)", category: "musica" as const, description: "Estilo musical recomendado · busca playlists en Spotify", icon: "🎵" },
+  { title: "Lo-fi boom-bap", category: "musica" as const, description: "Mood alterno para piezas más reflexivas", icon: "🎶" },
+];
+
+function LibraryView() {
+  const [filter, setFilter] = React.useState<string>("all");
+  const filtered = filter === "all" ? LIBRARY_RESOURCES : LIBRARY_RESOURCES.filter((r) => r.category === filter);
+
   return (
-    <div className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-card/85 backdrop-blur border border-border/60 text-[10px] font-mono text-muted-foreground shadow-sm">
-      <ChevronRight className="size-2.5 text-[hsl(var(--brand-violet))]" />
-      <span className="text-foreground font-semibold">{skillLabel}</span>
-      {showMode && (
-        <>
-          <span className="text-muted-foreground/40">·</span>
-          <span className="text-[hsl(var(--brand-violet))] font-bold">{modeLabel}</span>
-        </>
-      )}
-      {(html || imageCount > 0) && (
-        <>
-          <span className="text-muted-foreground/40">·</span>
-          <span>v{variant}</span>
-          {html && (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span>{Math.round(html.length / 1024)}KB</span>
-            </>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        {["all", "referencias", "musica", "fonts"].map((c) => (
+          <button
+            key={c}
+            onClick={() => setFilter(c)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium border transition-colors",
+              filter === c ? "bg-primary/15 text-primary border-primary/40" : "border-border/40 text-muted-foreground hover:bg-muted/40",
+            )}
+          >
+            {c === "all" ? "Todo" : c.charAt(0).toUpperCase() + c.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((r) => (
+          <TextureCard key={r.title} className="p-4 space-y-2">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">{r.icon}</div>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-semibold">{r.title}</h4>
+                <Badge variant="outline" className="text-[9px] mt-0.5">{r.category}</Badge>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">{r.description}</p>
+            {r.url && (
+              <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 transition">
+                Abrir <ExternalLink className="size-2.5" />
+              </a>
+            )}
+          </TextureCard>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── STUDIO CLI VIEW ───────────────────────────────────────────────────────
+
+function StudioCLIView() {
+  const [copied, setCopied] = React.useState<string | null>(null);
+  const [briefForClaude, setBriefForClaude] = React.useState("");
+
+  const copy = (text: string, label: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 1500);
+    toast.success(`${label} copiado`);
+  };
+
+  const claudePrompt = briefForClaude.trim()
+    ? `Usa la skill bewe-studio para generar contenido para Bewe.\n\nBRIEF:\n${briefForClaude}\n\nSigue estrictamente el brand kit de Bewe (paleta navy/aqua/emerald, Inter + Merriweather, NO emojis, NO #000/#FFF, NO morado). Genera reels/carruseles/portadas según corresponda.`
+    : `Usa la skill bewe-studio para generar contenido para Bewe siguiendo estrictamente el brand kit (navy/aqua/emerald · Inter + Merriweather).`;
+
+  return (
+    <div className="space-y-4">
+      <TextureCard className="p-5 bg-gradient-to-br from-emerald-500/[0.06] to-cyan-500/[0.04] border-emerald-500/20">
+        <div className="flex items-start gap-4">
+          <div className="flex size-12 items-center justify-center rounded-lg bg-emerald-500/20">
+            <Terminal className="size-6 text-emerald-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold">Bewe Studio (Local)</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Para videos reales (Remotion + FFmpeg + Whisper) corres la skill en Claude Code. El dashboard te da el
+              prompt pre-armado y te lleva ahí.
+            </p>
+            <a
+              href="https://github.com/santiagovarela-afk/bewe-studio"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300"
+            >
+              Repo bewe-studio en GitHub <ExternalLink className="size-3" />
+            </a>
+          </div>
+        </div>
+      </TextureCard>
+
+      <TextureCard className="p-4 space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <Download className="size-4" /> 1. Instala la skill (una sola vez)
+        </h4>
+        <CommandBlock cmd={`git clone https://github.com/santiagovarela-afk/bewe-studio.git ~/.claude/skills/bewe-studio`} onCopy={copy} />
+        <p className="text-[10px] text-muted-foreground">
+          Después de esto, Claude Code activa la skill automáticamente cada vez que pides contenido de Bewe.
+        </p>
+      </TextureCard>
+
+      <TextureCard className="p-4 space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <Code className="size-4" /> 2. Dependencias externas
+        </h4>
+        <CommandBlock cmd="brew install ffmpeg python3" label="macOS · Linux usa apt/dnf equivalente" onCopy={copy} />
+        <CommandBlock cmd="pip install openai-whisper" label="Transcripción de audio" onCopy={copy} />
+        <CommandBlock cmd="cd ~/.claude/skills/bewe-studio/assets/template && npm install" label="Deps del template Remotion" onCopy={copy} />
+      </TextureCard>
+
+      <TextureCard className="p-4 space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <Wand2 className="size-4" /> 3. Comandos comunes
+        </h4>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <CommandBlock cmd="npm run dev" label="Remotion Studio · edición visual" onCopy={copy} />
+          <CommandBlock cmd="npm run render" label="Renderizar reel a MP4 (9:16)" onCopy={copy} />
+          <CommandBlock cmd="npm run cover" label="Generar imagen portada" onCopy={copy} />
+          <CommandBlock cmd="npm run story1" label="Story interactiva" onCopy={copy} />
+        </div>
+      </TextureCard>
+
+      <TextureCard className="p-4 space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <Sparkles className="size-4" /> 4. Prompt builder para Claude Code
+        </h4>
+        <p className="text-xs text-muted-foreground">Describe lo que necesitas y te genero el prompt completo:</p>
+        <Textarea
+          value={briefForClaude}
+          onChange={(e) => setBriefForClaude(e.target.value)}
+          placeholder="Ej: Necesito un reel de 20s mostrando cómo Bewe automatiza WhatsApp para salones. Música deep house. Frase final: 'Pruébalo gratis 30 días'."
+          rows={3}
+          className="text-xs"
+        />
+        <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.05] p-3 space-y-2">
+          <p className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">Prompt generado</p>
+          <pre className="text-[11px] text-emerald-100 whitespace-pre-wrap font-mono leading-relaxed">{claudePrompt}</pre>
+          <Button onClick={() => copy(claudePrompt, "Prompt")} size="sm" variant="outline" className="gap-1.5 w-full">
+            {copied === "Prompt" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            Copiar prompt para Claude Code
+          </Button>
+        </div>
+      </TextureCard>
+    </div>
+  );
+}
+
+function CommandBlock({ cmd, label, onCopy }: { cmd: string; label?: string; onCopy: (text: string, label: string) => void }) {
+  return (
+    <div className="rounded-md border border-border/40 bg-black/30 p-2">
+      {label && <p className="text-[9px] text-muted-foreground mb-1">{label}</p>}
+      <div className="flex items-center gap-2">
+        <code className="text-[11px] font-mono text-emerald-300 flex-1 break-all">{cmd}</code>
+        <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={() => onCopy(cmd, "Comando")}>
+          <Copy className="size-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── CANVA VIEW ────────────────────────────────────────────────────────────
+
+const CANVA_LINKS = [
+  { title: "Nuevo Reel 9:16", url: "https://www.canva.com/design/play?category=tACFasH-mPo", icon: "🎬", description: "Inicia un Reel con dimensiones IG/TikTok" },
+  { title: "Nuevo Carrusel 4:5", url: "https://www.canva.com/design/play?category=tACFasH-Q9o", icon: "📐", description: "Slides múltiples para feed IG/FB" },
+  { title: "Nueva Historia", url: "https://www.canva.com/design/play?category=tACFasGoUjQ", icon: "📱", description: "Stories 9:16 con stickers y poll" },
+  { title: "Post Feed cuadrado", url: "https://www.canva.com/design/play?category=tACFasJWHrw", icon: "📷", description: "Imagen 1:1 para feed" },
+  { title: "Logo / Marca", url: "https://www.canva.com/design/play?category=tACFafQEZkc", icon: "✨", description: "Crear sub-marcas o variantes" },
+  { title: "Templates de mi equipo", url: "https://www.canva.com/folder/all-team-templates", icon: "📚", description: "Templates compartidos del equipo Bewe" },
+];
+
+function CanvaView() {
+  return (
+    <div className="space-y-4">
+      <TextureCard className="p-5 bg-gradient-to-br from-pink-500/[0.06] to-purple-500/[0.04] border-pink-500/20">
+        <div className="flex items-start gap-4">
+          <div className="flex size-12 items-center justify-center rounded-lg bg-pink-500/20">
+            <ImageIcon className="size-6 text-pink-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold">Canva · acceso rápido</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Deep links a Canva con cada formato pre-configurado. Para tener el brand kit de Bewe disponible automáticamente,
+              configura el <strong className="text-foreground">Brand Kit de Canva</strong> en tu cuenta del equipo con los
+              colores y fuentes oficiales.
+            </p>
+            <a href="https://www.canva.com/brand" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs text-pink-400 hover:text-pink-300">
+              Configurar Brand Kit en Canva <ExternalLink className="size-3" />
+            </a>
+          </div>
+        </div>
+      </TextureCard>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {CANVA_LINKS.map((link) => (
+          <motion.a key={link.url} whileHover={{ y: -2 }} href={link.url} target="_blank" rel="noopener noreferrer" className="block">
+            <TextureCard className="p-4 h-full hover:border-pink-500/40 transition-colors">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-pink-500/15 text-xl shrink-0">{link.icon}</div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-semibold flex items-center gap-1.5">
+                    {link.title} <ExternalLink className="size-3 opacity-50" />
+                  </h4>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{link.description}</p>
+                </div>
+              </div>
+            </TextureCard>
+          </motion.a>
+        ))}
+      </div>
+
+      <TextureCard className="p-4 border-amber-500/20 bg-amber-500/[0.04]">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="size-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-200/80">
+            <p className="font-medium mb-1">¿Quieres integración real con Canva Connect API?</p>
+            <p>
+              Lo que ves arriba son deep-links (Opción A). Para crear/editar designs directamente desde el dashboard
+              (Opción B) necesitamos registrar la app en Canva Developer + OAuth. ~2-3 horas. Avísame cuando lo decidas activar.
+            </p>
+          </div>
+        </div>
+      </TextureCard>
+    </div>
+  );
+}
+
+// ─── HISTORY VIEW ──────────────────────────────────────────────────────────
+
+function HistoryView() {
+  const [history, setHistory] = React.useState<HistoryEntry[]>([]);
+
+  React.useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
+
+  const refresh = () => setHistory(loadHistory());
+
+  const wipe = () => {
+    if (!confirm("¿Borrar TODO el histórico de generaciones?")) return;
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("bw_open_design_history");
+    }
+    setHistory([]);
+    toast.success("Histórico borrado");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <HistoryIcon className="size-4" /> Histórico de generaciones
+          </h4>
+          <p className="text-[10px] text-muted-foreground">
+            {history.length} generaciones · localStorage de este navegador
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={refresh} variant="outline" size="sm">
+            <RefreshCw className="size-3.5" />
+          </Button>
+          {history.length > 0 && (
+            <Button onClick={wipe} variant="outline" size="sm" className="gap-1.5 text-rose-400 border-rose-500/30">
+              <Trash2 className="size-3.5" /> Limpiar
+            </Button>
           )}
-          {!html && imageCount > 0 && (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span>
-                {imageCount} img
-              </span>
-            </>
-          )}
-        </>
+        </div>
+      </div>
+
+      {history.length === 0 ? (
+        <TextureCard className="p-12 text-center">
+          <HistoryIcon className="size-12 mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">Sin generaciones todavía</p>
+          <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+            Cuando generes contenido en "Generador IA", aparecerá aquí con preview, brief y fecha.
+          </p>
+        </TextureCard>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[...history].reverse().map((h) => (
+            <TextureCard key={h.id} className="p-3 space-y-2">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>{new Date(h.timestamp).toLocaleString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                <Badge variant="outline" className="text-[9px]">{h.skillId}</Badge>
+              </div>
+              {h.previewDataUri && (
+                <div className="aspect-square overflow-hidden rounded bg-muted/40">
+                  <img src={h.previewDataUri} alt="" className="h-full w-full object-contain" />
+                </div>
+              )}
+              <p className="text-xs line-clamp-3">{h.brief}</p>
+            </TextureCard>
+          ))}
+        </div>
       )}
     </div>
   );

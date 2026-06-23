@@ -1,19 +1,21 @@
 /**
- * Open Design · historial local de las últimas 10 piezas generadas.
- * Solo metadata + HTML · se guarda en localStorage. Reusable en el control panel.
+ * Bewe Studio · historial local de generaciones.
+ * Solo metadata + preview · se guarda en localStorage.
  */
 
 export interface HistoryEntry {
-  id: string; // ISO timestamp
+  id: string;
+  timestamp: number;
   skillId: string;
   brief: string;
-  variant: number;
   html: string;
-  persona: "mark" | "lua";
+  previewDataUri?: string;
+  persona?: "mark" | "lua";
+  variant?: number;
 }
 
-const KEY = "bw_open_design_history_v1";
-const MAX = 10;
+const KEY = "bw_open_design_history_v2";
+const MAX = 30;
 
 export function loadHistory(): HistoryEntry[] {
   if (typeof window === "undefined") return [];
@@ -38,4 +40,13 @@ export function pushHistory(entry: HistoryEntry): HistoryEntry[] {
     /* quota · ignore */
   }
   return next;
+}
+
+export function clearHistory() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(KEY);
+  } catch {
+    /* ignore */
+  }
 }

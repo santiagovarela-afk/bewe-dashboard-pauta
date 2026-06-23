@@ -20,7 +20,7 @@
 export interface PrivateUser {
   email: string;
   password: string;
-  role: "admin" | "lead" | "content";
+  role: "admin" | "lead" | "content" | "social";
   name: string;
 }
 
@@ -173,7 +173,7 @@ export function resetPrivateConfigCache(): void {
 export interface AuthSessionUser {
   email: string;
   name: string;
-  role: "admin" | "lead" | "content";
+  role: "admin" | "lead" | "content" | "social";
 }
 
 /** Valida login contra env-loaded USERS · timing-safe. */

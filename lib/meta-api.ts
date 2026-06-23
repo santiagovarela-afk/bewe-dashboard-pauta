@@ -15,21 +15,34 @@ const ALLOWED_ENDPOINT_PATTERNS: RegExp[] = [
   // Cuenta publicitaria
   new RegExp(`^${PLAN.meta.accountId}(/(insights|ads|adsets|campaigns|customaudiences|adcreatives))?$`),
   /^\d+\/insights$/,
-  // Instagram
+  // Instagram · media + comentarios + replies a comments IG
   new RegExp(`^${PLAN.meta.igAccountId}(/(media|media_publish|insights))?$`),
-  // Página Facebook · paths de lectura/publicación
-  new RegExp(`^${PLAN.meta.pageId}(/(photos|posts|feed|published_posts|tagged|videos|insights))?$`),
-  // Lookups por ID (creative · adset · ad)
-  /^\d+(\/insights)?$/,
+  // Página Facebook · paths de lectura/publicación + conversations (Messenger)
+  new RegExp(`^${PLAN.meta.pageId}(/(photos|posts|feed|published_posts|tagged|videos|insights|conversations))?$`),
+  // Lookups por ID (creative · adset · ad · IG media · FB post · comment)
+  // Incluye /comments (FB post + IG media) · /replies (responder IG comment)
+  /^\d+(\/(insights|comments|replies))?$/,
+  // Conversations Messenger · IDs tipo "t_2048315332430427"
+  /^t_\d+(\/messages)?$/,
+  // Envío de mensajes via página (POST /me/messages usando Page Token)
+  /^me\/messages$/,
   // Diagnóstico
   /^me(\/permissions|\/accounts)?$/,
   /^debug_token$/,
 ];
 
 /** Endpoints que requieren Page Access Token (no System User). */
-const PAGE_ENDPOINT_PATTERN = new RegExp(
-  `^${PLAN.meta.pageId}(/(posts|feed|published_posts|photos|tagged|videos|insights))?$`,
-);
+const PAGE_ENDPOINT_PATTERNS: RegExp[] = [
+  new RegExp(`^${PLAN.meta.pageId}(/(posts|feed|published_posts|photos|tagged|videos|insights|conversations))?$`),
+  // FB post comments — los post IDs FB tienen formato pageId_postId
+  new RegExp(`^${PLAN.meta.pageId}_\\d+(/comments)?$`),
+  // Conversations IDs (t_XXXXX) y sus mensajes
+  /^t_\d+(\/messages)?$/,
+  // Enviar mensaje desde página
+  /^me\/messages$/,
+  // Responder a comentario FB (los comment IDs FB también tienen formato pageId_commentId)
+  new RegExp(`^${PLAN.meta.pageId}_\\d+\\/comments$`),
+];
 
 export function isEndpointAllowed(endpoint: string): boolean {
   if (!endpoint || typeof endpoint !== "string") return false;
@@ -37,14 +50,14 @@ export function isEndpointAllowed(endpoint: string): boolean {
 }
 
 function needsPageToken(endpoint: string): boolean {
-  return PAGE_ENDPOINT_PATTERN.test(endpoint);
+  return PAGE_ENDPOINT_PATTERNS.some((re) => re.test(endpoint));
 }
 
 // ── Cache en memoria del Page Access Token ─────────────────────────────
 let pageTokenCache: { token: string; expiresAt: number } | null = null;
 const PAGE_TOKEN_TTL_MS = 50 * 60 * 1000; // 50 min · refresca antes de la hora
 
-async function getPageAccessToken(systemToken: string): Promise<string | null> {
+export async function getPageAccessToken(systemToken: string): Promise<string | null> {
   if (pageTokenCache && pageTokenCache.expiresAt > Date.now()) {
     return pageTokenCache.token;
   }

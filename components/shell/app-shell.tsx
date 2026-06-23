@@ -18,6 +18,7 @@ import { TabSeo } from "@/components/tabs/tab-seo";
 import { TabAeo } from "@/components/tabs/tab-aeo";
 import { TabPerformance } from "@/components/tabs/tab-performance";
 import { TabOpenBui } from "@/components/tabs/tab-open-bui";
+import { TabComunidad } from "@/components/tabs/tab-comunidad";
 import { NoiseBackdrop } from "@/components/fx/noise";
 import { AiDock } from "@/components/ai-dock/ai-dock";
 import { OnboardingTrigger } from "@/components/onboarding/onboarding-trigger";
@@ -35,6 +36,7 @@ const TAB_MAP: Record<string, React.ComponentType> = {
   performance: TabPerformance,
   "open-bui": TabOpenBui,
   informe: TabInforme,
+  comunidad: TabComunidad,
   config: TabConfig,
 };
 

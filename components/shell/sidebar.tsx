@@ -17,6 +17,7 @@ import {
   Gauge,
   Palette,
   Brain,
+  MessageCircle,
 } from "lucide-react";
 import { TABS, TAB_GROUPS, ROLE_TABS, PLAN } from "@/lib/config";
 import { useDashboard } from "@/lib/store";
@@ -37,6 +38,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Gauge,
   Palette,
   Brain,
+  MessageCircle,
 };
 
 export function Sidebar() {

@@ -98,13 +98,15 @@ export function getByCode(code: string): CampaignMapEntry | undefined {
 export const ROLE_TABS: Record<string, string[]> = {
   admin: [
     "dashboard", "campanas", "estrategia", "paid", "anuncios", "organico",
-    "parrilla", "seo", "aeo", "performance", "open-bui", "informe", "config",
+    "parrilla", "seo", "aeo", "performance", "open-bui", "informe", "comunidad", "config",
   ],
   lead: [
     "dashboard", "campanas", "estrategia", "paid", "anuncios", "organico",
-    "parrilla", "seo", "aeo", "performance", "open-bui", "informe",
+    "parrilla", "seo", "aeo", "performance", "open-bui", "informe", "comunidad",
   ],
-  content: ["dashboard", "anuncios", "organico", "parrilla", "open-bui"],
+  content: ["dashboard", "anuncios", "organico", "parrilla", "open-bui", "comunidad"],
+  // Rol "social" (Esneider y similares): foco en redes sociales · sin pauta paga
+  social: ["estrategia", "organico", "parrilla", "informe", "open-bui", "comunidad"],
 };
 
 // USERS se movió a env var `AUTH_USERS_JSON` (server-only)
@@ -124,6 +126,7 @@ export const TABS = [
   { id: "seo",         label: "SEO",         icon: "Search",           group: "analítica" },
   { id: "aeo",         label: "AEO · LLMs",  icon: "Brain",            group: "analítica" },
   { id: "informe",     label: "Informe",     icon: "FileText",         group: "analítica" },
+  { id: "comunidad",   label: "Comunidad",   icon: "MessageCircle",    group: "contenido" },
   { id: "config",      label: "Config",      icon: "Settings2",        group: "admin" },
 ] as const;
 

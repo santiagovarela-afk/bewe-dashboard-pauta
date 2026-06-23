@@ -134,16 +134,58 @@ export function saveStatus(itemId: string, status: "nuevo" | "leido" | "respondi
 
 // ─── PLANTILLAS ────────────────────────────────────────────────────────────
 
+export type Industry = "belleza" | "comercio" | "servicios" | "tools" | "general";
+export type Intent = "demo" | "trial" | "precios" | "info" | "soporte" | "agradecimiento" | "descartar";
+
 export interface Template {
   id: string;
   name: string;
   text: string;
   icon: string;
+  industry: Industry;
+  intent: Intent;
+  /** URL base destino (sin UTMs). Si está vacía no se genera link. */
+  urlBase?: string;
   useCount: number;
   createdAt: string;
 }
 
-const TEMPLATES_KEY = "bewe_comunidad_templates_v1";
+const TEMPLATES_KEY = "bewe_comunidad_templates_v2";
+
+/** Campaña actual del mes para UTMs (sincronizar mensualmente). */
+export const CURRENT_UTM_CAMPAIGN = "junio_redes_2026";
+
+/**
+ * Construye URL con UTMs estandarizadas según el plan de junio · redes.
+ * - utm_source: plataforma (instagram | facebook | messenger)
+ * - utm_medium: "comunidad" (todas las respuestas desde este módulo)
+ * - utm_campaign: junio_redes_<industria>
+ * - utm_content: <intent del template>
+ */
+export function buildUTMUrl(
+  urlBase: string,
+  opts: { platform: "ig" | "fb" | "messenger"; industry: Industry; intent: Intent },
+): string {
+  if (!urlBase) return "";
+  const source =
+    opts.platform === "ig"
+      ? "instagram"
+      : opts.platform === "fb"
+        ? "facebook"
+        : "messenger";
+  const campaign = `${CURRENT_UTM_CAMPAIGN.replace(/_\d{4}$/, "")}_${opts.industry}_2026`;
+  try {
+    const u = new URL(urlBase);
+    u.searchParams.set("utm_source", source);
+    u.searchParams.set("utm_medium", "comunidad");
+    u.searchParams.set("utm_campaign", campaign);
+    u.searchParams.set("utm_content", opts.intent);
+    return u.toString();
+  } catch {
+    // urlBase no válida; devolver tal cual
+    return urlBase;
+  }
+}
 
 /** Plantillas iniciales (se cargan si no hay nada en localStorage). */
 export const DEFAULT_TEMPLATES: Omit<Template, "useCount" | "createdAt">[] = [
@@ -151,48 +193,123 @@ export const DEFAULT_TEMPLATES: Omit<Template, "useCount" | "createdAt">[] = [
     id: "saludo",
     name: "Saludo inicial",
     icon: "👋",
+    industry: "general",
+    intent: "info",
     text: "¡Hola {{nombre}}! Gracias por escribirnos. Soy del equipo de Bewe y estaré encantado de ayudarte. ¿En qué te puedo apoyar?",
   },
   {
-    id: "precios",
-    name: "Info de precios",
+    id: "precios-belleza",
+    name: "Precios · Belleza",
     icon: "💰",
-    text: "¡Buenísimo que preguntes! Los planes de Bewe arrancan desde €19/mes con todo incluido (agenda + CRM + automatizaciones). ¿Quieres que te agende una demo de 15 min con un asesor para mostrarte cómo se adapta a tu negocio?",
+    industry: "belleza",
+    intent: "precios",
+    urlBase: "https://bewe.ai/belleza/precios",
+    text: "¡Buenísimo que preguntes! Para salones de belleza, los planes de Bewe arrancan desde €19/mes con agenda + CRM + automatizaciones por WhatsApp. Mira los detalles aquí: {{link}} · ¿Te agendo una demo de 15 min?",
   },
   {
-    id: "demo",
+    id: "precios-comercio",
+    name: "Precios · Comercio",
+    icon: "💰",
+    industry: "comercio",
+    intent: "precios",
+    urlBase: "https://bewe.ai/comercio/precios",
+    text: "Para retail/comercio, los planes arrancan desde €19/mes con inventario + CRM + pagos. Mira los detalles aquí: {{link}} · ¿Te agendo una demo personalizada?",
+  },
+  {
+    id: "precios-servicios",
+    name: "Precios · Servicios",
+    icon: "💰",
+    industry: "servicios",
+    intent: "precios",
+    urlBase: "https://bewe.ai/servicios/precios",
+    text: "Para servicios, los planes desde €19/mes con agenda inteligente + recordatorios + facturación. Detalles: {{link}} · ¿Demo de 15 min?",
+  },
+  {
+    id: "demo-general",
     name: "Agendar demo",
     icon: "📅",
-    text: "Perfecto, te muestro cómo funciona en una demo de 15 minutos sin compromiso. Reserva el horario que mejor te quede aquí: https://bewe.ai/demo · ¿O prefieres que un asesor te llame? Pásame tu WhatsApp.",
+    industry: "general",
+    intent: "demo",
+    urlBase: "https://bewe.ai/demo",
+    text: "Perfecto, te muestro cómo funciona en 15 min sin compromiso. Reserva el horario aquí: {{link}}",
   },
   {
-    id: "info-producto",
-    name: "Qué es Bewe",
-    icon: "ℹ️",
-    text: "Bewe es el sistema operativo para tu negocio: agenda inteligente, CRM con IA, automatización de mensajes, control de inventario y métricas — todo en una sola plataforma. Está diseñado para PYMEs que quieren crecer sin contratar más personal. ¿Te muestro un demo rápido?",
-  },
-  {
-    id: "trial",
-    name: "Prueba gratis",
+    id: "trial-general",
+    name: "Prueba gratis 14d",
     icon: "🎁",
-    text: "Genial, tenemos 14 días gratis sin tarjeta de crédito para que pruebes Bewe con tu negocio real. Empezar acá toma 2 minutos: https://app.bewe.ai/onboarding · ¿Cuento contigo?",
+    industry: "general",
+    intent: "trial",
+    urlBase: "https://app.bewe.ai/onboarding",
+    text: "Tenemos 14 días gratis sin tarjeta de crédito para que pruebes Bewe con tu negocio real. Empieza acá en 2 minutos: {{link}} · ¿Cuento contigo?",
+  },
+  {
+    id: "info-belleza",
+    name: "Qué es Bewe · Belleza",
+    icon: "ℹ️",
+    industry: "belleza",
+    intent: "info",
+    urlBase: "https://bewe.ai/belleza",
+    text: "Bewe es el sistema todo-en-uno para tu salón: agenda online, CRM con IA, WhatsApp automatizado, pagos y stock. Diseñado para que ahorres horas y atiendas más clientes. Conoce más: {{link}}",
+  },
+  {
+    id: "info-comercio",
+    name: "Qué es Bewe · Comercio",
+    icon: "ℹ️",
+    industry: "comercio",
+    intent: "info",
+    urlBase: "https://bewe.ai/comercio",
+    text: "Bewe es el sistema operativo de tu tienda: inventario inteligente, ventas multicanal, CRM y pagos integrados. Crece sin contratar más personal. Conoce más: {{link}}",
+  },
+  {
+    id: "tool-calculadora",
+    name: "Tool · Calculadora ROI",
+    icon: "🧮",
+    industry: "tools",
+    intent: "trial",
+    urlBase: "https://bewe.ai/tools/calculadora-roi",
+    text: "Te puede interesar nuestra calculadora gratis de ROI: en 2 min te dice cuánto puedes ahorrar/ganar implementando Bewe. Pruébala: {{link}}",
+  },
+  {
+    id: "tool-auditoria",
+    name: "Tool · Auditoría IG",
+    icon: "🔍",
+    industry: "tools",
+    intent: "trial",
+    urlBase: "https://bewe.ai/tools/auditoria-instagram",
+    text: "Tenemos una auditoría gratis de tu Instagram con recomendaciones específicas. Sirve para ver oportunidades de crecimiento sin costo: {{link}}",
+  },
+  {
+    id: "tool-comparador",
+    name: "Tool · Comparador",
+    icon: "📊",
+    industry: "tools",
+    intent: "trial",
+    urlBase: "https://bewe.ai/tools/comparador-local",
+    text: "Mira cómo está posicionado tu negocio vs la competencia local con nuestro comparador gratis: {{link}}",
   },
   {
     id: "agradecimiento",
     name: "Agradecer comentario",
     icon: "🙏",
-    text: "¡Muchas gracias {{nombre}}! Nos motiva mucho leer esto. Si en algún momento quieres conocer cómo Bewe puede impulsar tu negocio, escríbenos por aquí o reserva una demo en bewe.ai.",
+    industry: "general",
+    intent: "agradecimiento",
+    text: "¡Muchas gracias {{nombre}}! Nos motiva mucho leer esto. Si en algún momento quieres conocer cómo Bewe puede impulsar tu negocio, escríbenos por aquí.",
   },
   {
     id: "soporte",
     name: "Derivar a soporte",
     icon: "🛠️",
-    text: "Para resolver esto lo más rápido te paso con nuestro equipo de soporte. Escríbenos a soporte@bewe.ai o chatea directo desde app.bewe.ai (icono burbuja). Te responderán en menos de 1 hora hábil.",
+    industry: "general",
+    intent: "soporte",
+    urlBase: "https://app.bewe.ai",
+    text: "Para resolver esto lo más rápido te paso con soporte. Escribe a soporte@bewe.ai o chatea directo desde {{link}} (icono burbuja). Responden en <1h hábil.",
   },
   {
     id: "descartar",
     name: "Marcar descarte",
     icon: "🚫",
+    industry: "general",
+    intent: "descartar",
     text: "[Nota interna · spam u off-topic · no responder]",
   },
 ];

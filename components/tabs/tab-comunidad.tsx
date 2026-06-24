@@ -84,6 +84,11 @@ import {
   type Contact,
   type ContactStage,
 } from "@/lib/comunidad-crm";
+import {
+  findMatchingRules,
+  incrementTrigger,
+  type AutomationRule,
+} from "@/lib/comunidad-automations";
 import { useDashboard } from "@/lib/store";
 import { toast } from "sonner";
 import { ComunidadTour } from "@/components/comunidad/comunidad-tour";
@@ -1065,6 +1070,61 @@ function CommentItem({
   const isAnonymous = !rawAuthor.trim();
   const time = comment.timestamp ?? comment.created_time ?? "";
 
+  // ─── AUTOMATIZACIONES · matchear reglas configuradas ──────────────────
+  const matchingRules = React.useMemo(() => {
+    return findMatchingRules(comment.text, {
+      platform: comment.platform,
+      channel: "comment",
+    });
+  }, [comment.text, comment.platform]);
+
+  const applyRuleAction = async (rule: AutomationRule) => {
+    incrementTrigger(rule.id);
+    const action = rule.action;
+    if (action.type === "suggest-template") {
+      const templates = loadTemplates();
+      const target = templates.find((t) => t.id === action.templateId);
+      if (target) {
+        const firstName = author.split(" ")[0];
+        let body = applyTemplateVars(target.text, { nombre: firstName });
+        if (target.urlBase) {
+          const link = buildUTMUrl(target.urlBase, {
+            platform: comment.platform,
+            industry: target.industry,
+            intent: target.intent,
+          });
+          body = body.replace(/\{\{link\}\}/g, link);
+        } else {
+          body = body.replace(/\{\{link\}\}/g, "");
+        }
+        setReply(body);
+        setShowReply(true);
+        incrementTemplateUse(target.id);
+        toast.success(`Plantilla "${target.name}" cargada (regla: ${rule.name})`);
+      } else {
+        toast.error(`Plantilla ${action.templateId} no encontrada`);
+      }
+    } else if (action.type === "move-stage") {
+      const stage = action.stage;
+      const contacts = loadContacts();
+      const name = comment.username ?? comment.from?.name;
+      if (name) {
+        const upserted = upsertContact(contacts, {
+          name,
+          platform: comment.platform,
+          interactionAt: time,
+        });
+        const moved = moveContactToStage(upserted.contacts, upserted.contact.id, stage);
+        saveContacts(moved);
+        toast.success(`Contacto movido a "${stage}" (regla: ${rule.name})`);
+      } else {
+        toast.error("Comentario anónimo · no se puede mover en CRM");
+      }
+    } else if (action.type === "notify-only") {
+      toast.info(`Regla "${rule.name}" matcheó este comentario`);
+    }
+  };
+
   const sendReply = async () => {
     if (!reply.trim()) return;
     setSending(true);
@@ -1175,6 +1235,30 @@ function CommentItem({
             )}
           </div>
           <p className="mt-1 text-sm leading-relaxed">{comment.text}</p>
+
+          {/* Sugerencia IA por automatización (si alguna regla matchea el texto) */}
+          {matchingRules.length > 0 && !status && !comment.respondedByBewe && (
+            <div className="mt-2 rounded-md border border-violet-500/30 bg-gradient-to-r from-violet-500/[0.08] to-fuchsia-500/[0.06] p-2 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold text-violet-200">
+                <Sparkles className="size-2.5" /> Sugerencia IA · {matchingRules.length} regla{matchingRules.length === 1 ? "" : "s"} matchea{matchingRules.length === 1 ? "" : "n"}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {matchingRules.map((rule) => (
+                  <button
+                    key={rule.id}
+                    onClick={() => applyRuleAction(rule)}
+                    className="rounded-md bg-violet-500/15 border border-violet-500/40 px-2 py-1 text-[10px] hover:bg-violet-500/25 transition flex items-center gap-1 text-violet-100"
+                  >
+                    <Zap className="size-2.5" />
+                    {rule.name}
+                    <span className="text-violet-300/60 ml-1">
+                      →{rule.action.type === "suggest-template" ? " plantilla" : rule.action.type === "move-stage" ? " mover" : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Respuestas de Bewe (replies anidadas desde Meta) */}
           {comment.replies && comment.replies.length > 0 && (

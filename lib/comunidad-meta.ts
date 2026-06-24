@@ -46,6 +46,23 @@ export interface Comment {
   post_id: string;
   post_caption?: string;
   post_permalink?: string;
+  /** Respuestas anidadas (replies/comments) al comentario. */
+  replies?: Comment[];
+  /** True si al menos una reply es de Bewe Software / @bewe_software. */
+  respondedByBewe?: boolean;
+  /** Texto de la respuesta más reciente de Bewe (preview). */
+  beweReplyText?: string;
+}
+
+/** Determina si un autor (from/username) es Bewe. */
+function isFromBewe(from?: { name?: string; id?: string }, username?: string): boolean {
+  if (username === "bewe_software" || username === "bewesoftware") return true;
+  if (!from) return false;
+  const name = (from.name ?? "").toLowerCase();
+  if (name.includes("bewe")) return true;
+  // Page ID de Bewe Software
+  if (from.id === PLAN.meta.pageId) return true;
+  return false;
 }
 
 export interface Conversation {
@@ -82,25 +99,48 @@ export async function fetchIGPosts(limit = 25): Promise<IGPost[]> {
   return data.data ?? [];
 }
 
-/** Comentarios de un post IG (incluye replies anidadas). */
+/** Comentarios de un post IG · incluye replies anidadas y flag de respondido por Bewe. */
 export async function fetchIGComments(mediaId: string, post?: IGPost): Promise<Comment[]> {
   const res = await metaCall({
     endpoint: `${mediaId}/comments`,
     params: {
-      fields: "id,text,username,timestamp,parent_id,from",
+      fields:
+        "id,text,username,timestamp,parent_id,from,replies{id,text,username,timestamp,from}",
       limit: 100,
     },
   });
   if (!res.ok) return [];
-  const data = res.data as { data?: Array<Omit<Comment, "platform" | "post_id">> };
+  const data = res.data as {
+    data?: Array<
+      Omit<Comment, "platform" | "post_id" | "replies" | "respondedByBewe" | "beweReplyText"> & {
+        replies?: { data?: Array<{ id: string; text?: string; username?: string; timestamp?: string; from?: { name?: string; id?: string } }> };
+      }
+    >;
+  };
   const comments = data.data ?? [];
-  return comments.map((c) => ({
-    ...c,
-    platform: "ig" as const,
-    post_id: mediaId,
-    post_caption: post?.caption,
-    post_permalink: post?.permalink,
-  }));
+  return comments.map((c) => {
+    const replies: Comment[] = (c.replies?.data ?? []).map((r) => ({
+      id: r.id,
+      text: r.text ?? "",
+      username: r.username,
+      from: r.from,
+      timestamp: r.timestamp,
+      parent_id: c.id,
+      platform: "ig" as const,
+      post_id: mediaId,
+    }));
+    const beweReplies = replies.filter((r) => isFromBewe(r.from, r.username));
+    return {
+      ...c,
+      platform: "ig" as const,
+      post_id: mediaId,
+      post_caption: post?.caption,
+      post_permalink: post?.permalink,
+      replies,
+      respondedByBewe: beweReplies.length > 0,
+      beweReplyText: beweReplies[beweReplies.length - 1]?.text,
+    };
+  });
 }
 
 /** Responde a un comentario IG (crea un reply anidado). */
@@ -136,13 +176,15 @@ export async function fetchFBPosts(limit = 25): Promise<FBPost[]> {
   }));
 }
 
-/** Comentarios de un post FB. */
+/** Comentarios de un post FB · incluye replies anidadas y flag de respondido por Bewe. */
 export async function fetchFBComments(postId: string, post?: FBPost): Promise<Comment[]> {
   const res = await metaCall({
     endpoint: `${postId}/comments`,
     params: {
-      fields: "id,message,from,created_time,parent",
+      fields:
+        "id,message,from,created_time,parent,comments{id,message,from,created_time}",
       limit: 100,
+      filter: "stream", // trae también comentarios anidados
     },
   });
   if (!res.ok) return [];
@@ -153,19 +195,37 @@ export async function fetchFBComments(postId: string, post?: FBPost): Promise<Co
       from?: { name?: string; id?: string };
       created_time?: string;
       parent?: { id?: string };
+      comments?: { data?: Array<{ id: string; message?: string; from?: { name?: string; id?: string }; created_time?: string }> };
     }>;
   };
-  return (data.data ?? []).map((c) => ({
-    id: c.id,
-    text: c.message ?? "",
-    from: c.from,
-    created_time: c.created_time,
-    parent_id: c.parent?.id,
-    platform: "fb" as const,
-    post_id: postId,
-    post_caption: post?.message,
-    post_permalink: post?.permalink_url,
-  }));
+  return (data.data ?? [])
+    .filter((c) => !c.parent) // descartar replies (vienen como top-level con parent.id en filter=stream)
+    .map((c) => {
+      const replies: Comment[] = (c.comments?.data ?? []).map((r) => ({
+        id: r.id,
+        text: r.message ?? "",
+        from: r.from,
+        created_time: r.created_time,
+        parent_id: c.id,
+        platform: "fb" as const,
+        post_id: postId,
+      }));
+      const beweReplies = replies.filter((r) => isFromBewe(r.from));
+      return {
+        id: c.id,
+        text: c.message ?? "",
+        from: c.from,
+        created_time: c.created_time,
+        parent_id: c.parent?.id,
+        platform: "fb" as const,
+        post_id: postId,
+        post_caption: post?.message,
+        post_permalink: post?.permalink_url,
+        replies,
+        respondedByBewe: beweReplies.length > 0,
+        beweReplyText: beweReplies[beweReplies.length - 1]?.text,
+      };
+    });
 }
 
 /** Responde a un comentario FB (puede ser comentario raíz o reply). */

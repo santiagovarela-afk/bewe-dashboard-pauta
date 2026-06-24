@@ -116,10 +116,14 @@ interface Comment {
   from?: { name?: string; id?: string };
   timestamp?: string;
   created_time?: string;
+  parent_id?: string;
   platform: "ig" | "fb";
   post_id: string;
   post_caption?: string;
   post_permalink?: string;
+  replies?: Comment[];
+  respondedByBewe?: boolean;
+  beweReplyText?: string;
 }
 interface Conversation {
   id: string;
@@ -927,10 +931,26 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
 
             {/* Lista de comentarios */}
             <TextureCard className="p-4">
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
                 <h4 className="text-sm font-semibold flex items-center gap-2">
                   <MessageCircle className="size-4" /> Comentarios ({postComments.length})
                 </h4>
+                {postComments.length > 0 && (() => {
+                  const respondidos = postComments.filter((c) => c.respondedByBewe || statuses[c.id] === "respondido").length;
+                  const pendientes = postComments.length - respondidos;
+                  return (
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
+                        ✓ {respondidos} respondidos
+                      </Badge>
+                      {pendientes > 0 && (
+                        <Badge variant="outline" className="bg-rose-500/10 text-rose-300 border-rose-500/30">
+                          🔴 {pendientes} pendientes
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               {loadingComments ? (
                 <div className="space-y-2">
@@ -1059,20 +1079,39 @@ function CommentItem({
     }
   };
 
+  // Detecta si Bewe ya respondió a este comentario (replies anidadas desde Meta)
+  // o si el usuario lo marcó manualmente como respondido
+  const beweResponded = comment.respondedByBewe || status === "respondido";
+
   return (
-    <li className="space-y-2 rounded-md border border-border/40 bg-card/30 p-3">
+    <li className={cn(
+      "space-y-2 rounded-md border p-3 transition-colors",
+      beweResponded
+        ? "border-emerald-500/30 bg-emerald-500/[0.04]"
+        : "border-border/40 bg-card/30",
+    )}>
       <div className="flex items-start gap-2.5">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-primary/10 text-xs font-semibold text-primary">
           {author.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-medium">{author}</span>
             <span className="text-muted-foreground">·</span>
             <span className="text-muted-foreground">{formatDate(time)}</span>
-            {status === "respondido" && (
-              <Badge variant="outline" className="text-[9px] py-0 h-4 bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
-                <Check className="size-2 mr-0.5" /> respondido
+            {comment.respondedByBewe && (
+              <Badge variant="outline" className="text-[9px] py-0 h-4 bg-emerald-500/15 text-emerald-300 border-emerald-500/40 gap-0.5">
+                <Check className="size-2" /> Bewe respondió
+              </Badge>
+            )}
+            {!comment.respondedByBewe && status === "respondido" && (
+              <Badge variant="outline" className="text-[9px] py-0 h-4 bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
+                <Check className="size-2 mr-0.5" /> marcado
+              </Badge>
+            )}
+            {!comment.respondedByBewe && !status && (
+              <Badge variant="outline" className="text-[9px] py-0 h-4 bg-rose-500/10 text-rose-300 border-rose-500/30 gap-0.5">
+                🔴 sin responder
               </Badge>
             )}
             {tagDef && (
@@ -1082,6 +1121,31 @@ function CommentItem({
             )}
           </div>
           <p className="mt-1 text-sm leading-relaxed">{comment.text}</p>
+
+          {/* Respuestas de Bewe (replies anidadas desde Meta) */}
+          {comment.replies && comment.replies.length > 0 && (
+            <div className="mt-2 space-y-1.5 border-l-2 border-emerald-500/30 pl-3">
+              {comment.replies.map((r) => {
+                const isBewe = (r.username === "bewe_software") || (r.from?.name?.toLowerCase().includes("bewe") ?? false);
+                return (
+                  <div key={r.id} className={cn(
+                    "rounded-md p-2 text-xs",
+                    isBewe ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-muted/30",
+                  )}>
+                    <div className="flex items-center gap-1.5 text-[10px] mb-0.5">
+                      {isBewe && <Check className="size-2.5 text-emerald-400" />}
+                      <span className={cn("font-medium", isBewe ? "text-emerald-300" : "")}>
+                        {isBewe ? "Bewe Software" : (r.from?.name ?? r.username ?? "Anónimo")}
+                      </span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">{formatDate(r.timestamp ?? r.created_time ?? "")}</span>
+                    </div>
+                    <p className="text-foreground/90">{r.text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Acciones estilo Meta */}
           <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] font-medium">

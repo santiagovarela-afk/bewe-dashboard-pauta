@@ -89,6 +89,12 @@ import {
   incrementTrigger,
   type AutomationRule,
 } from "@/lib/comunidad-automations";
+import {
+  requestNotifPermission,
+  showNotification,
+  getNotifPermission,
+} from "@/lib/comunidad-notifications";
+import { findDuplicates, mergeContacts } from "@/lib/comunidad-crm";
 import { useDashboard } from "@/lib/store";
 import { toast } from "sonner";
 import { ComunidadTour } from "@/components/comunidad/comunidad-tour";
@@ -1432,6 +1438,14 @@ function NotificationsBanner({ onJump }: { onJump: (s: SubTab) => void }) {
         const convs: Conversation[] = msgRes.ok ? (msgRes.conversations ?? []) : [];
         const pendingMsgs = convs.filter((c) => statuses[c.id] !== "respondido").length;
         setPendingMessages(pendingMsgs);
+
+        // Notificación desktop si hay >0 pendientes y hay permiso
+        if (pendingMsgs > 0 && getNotifPermission() === "granted") {
+          showNotification(`Bewe Comunidad · ${pendingMsgs} mensajes pendientes`, {
+            body: "Tienes conversaciones de Messenger sin responder",
+            url: window.location.href,
+          });
+        }
 
         // Comentarios sin responder — aproximación basada en comments_count total
         const igTotal = (igRes.posts ?? []).reduce(
@@ -2962,13 +2976,93 @@ function CRMKanban() {
 
   const stats = computeStats(contacts);
 
+  // Detector de duplicados
+  const duplicates = React.useMemo(() => findDuplicates(contacts), [contacts]);
+
+  const autoClassifyAll = async () => {
+    const nuevos = contacts.filter((c) => c.stage === "nuevo");
+    if (nuevos.length === 0) {
+      toast.info("No hay contactos 'nuevos' sin clasificar");
+      return;
+    }
+    if (!confirm(`Auto-clasificar ${nuevos.length} contactos con IA (sentiment)?`)) return;
+    toast.info(`Clasificando ${nuevos.length} contactos...`);
+    try {
+      const items = nuevos.map((c) => ({ id: c.id, text: `${c.name} · ${c.notes ?? ""}` }));
+      const r = await fetch("/api/comunidad/classify-sentiment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error("Error: " + (d.error ?? "no se pudo clasificar"));
+        return;
+      }
+      const results = d.results as Array<{ id: string; stage: ContactStage; confidence: number }>;
+      let next = [...contacts];
+      results.forEach((res) => {
+        next = moveContactToStage(next, res.id, res.stage, {
+          autoClassified: true,
+          sentimentScore: res.confidence,
+        });
+      });
+      setContacts(next);
+      saveContacts(next);
+      toast.success(`${results.length} contactos clasificados por IA`);
+    } catch (e) {
+      toast.error("Error de red");
+    }
+  };
+
+  const mergeDups = (ids: string[]) => {
+    if (!confirm(`¿Unificar ${ids.length} contactos duplicados en uno solo?`)) return;
+    const next = mergeContacts(contacts, ids);
+    setContacts(next);
+    saveContacts(next);
+    toast.success("Contactos unificados");
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Alerta duplicados */}
+      {duplicates.length > 0 && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-xs font-medium text-amber-200 flex items-center gap-2">
+              <AlertCircle className="size-4" />
+              {duplicates.length} contacto{duplicates.length === 1 ? "" : "s"} con duplicados detectados
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {duplicates.slice(0, 5).map((dup) => (
+              <button
+                key={dup.ids.join("-")}
+                onClick={() => mergeDups(dup.ids)}
+                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] text-amber-100 hover:bg-amber-500/20 transition"
+              >
+                {dup.name} ({dup.ids.length}) · unificar
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="text-xs text-muted-foreground">
           {stats.total} contactos · {stats.positiveRate.toFixed(0)}% positivos · {stats.conversionRate.toFixed(0)}% convertidos
         </div>
         <div className="flex gap-2">
+          {contacts.filter((c) => c.stage === "nuevo").length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={autoClassifyAll}
+              className="gap-1.5 bg-gradient-to-r from-violet-500/15 to-cyan-500/15 border-violet-500/30 text-violet-100 hover:from-violet-500/25 hover:to-cyan-500/25"
+            >
+              <Sparkles className="size-3.5" /> Auto-clasificar IA ({contacts.filter((c) => c.stage === "nuevo").length})
+            </Button>
+          )}
           {contacts.length > 0 && (
             <Button
               variant="outline"

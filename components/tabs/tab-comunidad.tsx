@@ -1032,7 +1032,10 @@ function CommentItem({
   const [dmText, setDmText] = React.useState("");
   const [sendingDM, setSendingDM] = React.useState(false);
   const tagDef = tag ? getTagDef(tag) : null;
-  const author = comment.username ?? comment.from?.name ?? "Anónimo";
+  // Meta restringe from.name en comentarios públicos por privacy
+  const rawAuthor = comment.username ?? comment.from?.name ?? "";
+  const author = rawAuthor.trim() || (comment.platform === "ig" ? "Usuario Instagram" : "Usuario Facebook");
+  const isAnonymous = !rawAuthor.trim();
   const time = comment.timestamp ?? comment.created_time ?? "";
 
   const sendReply = async () => {
@@ -1104,8 +1107,19 @@ function CommentItem({
         : "border-border/40 bg-card/30",
     )}>
       <div className="flex items-start gap-2.5">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-primary/10 text-xs font-semibold text-primary">
-          {author.charAt(0).toUpperCase()}
+        <div className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+          isAnonymous
+            ? comment.platform === "ig"
+              ? "bg-gradient-to-br from-pink-500/30 to-purple-500/10 text-pink-200"
+              : "bg-gradient-to-br from-blue-500/30 to-cyan-500/10 text-blue-200"
+            : "bg-gradient-to-br from-primary/30 to-primary/10 text-primary",
+        )}>
+          {isAnonymous ? (
+            comment.platform === "ig" ? <Instagram className="size-4" /> : <Facebook className="size-4" />
+          ) : (
+            author.charAt(0).toUpperCase()
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs">

@@ -184,37 +184,50 @@ export function TabComunidad() {
 
       <NotificationsBanner onJump={setSub} />
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-2">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 pb-2">
         {(
           [
-            { id: "resumen", label: "Resumen", icon: BarChart3, color: "" },
+            { id: "resumen", label: "Resumen", icon: BarChart3, color: "text-foreground" },
             { id: "mensajes", label: "Messenger", icon: MessageSquare, color: "text-violet-400" },
             { id: "comentarios-fb", label: "Comentarios FB", icon: Facebook, color: "text-blue-400" },
             { id: "comentarios-ig", label: "Comentarios IG", icon: Instagram, color: "text-pink-400" },
             { id: "comentarios-pauta", label: "Comentarios Pauta", icon: TrendingUp, color: "text-amber-400" },
-            { id: "crm", label: "CRM Contactos", icon: Users, color: "" },
-            { id: "plantillas", label: "Plantillas", icon: Sparkles, color: "" },
+            { id: "crm", label: "CRM Contactos", icon: Users, color: "text-cyan-400" },
+            { id: "plantillas", label: "Plantillas", icon: Sparkles, color: "text-fuchsia-400" },
             { id: "automatizaciones", label: "Automatizaciones", icon: Bot, color: "text-emerald-400" },
-            { id: "reporte", label: "Reporte", icon: FileText, color: "" },
+            { id: "reporte", label: "Reporte", icon: FileText, color: "text-muted-foreground" },
           ] as const
         ).map(({ id, label, icon: Icon, color }) => (
-          <button
+          <motion.button
             key={id}
             onClick={() => setSub(id)}
+            whileHover={{ y: -1 }}
+            whileTap={{ y: 0 }}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              "relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all",
               sub === id
-                ? "bg-primary/15 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                ? "bg-gradient-to-br from-primary/20 to-primary/5 text-primary border border-primary/40 shadow-sm shadow-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/30 border border-transparent",
             )}
           >
-            <Icon className={cn("size-3.5", sub === id ? "" : color)} />
+            <Icon className={cn("size-3.5 transition", sub === id ? color : color + " opacity-70")} />
             {label}
-          </button>
+            {sub === id && (
+              <motion.div
+                layoutId="active-tab-indicator"
+                className="absolute -bottom-2 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full bg-primary"
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            )}
+          </motion.button>
         ))}
-        <div className="ml-auto text-[10px] text-muted-foreground/70">
-          Usuario: <span className="font-medium text-foreground/80">{user?.name}</span> · rol{" "}
-          <span className="font-mono">{user?.role}</span>
+        <div className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground/70">
+          <div className="flex items-center gap-1.5 rounded-full bg-muted/30 px-2 py-1">
+            <div className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Usuario: <span className="font-medium text-foreground/80">{user?.name}</span></span>
+            <span className="text-muted-foreground/50">·</span>
+            <span className="font-mono">{user?.role}</span>
+          </div>
         </div>
       </div>
 
@@ -1324,47 +1337,68 @@ function NotificationsBanner({ onJump }: { onJump: (s: SubTab) => void }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-lg border border-amber-500/40 bg-gradient-to-r from-amber-500/[0.12] via-orange-500/[0.08] to-rose-500/[0.06] p-3"
+      initial={{ opacity: 0, y: -12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="relative overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/[0.10] via-orange-500/[0.06] to-rose-500/[0.04] p-4 shadow-lg shadow-amber-500/5"
     >
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-full bg-amber-500/20">
-          <Bell className="size-5 text-amber-300" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-amber-100">
-            Tienes {total} pendiente{total === 1 ? "" : "s"} por responder
+      {/* Glow effect */}
+      <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+
+      <div className="relative flex items-center gap-4">
+        <motion.div
+          animate={{ scale: [1, 1.05, 1] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          className="flex size-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400/30 to-orange-500/30 ring-2 ring-amber-500/30 shrink-0"
+        >
+          <Bell className="size-5 text-amber-200" />
+        </motion.div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-amber-50 flex items-center gap-2">
+            <span className="text-lg tabular-nums">{total}</span>
+            <span>pendiente{total === 1 ? "" : "s"} por responder</span>
           </p>
-          <p className="text-xs text-amber-200/70 mt-0.5">
+          <div className="text-xs text-amber-200/80 mt-1 flex items-center gap-3 flex-wrap">
             {pendingMessages > 0 && (
               <button
                 onClick={() => onJump("mensajes")}
-                className="underline hover:text-amber-100"
+                className="flex items-center gap-1 hover:text-amber-50 transition group"
               >
-                {pendingMessages} mensaje{pendingMessages === 1 ? "" : "s"} en Messenger
+                <MessageSquare className="size-3 group-hover:scale-110 transition" />
+                <span className="font-medium">{pendingMessages}</span> Messenger
               </button>
             )}
-            {pendingMessages > 0 && pendingComments > 0 && " · "}
             {pendingComments > 0 && (
               <button
                 onClick={() => onJump("comentarios-fb")}
-                className="underline hover:text-amber-100"
+                className="flex items-center gap-1 hover:text-amber-50 transition group"
               >
-                ~{pendingComments} comentario{pendingComments === 1 ? "" : "s"} sin atender
+                <MessageCircle className="size-3 group-hover:scale-110 transition" />
+                <span className="font-medium">~{pendingComments}</span> comentarios
               </button>
             )}
-          </p>
+          </div>
         </div>
-        <div className="flex gap-1.5">
+
+        <div className="flex gap-2 shrink-0">
           {pendingMessages > 0 && (
-            <Button size="sm" onClick={() => onJump("mensajes")} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-amber-950 border-0">
-              <MessageSquare className="size-3.5" /> Mensajes
+            <Button
+              size="sm"
+              onClick={() => onJump("mensajes")}
+              className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-amber-950 border-0 shadow-md shadow-amber-500/30"
+            >
+              <MessageSquare className="size-3.5" /> Ver Messenger
             </Button>
           )}
-          {pendingComments > 0 && (
-            <Button size="sm" variant="outline" onClick={() => onJump("comentarios-fb")} className="gap-1.5 border-amber-500/40">
-              <MessageCircle className="size-3.5" /> Comentarios
+          {pendingComments > 0 && pendingMessages === 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onJump("comentarios-fb")}
+              className="gap-1.5 border-amber-500/40 hover:bg-amber-500/10"
+            >
+              <MessageCircle className="size-3.5" /> Ver comentarios
             </Button>
           )}
         </div>

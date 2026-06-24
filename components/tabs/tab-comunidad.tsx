@@ -944,6 +944,12 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
 
             {/* Lista de comentarios */}
             <TextureCard className="p-4">
+              {/* Aviso de auto-detección */}
+              <div className="mb-3 rounded-md border border-amber-500/20 bg-amber-500/[0.04] p-2.5 text-[10px] text-amber-200/80">
+                <strong className="text-amber-100">ℹ️ Nota:</strong> Los comentarios que respondiste por <strong>DM privado</strong> aparecen como "sin responder" porque Meta no los registra como reply pública.
+                Marca manualmente con <strong>✓</strong> los que ya atendiste por cualquier vía (DM, llamada, otro canal). El sistema solo auto-detecta respuestas tipo "reply" público.
+              </div>
+
               <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
                 <h4 className="text-sm font-semibold flex items-center gap-2">
                   <MessageCircle className="size-4" /> Comentarios ({postComments.length})
@@ -960,6 +966,27 @@ function PostInbox({ platform }: { platform: "ig" | "fb" }) {
                         <Badge variant="outline" className="bg-rose-500/10 text-rose-300 border-rose-500/30">
                           🔴 {pendientes} pendientes
                         </Badge>
+                      )}
+                      {pendientes > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (!confirm(`Marcar los ${pendientes} comentarios pendientes como respondidos?`)) return;
+                            const next = { ...statuses };
+                            postComments.forEach((c) => {
+                              if (!c.respondedByBewe && next[c.id] !== "respondido") {
+                                next[c.id] = "respondido";
+                                saveStatus(c.id, "respondido");
+                              }
+                            });
+                            setStatuses(next);
+                            toast.success(`${pendientes} comentarios marcados como respondidos`);
+                          }}
+                          className="h-7 gap-1.5 text-[10px] border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/10"
+                        >
+                          <Check className="size-3" /> Marcar todos
+                        </Button>
                       )}
                     </div>
                   );

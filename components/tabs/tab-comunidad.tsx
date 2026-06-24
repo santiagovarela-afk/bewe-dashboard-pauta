@@ -410,22 +410,22 @@ function Resumen({ onJump }: { onJump: (s: SubTab) => void }) {
         <KpiCard
           label="Contactos en CRM"
           value={loading ? 0 : crmStats.total}
-          sub={`${crmStats.byStage.lead + crmStats.byStage.trial + crmStats.byStage.convertido} en lead+`}
+          sub={`${crmStats.byStage.positivo + crmStats.byStage.convertido} positivos`}
           tone="ember"
         />
       </div>
 
-      {/* Funnel CRM compacto */}
+      {/* Funnel CRM compacto · sentiment-based */}
       <TextureCard className="p-5">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Users className="size-4" /> Funnel del CRM
+            <Users className="size-4" /> CRM · clasificación por sentiment
           </h3>
           <Button variant="ghost" size="sm" onClick={() => onJump("crm")}>
             Ver tablero →
           </Button>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           {CONTACT_STAGES.map((s) => (
             <div
               key={s.id}
@@ -441,13 +441,13 @@ function Resumen({ onJump }: { onJump: (s: SubTab) => void }) {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="text-muted-foreground">
-            Calificación: <span className="font-medium text-foreground">{crmStats.qualificationRate.toFixed(0)}%</span>
+            Positivo: <span className="font-medium text-emerald-400">{crmStats.positiveRate.toFixed(0)}%</span>
           </span>
           <span className="text-muted-foreground">
-            Trial: <span className="font-medium text-orange-400">{crmStats.trialRate.toFixed(0)}%</span>
+            Negativo: <span className="font-medium text-amber-400">{crmStats.negativeRate.toFixed(0)}%</span>
           </span>
           <span className="text-muted-foreground">
-            Conversión: <span className="font-medium text-emerald-400">{crmStats.conversionRate.toFixed(0)}%</span>
+            Conversión: <span className="font-medium text-violet-400">{crmStats.conversionRate.toFixed(0)}%</span>
           </span>
         </div>
       </TextureCard>
@@ -2136,9 +2136,9 @@ function AutomationEditor({
                 t === "suggest-template"
                   ? { type: "suggest-template", templateId: "info-belleza" }
                   : t === "move-stage"
-                    ? { type: "move-stage", stage: "interesado" }
+                    ? { type: "move-stage", stage: "positivo" }
                     : t === "auto-tag"
-                      ? { type: "auto-tag", tag: "interesado" }
+                      ? { type: "auto-tag", tag: "positivo" }
                       : { type: "notify-only" };
               setDraft({ ...draft, action: newAction });
             }}
@@ -2966,7 +2966,7 @@ function CRMKanban() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
-          {stats.total} contactos · {stats.qualificationRate.toFixed(0)}% calificados · {stats.conversionRate.toFixed(0)}% convertidos
+          {stats.total} contactos · {stats.positiveRate.toFixed(0)}% positivos · {stats.conversionRate.toFixed(0)}% convertidos
         </div>
         <div className="flex gap-2">
           {contacts.length > 0 && (

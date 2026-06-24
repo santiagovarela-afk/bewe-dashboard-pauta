@@ -1,20 +1,28 @@
 /**
  * Comunidad · CRM de contactos en redes sociales
  *
- * Modelo Kanban tipo HubSpot: cada persona que escribió (comentó o mandó
- * mensaje) tiene su tarjeta. Esneider la mueve entre columnas a medida que
- * conversa. Persistencia en localStorage v1 — cuando crezca el equipo,
- * mover a BD compartida.
+ * V3 (jun-2026): stages basadas en SENTIMENT en vez de funnel ventas.
+ * Más adecuado para social media porque la clasificación es automática
+ * vía Gemini al cargar comentarios.
+ *
+ * Stages:
+ *  - nuevo: sin clasificar (default al crear contacto)
+ *  - positivo: muestra interés / elogia / pide info con intención
+ *  - neutral: pregunta general / consulta / informativo
+ *  - negativo: crítica / queja / hate
+ *  - convertido: cliente / trial / conversión cerrada
+ *  - descartado: spam / off-topic / promoción ajena
+ *
+ * Persistencia en localStorage. Cuando crezca el equipo, mover a BD.
  */
 
 export type ContactStage =
-  | "registrado"
-  | "interesado"
-  | "prospecto"
-  | "lead"
-  | "trial"
+  | "nuevo"
+  | "positivo"
+  | "neutral"
+  | "negativo"
   | "convertido"
-  | "spam";
+  | "descartado";
 
 export interface ContactStageDef {
   id: ContactStage;
@@ -23,94 +31,91 @@ export interface ContactStageDef {
   description: string;
   color: string;
   bg: string;
-  /** Color del header del stage (Tailwind className). */
   accent: string;
 }
 
 export const CONTACT_STAGES: ContactStageDef[] = [
   {
-    id: "registrado",
-    label: "Registrado",
+    id: "nuevo",
+    label: "Nuevo",
     icon: "🆕",
-    description: "Primer contacto · acaba de escribir",
+    description: "Sin clasificar · acaba de interactuar",
     color: "text-slate-200",
     bg: "border-slate-500/40 bg-gradient-to-br from-slate-500/10 to-slate-500/[0.02]",
     accent: "from-slate-500 to-slate-400",
   },
   {
-    id: "interesado",
-    label: "Interesado",
-    icon: "👋",
-    description: "Mostró interés inicial · primera respuesta",
-    color: "text-blue-200",
-    bg: "border-blue-500/40 bg-gradient-to-br from-blue-500/10 to-blue-500/[0.02]",
-    accent: "from-blue-500 to-cyan-400",
-  },
-  {
-    id: "prospecto",
-    label: "Prospecto",
-    icon: "💬",
-    description: "Conversación activa · interés sostenido",
-    color: "text-violet-200",
-    bg: "border-violet-500/40 bg-gradient-to-br from-violet-500/10 to-violet-500/[0.02]",
-    accent: "from-violet-500 to-fuchsia-400",
-  },
-  {
-    id: "lead",
-    label: "Lead / Demo",
-    icon: "🎯",
-    description: "Pidió precios / demo / información concreta",
-    color: "text-amber-200",
-    bg: "border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-amber-500/[0.02]",
-    accent: "from-amber-500 to-orange-400",
-  },
-  {
-    id: "trial",
-    label: "Trial",
-    icon: "🚀",
-    description: "Inició trial · probando Bewe",
-    color: "text-orange-200",
-    bg: "border-orange-500/40 bg-gradient-to-br from-orange-500/10 to-orange-500/[0.02]",
-    accent: "from-orange-500 to-red-400",
-  },
-  {
-    id: "convertido",
-    label: "Convertido",
-    icon: "✅",
-    description: "Cliente pagado · conversión cerrada",
+    id: "positivo",
+    label: "Positivo",
+    icon: "✨",
+    description: "Interés real · elogio · pide info con intención",
     color: "text-emerald-200",
     bg: "border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-emerald-500/[0.02]",
     accent: "from-emerald-500 to-green-400",
   },
   {
-    id: "spam",
+    id: "neutral",
+    label: "Neutral",
+    icon: "💬",
+    description: "Pregunta general · consulta · informativo",
+    color: "text-blue-200",
+    bg: "border-blue-500/40 bg-gradient-to-br from-blue-500/10 to-blue-500/[0.02]",
+    accent: "from-blue-500 to-cyan-400",
+  },
+  {
+    id: "negativo",
+    label: "Negativo",
+    icon: "⚠️",
+    description: "Crítica · queja · sentimiento adverso",
+    color: "text-amber-200",
+    bg: "border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-amber-500/[0.02]",
+    accent: "from-amber-500 to-orange-400",
+  },
+  {
+    id: "convertido",
+    label: "Convertido",
+    icon: "✅",
+    description: "Cliente · trial activo · conversión cerrada",
+    color: "text-violet-200",
+    bg: "border-violet-500/40 bg-gradient-to-br from-violet-500/10 to-violet-500/[0.02]",
+    accent: "from-violet-500 to-fuchsia-400",
+  },
+  {
+    id: "descartado",
     label: "Descartado",
     icon: "🚫",
-    description: "Spam, troll, off-topic, no relevante",
+    description: "Spam · off-topic · promoción ajena",
     color: "text-rose-200",
     bg: "border-rose-500/40 bg-gradient-to-br from-rose-500/10 to-rose-500/[0.02]",
     accent: "from-rose-500 to-pink-400",
   },
 ];
 
-/** Stages activos del funnel (sin contar spam/descartado). Para porcentajes. */
+/** Stages activos del funnel (sin contar descartado). Para porcentajes. */
 export const FUNNEL_STAGES: ContactStage[] = [
-  "registrado",
-  "interesado",
-  "prospecto",
-  "lead",
-  "trial",
+  "nuevo",
+  "positivo",
+  "neutral",
+  "negativo",
   "convertido",
 ];
 
 /**
- * Migra contactos desde el schema v1 (4 stages) al v2 (7 stages).
- * "calificado" antiguo se mapea a "interesado".
+ * Migra contactos desde stages anteriores (v1/v2) al schema v3 (sentiment).
+ * Mapping:
+ *  - calificado, interesado, prospecto, lead, trial → positivo
+ *  - convertido → convertido
+ *  - spam → descartado
+ *  - cualquier otro → nuevo
  */
 function migrateStage(stage: string): ContactStage {
-  if (stage === "calificado") return "interesado";
+  // v3 stages (no requieren migración)
   if (CONTACT_STAGES.some((s) => s.id === stage)) return stage as ContactStage;
-  return "registrado";
+  // v1/v2 → v3
+  if (["calificado", "interesado", "prospecto", "lead", "trial"].includes(stage)) return "positivo";
+  if (stage === "convertido") return "convertido";
+  if (stage === "spam" || stage === "pasado-comercial") return "descartado";
+  return "nuevo";
 }
 
 export function getStageDef(id: ContactStage): ContactStageDef {
@@ -133,10 +138,10 @@ export interface Contact {
   name: string;
   /** Plataforma principal por la que llegó. */
   primaryPlatform: "ig" | "fb" | "messenger";
-  /** Plataformas donde nos ha escrito (puede tener varias). */
+  /** Plataformas donde nos ha escrito. */
   platforms: Array<"ig" | "fb" | "messenger">;
   stage: ContactStage;
-  /** Notas internas que Esneider/Santiago agregan. */
+  /** Notas internas. */
   notes: string;
   /** Última vez que esa persona escribió algo. */
   lastInteraction: string;
@@ -148,6 +153,12 @@ export interface Contact {
   stageChangedAt: string;
   /** Avatar opcional (URL). */
   avatar?: string;
+  /** Sentiment classification de IA (v3). */
+  sentiment?: "positive" | "neutral" | "negative";
+  /** Score de confianza de la clasificación 0-100. */
+  sentimentScore?: number;
+  /** Si la stage fue clasificada por IA o manualmente. */
+  autoClassified?: boolean;
 }
 
 const CONTACTS_KEY = "bewe_comunidad_contacts_v1";
@@ -156,7 +167,6 @@ export function loadContacts(): Contact[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = JSON.parse(localStorage.getItem(CONTACTS_KEY) || "[]") as Contact[];
-    // Auto-migración: stages v1 ("calificado") → v2 ("interesado")
     return raw.map((c) => ({ ...c, stage: migrateStage(c.stage as string) }));
   } catch {
     return [];
@@ -179,10 +189,6 @@ export function contactKey(name: string, platform: "ig" | "fb" | "messenger"): s
   return `${platform}:${slug || "sin-nombre"}`;
 }
 
-/**
- * Upsert un contacto a partir de una interacción nueva (comentario o
- * mensaje). Si ya existe, actualiza lastInteraction y suma al contador.
- */
 export function upsertContact(
   contacts: Contact[],
   data: {
@@ -209,7 +215,7 @@ export function upsertContact(
     name: data.name,
     primaryPlatform: data.platform,
     platforms: [data.platform],
-    stage: "registrado",
+    stage: "nuevo",
     notes: "",
     lastInteraction: data.interactionAt || now,
     interactionCount: 1,
@@ -223,10 +229,17 @@ export function moveContactToStage(
   contacts: Contact[],
   contactId: string,
   stage: ContactStage,
+  meta?: { autoClassified?: boolean; sentimentScore?: number },
 ): Contact[] {
   return contacts.map((c) =>
     c.id === contactId
-      ? { ...c, stage, stageChangedAt: new Date().toISOString() }
+      ? {
+          ...c,
+          stage,
+          stageChangedAt: new Date().toISOString(),
+          autoClassified: meta?.autoClassified ?? false,
+          sentimentScore: meta?.sentimentScore,
+        }
       : c,
   );
 }
@@ -248,33 +261,131 @@ export function deleteContact(contacts: Contact[], contactId: string): Contact[]
 export interface CRMStats {
   total: number;
   byStage: Record<ContactStage, number>;
-  conversionRate: number; // % convertidos / (total - spam)
-  qualificationRate: number; // % >=interesado / total
-  trialRate: number; // % trial+convertido / total
+  conversionRate: number;
+  positiveRate: number;
+  negativeRate: number;
 }
 
 export function computeStats(contacts: Contact[]): CRMStats {
   const byStage: Record<ContactStage, number> = {
-    registrado: 0,
-    interesado: 0,
-    prospecto: 0,
-    lead: 0,
-    trial: 0,
+    nuevo: 0,
+    positivo: 0,
+    neutral: 0,
+    negativo: 0,
     convertido: 0,
-    spam: 0,
+    descartado: 0,
   };
   contacts.forEach((c) => {
     byStage[c.stage] = (byStage[c.stage] ?? 0) + 1;
   });
   const total = contacts.length;
-  const activeFunnel = total - byStage.spam;
-  const qualified = byStage.interesado + byStage.prospecto + byStage.lead + byStage.trial + byStage.convertido;
-  const trial = byStage.trial + byStage.convertido;
+  const activeFunnel = total - byStage.descartado;
   return {
     total,
     byStage,
-    qualificationRate: total > 0 ? (qualified / total) * 100 : 0,
-    trialRate: total > 0 ? (trial / total) * 100 : 0,
+    positiveRate: total > 0 ? ((byStage.positivo + byStage.convertido) / total) * 100 : 0,
+    negativeRate: total > 0 ? (byStage.negativo / total) * 100 : 0,
     conversionRate: activeFunnel > 0 ? (byStage.convertido / activeFunnel) * 100 : 0,
   };
+}
+
+// ─── DUPLICADOS ────────────────────────────────────────────────────────────
+
+/**
+ * Detecta contactos potencialmente duplicados:
+ * - Mismo nombre en distintas plataformas → probable misma persona
+ * - Devuelve clusters de IDs candidatos a unificar
+ */
+export function findDuplicates(contacts: Contact[]): Array<{ name: string; ids: string[] }> {
+  const byNormalizedName = new Map<string, Contact[]>();
+  contacts.forEach((c) => {
+    const norm = c.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "");
+    if (!norm) return;
+    if (!byNormalizedName.has(norm)) byNormalizedName.set(norm, []);
+    byNormalizedName.get(norm)!.push(c);
+  });
+  const dups: Array<{ name: string; ids: string[] }> = [];
+  byNormalizedName.forEach((arr, key) => {
+    if (arr.length > 1) {
+      dups.push({ name: arr[0].name, ids: arr.map((c) => c.id) });
+    }
+  });
+  return dups;
+}
+
+/** Merge contactos duplicados manteniendo el más antiguo y sumando interacciones. */
+export function mergeContacts(contacts: Contact[], ids: string[]): Contact[] {
+  if (ids.length < 2) return contacts;
+  const toMerge = contacts.filter((c) => ids.includes(c.id));
+  if (toMerge.length < 2) return contacts;
+
+  // Mantener el contacto más antiguo
+  const primary = toMerge.reduce((oldest, c) =>
+    new Date(c.createdAt) < new Date(oldest.createdAt) ? c : oldest,
+  );
+  // Acumular interactions + platforms del resto
+  toMerge.forEach((c) => {
+    if (c.id === primary.id) return;
+    primary.interactionCount += c.interactionCount;
+    c.platforms.forEach((p) => {
+      if (!primary.platforms.includes(p)) primary.platforms.push(p);
+    });
+    if (new Date(c.lastInteraction) > new Date(primary.lastInteraction)) {
+      primary.lastInteraction = c.lastInteraction;
+    }
+    if (c.notes && !primary.notes.includes(c.notes)) {
+      primary.notes = primary.notes ? `${primary.notes}\n${c.notes}` : c.notes;
+    }
+  });
+
+  // Promover al stage más avanzado entre todos (convertido > positivo > neutral > nuevo > negativo > descartado)
+  const order: ContactStage[] = ["convertido", "positivo", "neutral", "nuevo", "negativo", "descartado"];
+  primary.stage = toMerge.reduce((bestStage, c) => {
+    return order.indexOf(c.stage) < order.indexOf(bestStage) ? c.stage : bestStage;
+  }, primary.stage);
+
+  return contacts.filter((c) => !ids.includes(c.id) || c.id === primary.id);
+}
+
+// ─── SLA TRACKING ──────────────────────────────────────────────────────────
+
+/**
+ * Calcula tiempo desde la última interacción del usuario hasta ahora.
+ * Si está respondido, devuelve null. Si no, devuelve ms.
+ */
+export function timeSinceLastInteraction(lastInteractionISO: string): number {
+  return Date.now() - new Date(lastInteractionISO).getTime();
+}
+
+/**
+ * Color SLA según tiempo desde la interacción:
+ *  - <1h: verde (rápido)
+ *  - 1-4h: amarillo
+ *  - 4-24h: naranja
+ *  - >24h: rojo (lento)
+ */
+export function slaLevel(ms: number): "rapid" | "normal" | "slow" | "critical" {
+  const hours = ms / 3600000;
+  if (hours < 1) return "rapid";
+  if (hours < 4) return "normal";
+  if (hours < 24) return "slow";
+  return "critical";
+}
+
+export function slaColor(level: ReturnType<typeof slaLevel>): string {
+  return {
+    rapid: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+    normal: "text-amber-300 bg-amber-500/10 border-amber-500/30",
+    slow: "text-orange-300 bg-orange-500/10 border-orange-500/30",
+    critical: "text-rose-300 bg-rose-500/10 border-rose-500/30",
+  }[level];
+}
+
+export function slaLabel(level: ReturnType<typeof slaLevel>): string {
+  return {
+    rapid: "⚡ Rápido",
+    normal: "🕐 OK",
+    slow: "⏰ Lento",
+    critical: "🚨 Crítico",
+  }[level];
 }

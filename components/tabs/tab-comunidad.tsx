@@ -1131,6 +1131,45 @@ function CommentItem({
     }
   };
 
+  // ─── DRAFT IA · genera respuesta custom con brand kit de Bewe ──────────
+  const [aiDraft, setAiDraft] = React.useState<{
+    publicReply?: string;
+    dmReply?: string;
+    intent?: string;
+    recommendedUrl?: string;
+    reasoning?: string;
+  } | null>(null);
+  const [draftingAI, setDraftingAI] = React.useState(false);
+
+  const askBeweAIDraft = async () => {
+    setDraftingAI(true);
+    setAiDraft(null);
+    try {
+      const r = await fetch("/api/comunidad/draft-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commentText: comment.text,
+          platform: comment.platform,
+          context: comment.platform === "ig" ? "comentario_publico_ig" : "comentario_publico_fb",
+          author,
+          postCaption: comment.post_caption,
+        }),
+      });
+      const d = await r.json();
+      if (d.ok && d.draft) {
+        setAiDraft(d.draft);
+        toast.success(`IA Bewe sugirió respuesta · intent: ${d.draft.intent ?? "?"}`);
+      } else {
+        toast.error("Error: " + (d.error ?? "no se pudo generar"));
+      }
+    } catch (e) {
+      toast.error("Error generando respuesta IA");
+    } finally {
+      setDraftingAI(false);
+    }
+  };
+
   const sendReply = async () => {
     if (!reply.trim()) return;
     setSending(true);
@@ -1306,6 +1345,14 @@ function CommentItem({
               ✉️ Enviar DM
             </button>
             <button
+              onClick={askBeweAIDraft}
+              disabled={draftingAI}
+              className="text-cyan-400 hover:text-cyan-300 transition disabled:opacity-50 flex items-center gap-1"
+            >
+              {draftingAI ? <Loader2 className="size-2.5 animate-spin" /> : "✨"}
+              Sugerir IA (Bewe)
+            </button>
+            <button
               onClick={() => onStatusChange("respondido")}
               className="text-emerald-400 hover:text-emerald-300 transition"
             >
@@ -1327,6 +1374,68 @@ function CommentItem({
               ))}
             </div>
           </div>
+
+          {/* Bloque IA Bewe · drafts generados con voz de marca */}
+          {aiDraft && (
+            <div className="mt-2 space-y-2 rounded-md border border-cyan-500/30 bg-gradient-to-br from-cyan-500/[0.06] to-blue-500/[0.04] p-3">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold text-cyan-200">
+                <Sparkles className="size-3" /> IA Bewe sugiere ·
+                {aiDraft.intent && <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-cyan-500/15">{aiDraft.intent}</Badge>}
+                {aiDraft.recommendedUrl && (
+                  <span className="text-cyan-300/70 font-mono text-[9px] truncate max-w-[200px]">{aiDraft.recommendedUrl}</span>
+                )}
+              </div>
+              {aiDraft.reasoning && (
+                <p className="text-[10px] text-cyan-200/70 italic">{aiDraft.reasoning}</p>
+              )}
+
+              {aiDraft.publicReply && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] uppercase tracking-wider text-cyan-300 font-semibold">
+                      💬 Respuesta pública (sin link)
+                    </span>
+                    <Button
+                      onClick={() => {
+                        setReply(aiDraft.publicReply ?? "");
+                        setShowReply(true);
+                        toast.success("Borrador público cargado");
+                      }}
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] gap-1 border-cyan-500/40"
+                    >
+                      <Check className="size-2.5" /> Usar para responder
+                    </Button>
+                  </div>
+                  <p className="rounded bg-cyan-500/[0.04] border border-cyan-500/15 p-2 text-xs leading-relaxed">{aiDraft.publicReply}</p>
+                </div>
+              )}
+
+              {aiDraft.dmReply && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] uppercase tracking-wider text-violet-300 font-semibold">
+                      ✉️ Mensaje DM (con link UTM)
+                    </span>
+                    <Button
+                      onClick={() => {
+                        setDmText(aiDraft.dmReply ?? "");
+                        setShowDM(true);
+                        toast.success("Borrador DM cargado");
+                      }}
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] gap-1 border-violet-500/40"
+                    >
+                      <Check className="size-2.5" /> Usar para DM
+                    </Button>
+                  </div>
+                  <p className="rounded bg-violet-500/[0.04] border border-violet-500/15 p-2 text-xs leading-relaxed whitespace-pre-wrap">{aiDraft.dmReply}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Composer inline de respuesta */}
           {showReply && (

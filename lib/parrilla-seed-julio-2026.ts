@@ -178,18 +178,38 @@ Linda: "Listo girl, te dejé el sábado 4 a las 11am en Salón Bella ✨"
   },
 ];
 
+/** Set de fechas que cubre el seed — útil para hacer reemplazo selectivo. */
+export const SEED_DATES = new Set(JULIO_2026_SEMANA_1.map((p) => p.date));
+
 /**
- * Inyecta el seed al localStorage SIN sobreescribir lo existente.
- * Si un día ya tiene posts, se respeta — solo agrega los días vacíos.
+ * Inyecta el seed al localStorage.
+ *
+ * - replace=false (default): si un día del seed ya tenía post, se RESPETA.
+ *   Devuelve { merged, added, skipped }.
+ * - replace=true: ELIMINA todos los posts existentes en los días del seed
+ *   (1-4 jul) y los reemplaza con los nuevos. Útil cuando el seed cambia
+ *   y el usuario quiere actualizar lo que ya tenía.
  */
 export function seedJulio2026Semana1(
   existing: ScheduledPost[],
-): { merged: ScheduledPost[]; added: number; skipped: number } {
-  const existingDates = new Set(existing.map((p) => p.date));
+  opts: { replace?: boolean } = {},
+): { merged: ScheduledPost[]; added: number; skipped: number; removed: number } {
+  const replace = opts.replace ?? false;
+
+  // En modo replace, dropamos los posts existentes en los días del seed
+  let base = existing;
+  let removed = 0;
+  if (replace) {
+    const before = base.length;
+    base = base.filter((p) => !SEED_DATES.has(p.date));
+    removed = before - base.length;
+  }
+
+  const existingDates = new Set(base.map((p) => p.date));
   let added = 0;
   let skipped = 0;
-
   const newPosts: ScheduledPost[] = [];
+
   for (const p of JULIO_2026_SEMANA_1) {
     if (existingDates.has(p.date)) {
       skipped++;
@@ -204,8 +224,14 @@ export function seedJulio2026Semana1(
   }
 
   return {
-    merged: [...existing, ...newPosts],
+    merged: [...base, ...newPosts],
     added,
     skipped,
+    removed,
   };
+}
+
+/** ¿El usuario tiene posts en los días del seed que se deberían reemplazar? */
+export function hasSeedConflicts(existing: ScheduledPost[]): boolean {
+  return existing.some((p) => SEED_DATES.has(p.date));
 }

@@ -45,7 +45,11 @@ import { HashtagFinder } from "@/components/parrilla/hashtag-finder";
 import { IdeaGenerator, type PostIdea } from "@/components/parrilla/idea-generator";
 import { PostPreview, type PreviewPlatform } from "@/components/parrilla/post-preview";
 import { bestTimeForPlatform } from "@/components/parrilla/best-time";
-import { seedJulio2026Semana1, JULIO_2026_SEMANA_1 } from "@/lib/parrilla-seed-julio-2026";
+import {
+  seedJulio2026Semana1,
+  JULIO_2026_SEMANA_1,
+  hasSeedConflicts,
+} from "@/lib/parrilla-seed-julio-2026";
 import { useOrganic } from "@/lib/hooks/use-organic";
 import { dailyPlan, performanceByFormat, type AnalyticsPost } from "@/lib/organic-analytics";
 
@@ -225,22 +229,32 @@ export function TabParrilla() {
 
   /** Inyecta los 4 posts de la semana 1-4 jul 2026 (Estrategia Julio · plan cliente). */
   function handleSeedJulio() {
-    const { merged, added, skipped } = seedJulio2026Semana1(posts);
-
-    // Calcular destino desde el primer post del seed (más robusto que hardcodear)
+    // Navegar a julio primero (más robusto que hardcodear el mes)
     const firstSeedDate = JULIO_2026_SEMANA_1[0]?.date ?? "2026-07-01";
     const [targetY, targetM] = firstSeedDate.split("-").map(Number);
     setViewYear(targetY);
     setViewMonth((targetM ?? 7) - 1);
+
+    // Si ya hay posts en los días del seed (1-4 jul), preguntar si reemplazar
+    const replace =
+      hasSeedConflicts(posts) &&
+      window.confirm(
+        "Ya tienes posts programados del 1 al 4 de julio.\n\n" +
+          "¿Reemplazarlos con el plan validado (Toy Story · 5 tools · Historias PYMES · Reel Mundial)?\n\n" +
+          "OK = reemplazar · Cancelar = mantener lo que tienes",
+      );
+
+    const { merged, added, skipped, removed } = seedJulio2026Semana1(posts, { replace });
 
     if (added === 0) {
       toast.info("Esos días ya estaban cargados. Te llevo a julio para que los veas.");
       return;
     }
     setPosts(merged);
-    toast.success(
-      `✨ ${added} posts cargados (1-4 jul)${skipped ? ` · ${skipped} días ya tenían contenido` : ""}`,
-    );
+    const parts = [`✨ ${added} posts cargados (1-4 jul)`];
+    if (removed) parts.push(`${removed} viejos eliminados`);
+    if (skipped) parts.push(`${skipped} días ya tenían contenido`);
+    toast.success(parts.join(" · "));
   }
 
   function openComposerForDate(iso: string | null) {

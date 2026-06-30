@@ -55,9 +55,11 @@ en la última story. Educar y posicionar a Bewe como autoridad en
 ═══════════════════════════════════════════
 
 🎬 STORY 1 · HOOK
-"¿Sabías que el 67% de las PYMES en LatAm aún NO usan
-inteligencia artificial?"
-+ encuesta: ¿Tu negocio usa IA? Sí / No
+"Si abriste un negocio en 2026 y aún no usas IA…
+tenemos que hablar 👀"
++ visual: pantalla negra, texto blanco grande tipo letrero
+  sin emoji decorativo extra ni encuesta — todo el peso en
+  la provocación para que la gente tape la story
 
 🎬 STORY 2 · DOLOR
 "Esto es exactamente lo que se están perdiendo 👇"

@@ -223,7 +223,7 @@ export function TabParrilla() {
     toast.success("Parrilla limpiada");
   }
 
-  /** Inyecta los 7 posts de la semana 1-7 jul 2026 (Estrategia Julio). */
+  /** Inyecta los 4 posts de la semana 1-4 jul 2026 (Estrategia Julio · plan cliente). */
   function handleSeedJulio() {
     const { merged, added, skipped } = seedJulio2026Semana1(posts);
     if (added === 0) {
@@ -234,7 +234,7 @@ export function TabParrilla() {
     setViewYear(2026);
     setViewMonth(6); // julio = mes 6 (0-indexed)
     toast.success(
-      `✨ ${added} posts cargados (1-7 jul)${skipped ? ` · ${skipped} días saltados (ya tenían contenido)` : ""}`,
+      `✨ ${added} posts cargados (1-4 jul)${skipped ? ` · ${skipped} días saltados (ya tenían contenido)` : ""}`,
     );
   }
 

@@ -1,194 +1,186 @@
 /**
- * Seed de la PARRILLA JULIO 2026 · semana 1 (mié 1 jul → mar 7 jul).
+ * Seed de la PARRILLA JULIO 2026 · semana 1 (mié 1 jul → sáb 4 jul).
  *
- * Basado en el documento "00 - Estrategia Julio 2026":
- * - Posicionamiento: Bewe como influencer de IA → educa y entretiene, vende como
- *   consecuencia. Linda es el caso estrella (Google Cloud 2024).
- * - Público núcleo: belleza y bienestar (peluquería, barbería, estética, spa, uñas).
- * - Mix objetivo (mes): 35% promo · 30% educación · 20% entretenimiento · 15% comunidad.
- * - Mix tema (mes): 40% Bewe/Linda · 30% Tools IA · 30% IA general.
- * - Ancla julio: Mundial 2026 (final ~19 jul) + prueba gratis 15 días.
- * - Reglas: solo "Bewe" (nunca "BeweOS") · no mencionar competidores · tono cercano.
+ * Plan validado con cliente (30-jun-2026):
+ * - Mié 1 · Carrusel Toy Story · personajes preocupados sin clientes → Linda al rescate
+ * - Jue 2 · Carrusel storytelling · 5 tools de IA gratis para salón belleza (cierre Q2)
+ * - Vie 3 · Historias · "IA para PYMES" (la promesa de Bewe)
+ * - Sáb 4 · Reel · "Las girls también vemos el Mundial" — manicurista + Linda agendamiento
  *
- * Los posts se inyectan al localStorage `bw_parrilla_posts` cuando el usuario
- * pulsa "Cargar planeación Julio" en el header. NO sobreescribe lo existente —
- * sólo agrega los días que aún no tengan posts.
+ * Reglas de marca aplicadas:
+ * - Solo "Bewe" (nunca "BeweOS")
+ * - Linda como Caso de Éxito Google Cloud 2024
+ * - Trial 15 días en CTAs
+ * - No competidores · tono cercano · sentence case
  */
 
 import { type ScheduledPost, cryptoRandomId } from "./parrilla-data";
 
-/** Mié 1 jul → mar 7 jul 2026 (7 días). */
+/** Mié 1 → sáb 4 jul 2026 (4 días). */
 export const JULIO_2026_SEMANA_1: Omit<ScheduledPost, "id" | "createdAt">[] = [
   // ────────────────────────────────────────────────────────────────────────
-  // MIÉ 1 JUL · REEL PROMOCIÓN · Bewe/Linda · arranque de mes
+  // MIÉ 1 JUL · CARRUSEL TOY STORY · IG + FB · entretenimiento + promo
+  // 7 slides · personajes preocupados sin clientes → Linda los salva
   // ────────────────────────────────────────────────────────────────────────
   {
     date: "2026-07-01",
     time: "19:00",
-    platforms: ["ig"],
+    platforms: ["ig", "fb"],
     goal: "leads",
-    caption: `🤖 Conoce a Linda, la IA que gestiona tu salón mientras duermes
+    caption: `🧸 Cuando abres tu salón y la agenda está… vacía
 
-Mientras tú descansas, Linda:
-✨ Agenda nuevas citas
-✨ Responde mensajes en redes
-✨ Actualiza tu CRM
-✨ Te manda el reporte del día
+Desliza →
 
-No es magia, es Bewe — la plataforma que llevó a Linda a ser reconocida como Caso de Éxito del Año 2024 por Google Cloud.
+🤠 Slide 1 · Woody: "Estoy sin agendamientos hace 3 días"
+🚀 Slide 2 · Buzz: "Y yo sin saber qué publicar en redes"
+🐎 Slide 3 · Jessie: "Mis clientas no me responden el WhatsApp"
+🦖 Slide 4 · Rex: "Mi agenda en papel es un caos"
+🐷 Slide 5 · Hamm: "Y el dinero… ya sabes"
 
-👉 Prueba gratis 15 días en bewe.io
+🤖 Slide 6 · Linda: "Tranquilos, juguetes. Yo me encargo."
+✅ Agenda automática 24/7
+✅ Responde mensajes por ti
+✅ Publica en redes sola
+✅ Te manda el reporte del día
 
-#IAparaNegocios #Linda #Bewe #InteligenciaArtificial #Belleza`,
+📌 Slide 7 · Hasta el infinito y más allá tu negocio puede ir.
+Prueba gratis 15 días → bewe.io
+
+#Bewe #Linda #IAparaNegocios #Belleza #ToyStory`,
   },
 
   // ────────────────────────────────────────────────────────────────────────
-  // JUE 2 JUL · CARRUSEL EDUCACIÓN · Tools IA · alto guardado
+  // JUE 2 JUL · CARRUSEL EDUCACIÓN STORYTELLING · IG + FB
+  // Q2 cierre · 5 tools de IA gratis ESPECÍFICAS para salón de belleza
   // ────────────────────────────────────────────────────────────────────────
   {
     date: "2026-07-02",
     time: "19:00",
     platforms: ["ig", "fb"],
     goal: "engagement",
-    caption: `📚 5 herramientas de IA gratis que TODO salón debería usar en 2026
+    caption: `📚 Estamos cerrando Q2 y tu salón sigue sin usar IA. Esto cambia hoy.
+
+Te voy a contar las 5 herramientas de inteligencia artificial GRATIS que todo salón de belleza debería usar — desde la que escribe por ti hasta la que te edita los reels en dos minutos.
 
 Desliza →
 
-1️⃣ ChatGPT — para escribir respuestas a clientes en segundos
-2️⃣ Canva Magic Studio — diseños listos para Instagram
-3️⃣ ElevenLabs — voces IA para reels sin grabar
-4️⃣ Notion AI — organiza tu agenda y notas
-5️⃣ Bewe + Linda — la única que reúne todo lo de arriba pensado para tu negocio
+1️⃣ ChatGPT
+   La asistente que responde las dudas eternas de tus clientas
+   ("¿cuánto cuesta?", "¿tienes disponibilidad el viernes?") en 5 segundos.
+   Tip: copia y pega tu menú de servicios y dile que responda como tú.
+
+2️⃣ Canva Magic Studio
+   Posts de Instagram listos sin saber diseño.
+   Le escribes "post para promo de uñas semipermanentes en julio" y tienes 6 variaciones.
+
+3️⃣ CapCut con IA
+   Editás un reel completo en 2 minutos. Pone subtítulos, recorta los silencios,
+   te sugiere música trending.
+
+4️⃣ ElevenLabs
+   ¿Te da pena tu voz en los reels? Esta IA te presta una. Suena natural,
+   en español y gratis hasta 10.000 caracteres al mes.
+
+5️⃣ Linda (Bewe)
+   La única que reúne todo lo de arriba pensada para tu negocio:
+   agenda + CRM + publica en redes + responde por ti + reporte mensual.
+   Caso de Éxito del Año 2024 de Google Cloud.
 
 📌 Guarda este post para no olvidarlo.
 
-¿Cuál usas tú? Te leemos 👇
+¿Cuál vas a probar primero? Te leemos 👇
 
-#IA #HerramientasIA #Belleza #Bewe`,
+#IA #Belleza #HerramientasIA #Bewe #Linda`,
   },
 
   // ────────────────────────────────────────────────────────────────────────
-  // VIE 3 JUL · REEL ENTRETENIMIENTO · ancla Mundial · Bewe/Linda
+  // VIE 3 JUL · HISTORIAS IG · "IA para PYMES" (la promesa Bewe)
+  // 7 historias secuenciales con encuesta + CTA prueba 15 días
   // ────────────────────────────────────────────────────────────────────────
   {
     date: "2026-07-03",
-    time: "20:00",
-    platforms: ["ig"],
-    goal: "awareness",
-    caption: `⚽ POV: tu cliente llegó sin cita en pleno Mundial y tu IA ya la había agendado
+    time: "10:00",
+    platforms: ["story"],
+    goal: "leads",
+    caption: `📲 HISTORIAS · viernes IA para PYMES (7 stories secuenciales)
 
-Mientras todos miran el partido, Linda:
-🔥 Confirma las citas del finde
-🔥 Reagenda las que se cruzan
-🔥 Manda recordatorios automáticos
+🎬 Story 1 — HOOK
+"¿Sabías que el 67% de las PYMES en LatAm aún NO usan inteligencia artificial?"
++ encuesta: ¿Tu negocio usa IA? Sí / No
 
-Y tú… sigues viendo el partido tranquilo 🍿
+🎬 Story 2 — DOLOR
+"Esto es exactamente lo que se están perdiendo 👇"
++ texto sobre fondo dramático
 
-Esto no es ficción. Es Bewe.
-Prueba gratis 15 días → bewe.io
+🎬 Story 3 — BENEFICIO 1
+"1️⃣ Responder a clientes 24/7 sin contestar tú a las 11pm"
++ gif/screenshot de Linda respondiendo
 
-#Mundial2026 #IA #Bewe #Linda #Belleza`,
+🎬 Story 4 — BENEFICIO 2
+"2️⃣ Publicar en redes sin sentarte a pensar qué subir"
++ ejemplo visual
+
+🎬 Story 5 — BENEFICIO 3
+"3️⃣ Llevar la agenda sin libreta de papel"
++ pantallazo agenda Bewe
+
+🎬 Story 6 — BENEFICIO 4
+"4️⃣ Tener el reporte de cierre de mes LISTO sin tocarlo"
++ pantallazo reporte
+
+🎬 Story 7 — CTA
+"Si tu PYME aún no usa IA, hoy es el día."
++ sticker link "Prueba gratis 15 días → bewe.io"
++ encuesta: ¿Te animas? Sí / Quiero saber más
+
+💡 Tip ejecución: usar mismo fondo de marca + mismo tipo de letra en todas las 7
+para que se sientan una sola secuencia. Cerrar con CTA fuerte y link sticker.`,
   },
 
   // ────────────────────────────────────────────────────────────────────────
-  // SÁB 4 JUL · CARRUSEL COMUNIDAD · Tools IA · engagement directo
+  // SÁB 4 JUL · REEL · IG · "Las girls también vemos el Mundial"
+  // Manicurista + Linda · tono femenino casual · ancla Mundial
   // ────────────────────────────────────────────────────────────────────────
   {
     date: "2026-07-04",
-    time: "11:00",
-    platforms: ["ig", "fb"],
-    goal: "engagement",
-    caption: `🤔 Pregunta del finde: ¿qué herramienta de IA usas MÁS en tu negocio?
-
-A — ChatGPT (escribir / responder)
-B — Canva Magic (diseño)
-C — Linda de Bewe (todo el negocio)
-D — Otra (cuál? 👇)
-
-Te leemos en comentarios.
-Nos sirve para preparar los próximos tutoriales 💡
-
-#Comunidad #IA #Belleza #Bewe`,
-  },
-
-  // ────────────────────────────────────────────────────────────────────────
-  // DOM 5 JUL · REEL EDUCACIÓN · IA general · alto valor
-  // ────────────────────────────────────────────────────────────────────────
-  {
-    date: "2026-07-05",
-    time: "18:00",
-    platforms: ["ig"],
-    goal: "engagement",
-    caption: `💡 Cómo escribir un buen prompt para tu IA (en 3 reglas)
-
-1️⃣ Sé específico → "haz un post para mi salón en Bogotá sobre cortes de verano" > "haz un post"
-
-2️⃣ Da contexto → quién eres, a quién le hablas, en qué tono.
-
-3️⃣ Pide formato → "dame 3 versiones cortas para Reels".
-
-Aplica esto a cualquier IA (ChatGPT, Linda, Gemini) y los resultados cambian totalmente.
-
-📌 Guarda y compártelo con alguien que use IA.
-
-#IA #Prompts #Bewe`,
-  },
-
-  // ────────────────────────────────────────────────────────────────────────
-  // LUN 6 JUL · CARRUSEL PROMOCIÓN · Bewe/Linda · caso real
-  // ────────────────────────────────────────────────────────────────────────
-  {
-    date: "2026-07-06",
-    time: "19:00",
-    platforms: ["ig", "fb"],
-    goal: "leads",
-    caption: `🏆 Caso real: salón en Bogotá duplicó reservas con Linda
-
-Conoce a Andrea, dueña de un salón de uñas. Antes de Bewe:
-😩 Perdía citas por WhatsApp sin respuesta
-😩 Tardaba 2h al día agendando
-😩 No sabía qué publicar en redes
-
-Después de Linda:
-📈 +112% reservas en 60 días
-⏱️ Recuperó 10h/semana
-📱 La IA publica y responde por ella
-
-"Es como tener una recepcionista que nunca duerme" — Andrea
-
-👉 Prueba gratis 15 días → bewe.io
-
-#CasoDeExito #Linda #Bewe #Belleza`,
-  },
-
-  // ────────────────────────────────────────────────────────────────────────
-  // MAR 7 JUL · REEL ENTRETENIMIENTO · Tools IA · relatable / viral
-  // ────────────────────────────────────────────────────────────────────────
-  {
-    date: "2026-07-07",
     time: "20:00",
     platforms: ["ig"],
     goal: "awareness",
-    caption: `🎬 Cuando le pediste a la IA que te organice la semana y ahora trabajas menos que tu asistente
+    caption: `⚽💅 Las girls también vemos el Mundial — y para eso hay que estar con toda la pinta
 
-Pasos:
-1. Abrí Linda
-2. "Organiza mi semana"
-3. ☕
+🎬 SCRIPT DEL REEL (15-20s)
 
-(La IA reagendó, mandó recordatorios y respondió comentarios. Yo solo cobré.)
+[Hook · frame 1, texto en pantalla:]
+"Las girls también vemos el Mundial 🏟️⚽"
 
-¿Te imaginas tu negocio así? Es real.
-Prueba gratis 15 días → bewe.io
+[Beat 1 — voice over o texto:]
+"Acompañamos al novio al bar… salimos con las amigas… o lo vemos con la familia."
 
-#IA #Productividad #Bewe #Linda`,
+[Beat 2 — corte:]
+"Pero para eso hay que estar con TODA la pinta 💅✨"
+
+[Beat 3 — la chica busca dónde hacerse las uñas:]
+"Y antes de salir corriendo al salón…"
+
+[Beat 4 — abre el chat con Linda en celular:]
+"Le decimos a Linda que nos agende 📱"
+
+[Beat 5 — Linda responde en pantalla:]
+Linda: "Listo girl, te dejé el sábado 4 a las 11am en Salón Bella ✨"
+
+[Beat 6 — chica feliz, uñas listas, mirando el partido:]
+"Ahora sí — lista para el partido, las fotos y el grito de gol 📸⚽"
+
+[CTA frame final:]
+"Tu salón también puede tener su Linda — prueba 15 días gratis → bewe.io"
+
+#Mundial2026 #Belleza #Uñas #Bewe #Linda #IAparaNegocios`,
   },
 ];
 
 /**
  * Inyecta el seed al localStorage SIN sobreescribir lo existente.
  * Si un día ya tiene posts, se respeta — solo agrega los días vacíos.
- * Devuelve { added, skipped } para mostrar feedback al usuario.
  */
 export function seedJulio2026Semana1(
   existing: ScheduledPost[],

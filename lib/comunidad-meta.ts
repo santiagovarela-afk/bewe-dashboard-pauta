@@ -239,13 +239,20 @@ export async function replyToFBComment(commentId: string, message: string) {
 
 // ─── MESSENGER ─────────────────────────────────────────────────────────────
 
-/** Lista de conversaciones de Messenger en la página FB. */
+/** Lista de conversaciones de Messenger en la página FB.
+ *
+ * Incluye `messages.limit(1){from,created_time,id}` para que el frontend pueda
+ * distinguir conversaciones REALMENTE sin responder (último msg del cliente)
+ * vs ya respondidas (último msg de la página = Bewe). Sin esto, contábamos
+ * todas como "pendientes" → conteo inflado.
+ */
 export async function fetchMessengerConversations(limit = 25): Promise<Conversation[]> {
   const res = await metaCall({
     endpoint: `${PLAN.meta.pageId}/conversations`,
     params: {
       platform: "messenger",
-      fields: "id,updated_time,message_count,unread_count,participants,snippet",
+      fields:
+        "id,updated_time,message_count,unread_count,participants,snippet,messages.limit(1){from,created_time,id}",
       limit,
     },
   });

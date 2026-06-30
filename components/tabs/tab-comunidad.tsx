@@ -143,6 +143,32 @@ interface Conversation {
   unread_count: number;
   participants?: { data: Array<{ id: string; name?: string }> };
   snippet?: string;
+  /** Último mensaje (Meta lo manda inline si pedimos messages.limit(1){from}) */
+  messages?: {
+    data?: Array<{
+      id: string;
+      created_time: string;
+      from?: { id: string; name?: string };
+    }>;
+  };
+}
+
+/**
+ * Una conversación está pendiente si:
+ * - el usuario NO la marcó a mano como "respondido" (override manual), Y
+ * - el último mensaje vino del cliente (no de Bewe / no del page).
+ *
+ * Si Meta no devolvió `messages` inline, caemos al unread_count > 0 como proxy.
+ */
+function isConversationPending(c: Conversation, statuses: Record<string, string>) {
+  if (statuses[c.id] === "respondido") return false;
+  const last = c.messages?.data?.[0];
+  if (last?.from?.name) {
+    // "Bewe Software" es el nombre del page → si el último mensaje es nuestro, no está pendiente
+    return last.from.name.toLowerCase() !== "bewe software";
+  }
+  // Fallback: si Meta no devolvió el último msg, usar unread_count
+  return (c.unread_count ?? 0) > 0;
 }
 interface MessengerMsg {
   id: string;
@@ -1543,9 +1569,9 @@ function NotificationsBanner({ onJump }: { onJump: (s: SubTab) => void }) {
           fetch("/api/comunidad/messenger?limit=25&_t=" + Date.now()).then((r) => r.json()),
         ]);
 
-        // Mensajes sin responder
+        // Mensajes sin responder — basado en quién envió el último mensaje
         const convs: Conversation[] = msgRes.ok ? (msgRes.conversations ?? []) : [];
-        const pendingMsgs = convs.filter((c) => statuses[c.id] !== "respondido").length;
+        const pendingMsgs = convs.filter((c) => isConversationPending(c, statuses)).length;
         setPendingMessages(pendingMsgs);
 
         // Notificación desktop si hay >0 pendientes y hay permiso
@@ -2851,9 +2877,9 @@ function Mensajes() {
   const otherParticipant = (c: Conversation) =>
     c.participants?.data?.find((p) => p.name !== "Bewe Software")?.name ?? "Usuario";
 
-  // Aplicar filtros: pendientes (no respondidos) + unread + búsqueda
+  // Aplicar filtros: pendientes (real: último msg del cliente) + unread + búsqueda
   const filteredConvs = conversations.filter((c) => {
-    if (filter === "no-respondidos" && statuses[c.id] === "respondido") return false;
+    if (filter === "no-respondidos" && !isConversationPending(c, statuses)) return false;
     if (filter === "unread" && (c.unread_count ?? 0) === 0) return false;
     if (search) {
       const name = otherParticipant(c).toLowerCase();
@@ -2864,7 +2890,7 @@ function Mensajes() {
     return true;
   });
 
-  const pendingCount = conversations.filter((c) => statuses[c.id] !== "respondido").length;
+  const pendingCount = conversations.filter((c) => isConversationPending(c, statuses)).length;
 
   return (
     <div className="space-y-4">

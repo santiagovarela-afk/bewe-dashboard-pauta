@@ -45,7 +45,7 @@ import { HashtagFinder } from "@/components/parrilla/hashtag-finder";
 import { IdeaGenerator, type PostIdea } from "@/components/parrilla/idea-generator";
 import { PostPreview, type PreviewPlatform } from "@/components/parrilla/post-preview";
 import { bestTimeForPlatform } from "@/components/parrilla/best-time";
-import { seedJulio2026Semana1 } from "@/lib/parrilla-seed-julio-2026";
+import { seedJulio2026Semana1, JULIO_2026_SEMANA_1 } from "@/lib/parrilla-seed-julio-2026";
 import { useOrganic } from "@/lib/hooks/use-organic";
 import { dailyPlan, performanceByFormat, type AnalyticsPost } from "@/lib/organic-analytics";
 
@@ -226,15 +226,20 @@ export function TabParrilla() {
   /** Inyecta los 4 posts de la semana 1-4 jul 2026 (Estrategia Julio · plan cliente). */
   function handleSeedJulio() {
     const { merged, added, skipped } = seedJulio2026Semana1(posts);
+
+    // Calcular destino desde el primer post del seed (más robusto que hardcodear)
+    const firstSeedDate = JULIO_2026_SEMANA_1[0]?.date ?? "2026-07-01";
+    const [targetY, targetM] = firstSeedDate.split("-").map(Number);
+    setViewYear(targetY);
+    setViewMonth((targetM ?? 7) - 1);
+
     if (added === 0) {
-      toast.info("Esos días ya tienen posts programados — no se sobreescribe nada.");
+      toast.info("Esos días ya estaban cargados. Te llevo a julio para que los veas.");
       return;
     }
     setPosts(merged);
-    setViewYear(2026);
-    setViewMonth(6); // julio = mes 6 (0-indexed)
     toast.success(
-      `✨ ${added} posts cargados (1-4 jul)${skipped ? ` · ${skipped} días saltados (ya tenían contenido)` : ""}`,
+      `✨ ${added} posts cargados (1-4 jul)${skipped ? ` · ${skipped} días ya tenían contenido` : ""}`,
     );
   }
 

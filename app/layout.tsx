@@ -18,9 +18,9 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bewe · Control de Pauta · Mayo 2026",
+  title: "Bewe · Dashboard de Pauta",
   description:
-    "Dashboard de control de campañas Meta Ads · Plan mayo 2026 · 6 campañas activas, €3.000 budget",
+    "Control de campañas Meta Ads + contenido orgánico + comunidad · Bewe",
 };
 
 export const viewport: Viewport = {

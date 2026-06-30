@@ -235,13 +235,15 @@ export function TabParrilla() {
     setViewYear(targetY);
     setViewMonth((targetM ?? 7) - 1);
 
-    // Si ya hay posts en los días del seed (1-4 jul), preguntar si reemplazar
+    // Si ya hay posts en los días del seed o legacy, preguntar si reemplazar
     const replace =
       hasSeedConflicts(posts) &&
       window.confirm(
-        "Ya tienes posts programados del 1 al 4 de julio.\n\n" +
-          "¿Reemplazarlos con el plan validado (Toy Story · 5 tools · Historias PYMES · Reel Mundial)?\n\n" +
-          "OK = reemplazar · Cancelar = mantener lo que tienes",
+        "Ya tienes posts programados en la primera semana de julio.\n\n" +
+          "¿Cargar el plan validado y limpiar lo viejo?\n\n" +
+          "Se REEMPLAZA: mié 1 · jue 2 · vie 3 · sáb 4 con el plan nuevo\n" +
+          "Se LIMPIA: dom 5 · lun 6 · mar 7 (eran del plan viejo)\n\n" +
+          "OK = aplicar · Cancelar = mantener lo que tienes",
       );
 
     const { merged, added, skipped, removed } = seedJulio2026Semana1(posts, { replace });

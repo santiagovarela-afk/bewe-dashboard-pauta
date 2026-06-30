@@ -361,6 +361,17 @@ Sub: bewe.io para empezar con Linda
 export const SEED_DATES = new Set(JULIO_2026_SEMANA_1.map((p) => p.date));
 
 /**
+ * Fechas que estaban en versiones PREVIAS del seed pero ya no están en v3.
+ * Cuando el usuario reemplaza el plan, también queremos limpiar estos días
+ * para que no queden posts "huérfanos" de planeaciones viejas.
+ */
+export const LEGACY_SEED_DATES = new Set([
+  "2026-07-05", // v1: reel "Cómo escribir prompts"
+  "2026-07-06", // v1: carrusel "Caso real Andrea"
+  "2026-07-07", // v1: reel "Cuando le pediste a la IA"
+]);
+
+/**
  * Inyecta el seed al localStorage.
  *
  * - replace=false (default): si un día del seed ya tenía post, se RESPETA.
@@ -377,7 +388,9 @@ export function seedJulio2026Semana1(
   let removed = 0;
   if (replace) {
     const before = base.length;
-    base = base.filter((p) => !SEED_DATES.has(p.date));
+    // En replace, limpiamos tanto los días del seed actual como los legacy
+    // (5/6/7 jul del seed v1 que ya no aplican)
+    base = base.filter((p) => !SEED_DATES.has(p.date) && !LEGACY_SEED_DATES.has(p.date));
     removed = before - base.length;
   }
 
@@ -407,7 +420,7 @@ export function seedJulio2026Semana1(
   };
 }
 
-/** ¿El usuario tiene posts en los días del seed que se deberían reemplazar? */
+/** ¿El usuario tiene posts en los días del seed actual o en legacy (a limpiar)? */
 export function hasSeedConflicts(existing: ScheduledPost[]): boolean {
-  return existing.some((p) => SEED_DATES.has(p.date));
+  return existing.some((p) => SEED_DATES.has(p.date) || LEGACY_SEED_DATES.has(p.date));
 }
